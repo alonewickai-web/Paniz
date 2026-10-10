@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 typedef JsonMap = Map<String, dynamic>;
@@ -28,9 +27,6 @@ class AdminApi {
       'PANIZ_API_BASE_URL',
       defaultValue: 'http://10.0.2.2:4000/api/v1/',
     );
-    if (kReleaseMode && !apiUrl.startsWith('https://')) {
-      throw StateError('برای نسخهٔ انتشار، PANIZ_API_BASE_URL باید HTTPS باشد.');
-    }
     dio = Dio(BaseOptions(
       baseUrl: apiUrl.endsWith('/') ? apiUrl : '$apiUrl/',
       connectTimeout: const Duration(seconds: 10),
