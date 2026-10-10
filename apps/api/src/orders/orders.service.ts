@@ -1,0 +1,425 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from "@nestjs/common";
+import { Prisma } from "@prisma/client";
+import { randomBytes } from "node:crypto";
+import { PrismaService } from "../database/prisma.service";
+import { CreateCustomerOrderDto } from "../customer/dto/create-customer-order.dto";
+import { CartItemDto } from "./dto/cart-item.dto";
+import { TrackOrderDto } from "./dto/track-order.dto";
+
+const RESERVATION_MINUTES = 15;
+
+type QuotedLine = {
+  variantId: bigint;
+  quantity: number;
+  sku: string;
+  colorName: string;
+  sizeLabel: string;
+  unitPriceToman: bigint;
+  productId: bigint;
+  productName: string;
+};
+
+@Injectable()
+export class OrdersService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(OrdersService.name);
+  private expirationTimer?: NodeJS.Timeout;
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  onModuleInit(): void {
+    this.expirationTimer = setInterval(() => {
+      void this.releaseExpiredReservations().catch(() => {
+        this.logger.error("Could not release expired inventory reservations.");
+      });
+    }, 30_000);
+    this.expirationTimer.unref();
+    void this.releaseExpiredReservations().catch(() => {
+      this.logger.error("Could not release expired inventory reservations.");
+    });
+  }
+
+  onModuleDestroy(): void {
+    if (this.expirationTimer) clearInterval(this.expirationTimer);
+  }
+
+  async quote(items: CartItemDto[]) {
+    const lines = await this.getQuotedLines(this.prisma, items);
+    const subtotalToman = lines.reduce(
+      (sum, line) => sum + line.unitPriceToman * BigInt(line.quantity),
+      0n,
+    );
+
+    return {
+      data: {
+        items: lines.map((line) => ({
+          variantId: line.variantId.toString(),
+          productId: line.productId.toString(),
+          productName: line.productName,
+          sku: line.sku,
+          color: line.colorName,
+          size: line.sizeLabel,
+          quantity: line.quantity,
+          unitPriceToman: toSafeNumber(line.unitPriceToman),
+          lineTotalToman: toSafeNumber(line.unitPriceToman * BigInt(line.quantity)),
+        })),
+        subtotalToman: toSafeNumber(subtotalToman),
+        shippingToman: null,
+        totalToman: null,
+        shippingConfigured: false,
+        paymentConfigured: Boolean(process.env.PAYMENT_PROVIDER && process.env.PAYMENT_SECRET),
+      },
+    };
+  }
+
+  async createCustomerOrder(customerId: bigint, input: CreateCustomerOrderDto, idempotencyKey: string) {
+    if (!idempotencyKey || idempotencyKey.length > 100) {
+      throw new BadRequestException({
+        code: "IDEMPOTENCY_KEY_REQUIRED",
+        message: "شناسهٔ یکتای ثبت سفارش معتبر نیست",
+      });
+    }
+
+    const existing = await this.prisma.order.findUnique({ where: { idempotencyKey } });
+    if (existing) {
+      if (existing.customerId !== customerId) {
+        throw new ConflictException({ code: "IDEMPOTENCY_KEY_ALREADY_USED", message: "این شناسهٔ ثبت سفارش قبلاً استفاده شده است." });
+      }
+      return this.toCreatedOrder(existing);
+    }
+
+    const expiresAt = new Date(Date.now() + RESERVATION_MINUTES * 60_000);
+    try {
+      const order = await this.prisma.$transaction(async (tx) => {
+        const address = await tx.customerAddress.findFirst({
+          where: { id: BigInt(input.addressId), customerId },
+        });
+        if (!address) {
+          throw new BadRequestException({ code: "CUSTOMER_ADDRESS_REQUIRED", message: "نشانی انتخاب‌شده در حساب کاربری پیدا نشد." });
+        }
+        const lines = await this.getQuotedLines(tx, input.items);
+        const subtotalToman = lines.reduce(
+          (sum, line) => sum + line.unitPriceToman * BigInt(line.quantity),
+          0n,
+        );
+
+        for (const line of lines) {
+          const reserved = await tx.$executeRaw`
+            UPDATE product_variants
+            SET reserved_quantity = reserved_quantity + ${line.quantity}, updated_at = CURRENT_TIMESTAMP(3)
+            WHERE id = ${line.variantId}
+              AND is_active = 1
+              AND stock_quantity - reserved_quantity >= ${line.quantity}
+          `;
+          if (reserved !== 1) {
+            throw new ConflictException({
+              code: "INSUFFICIENT_STOCK",
+              message: `موجودی ${line.productName} تغییر کرده است؛ سبد خرید را دوباره بررسی کن`,
+            });
+          }
+        }
+
+        const orderNumber = makeOrderNumber();
+        const order = await tx.order.create({
+          data: {
+            orderNumber,
+            idempotencyKey,
+            status: "pending_payment",
+            paymentStatus: "unpaid",
+            reservationExpiresAt: expiresAt,
+            customerId,
+            addressId: address.id,
+            subtotalToman,
+            discountToman: 0n,
+            shippingToman: 0n,
+            totalToman: subtotalToman,
+            recipientNameSnapshot: address.recipientName,
+            recipientPhoneSnapshot: address.recipientPhone,
+            shippingAddressSnapshot: {
+              province: address.province,
+              city: address.city,
+              street: address.street,
+              alley: address.alley,
+              plaqueNumber: address.plaqueNumber,
+              unit: address.unit,
+              deliveryDetails: address.deliveryDetails,
+              addressLine: address.addressLine,
+              postalCode: address.postalCode,
+            } satisfies Prisma.InputJsonObject,
+            customerNote: input.customerNote?.trim() || null,
+            items: {
+              create: lines.map((line) => ({
+                productId: line.productId,
+                variantId: line.variantId,
+                productNameSnapshot: line.productName,
+                skuSnapshot: line.sku,
+                colorNameSnapshot: line.colorName,
+                sizeLabelSnapshot: line.sizeLabel,
+                unitPriceToman: line.unitPriceToman,
+                quantity: line.quantity,
+                lineTotalToman: line.unitPriceToman * BigInt(line.quantity),
+              })),
+            },
+            statusHistory: {
+              create: {
+                newStatus: "pending_payment",
+                note: "سفارش مشتری ثبت شد؛ منتظر تنظیم روش پرداخت است.",
+                visibleToCustomer: true,
+              },
+            },
+          },
+        });
+
+        await tx.inventoryMovement.createMany({
+          data: lines.map((line) => ({
+            variantId: line.variantId,
+            movementType: "reservation",
+            quantityDelta: 0,
+            reservedDelta: line.quantity,
+            referenceType: "order",
+            referenceId: order.id,
+            note: `رزرو موقت سفارش ${order.orderNumber}`,
+          })),
+        });
+
+        return order;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+      return this.toCreatedOrder(order);
+    } catch (error) {
+      const duplicate = await this.prisma.order.findUnique({ where: { idempotencyKey } });
+      if (duplicate) {
+        if (duplicate.customerId !== customerId) {
+          throw new ConflictException({ code: "IDEMPOTENCY_KEY_ALREADY_USED", message: "این شناسهٔ ثبت سفارش قبلاً استفاده شده است." });
+        }
+        return this.toCreatedOrder(duplicate);
+      }
+      throw error;
+    }
+  }
+
+  async trackOrder(input: TrackOrderDto) {
+    const order = await this.prisma.order.findFirst({
+      where: {
+        orderNumber: input.orderNumber.toUpperCase(),
+        recipientPhoneSnapshot: normalizePhone(input.phone),
+      },
+      include: {
+        items: {
+          select: {
+            productNameSnapshot: true,
+            colorNameSnapshot: true,
+            sizeLabelSnapshot: true,
+            quantity: true,
+            lineTotalToman: true,
+          },
+        },
+        statusHistory: {
+          where: { visibleToCustomer: true },
+          orderBy: { createdAt: "asc" },
+          select: { newStatus: true, note: true, createdAt: true },
+        },
+        shipments: { select: { trackingCode: true, status: true, shippedAt: true, deliveredAt: true } },
+      },
+    });
+    if (!order) {
+      throw new BadRequestException({
+        code: "ORDER_NOT_FOUND",
+        message: "سفارشی با این شماره و تلفن پیدا نشد",
+      });
+    }
+
+    return {
+      data: {
+        orderNumber: order.orderNumber,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        totalToman: toSafeNumber(order.totalToman),
+        reservationExpiresAt: order.reservationExpiresAt?.toISOString() ?? null,
+        items: order.items.map((item) => ({
+          name: item.productNameSnapshot,
+          color: item.colorNameSnapshot,
+          size: item.sizeLabelSnapshot,
+          quantity: item.quantity,
+          lineTotalToman: toSafeNumber(item.lineTotalToman),
+        })),
+        timeline: order.statusHistory.map((entry) => ({
+          status: entry.newStatus,
+          note: entry.note,
+          at: entry.createdAt.toISOString(),
+        })),
+        shipments: order.shipments.map((shipment) => ({
+          trackingCode: shipment.trackingCode,
+          status: shipment.status,
+          shippedAt: shipment.shippedAt?.toISOString() ?? null,
+          deliveredAt: shipment.deliveredAt?.toISOString() ?? null,
+        })),
+        paymentConfigured: Boolean(process.env.PAYMENT_PROVIDER && process.env.PAYMENT_SECRET),
+      },
+    };
+  }
+
+  private async getQuotedLines(
+    db: PrismaService | Prisma.TransactionClient,
+    inputItems: CartItemDto[],
+  ): Promise<QuotedLine[]> {
+    const requested = new Map<bigint, number>();
+    for (const item of inputItems) {
+      const id = BigInt(item.variantId);
+      const quantity = (requested.get(id) ?? 0) + item.quantity;
+      if (quantity > 10) {
+        throw new BadRequestException({ code: "QUANTITY_LIMIT", message: "حداکثر تعداد هر تنوع ۱۰ عدد است" });
+      }
+      requested.set(id, quantity);
+    }
+
+    const variants = await db.productVariant.findMany({
+      where: {
+        id: { in: [...requested.keys()] },
+        isActive: true,
+        product: {
+          is: {
+            status: "published",
+            deletedAt: null,
+            publishedAt: { lte: new Date() },
+          },
+        },
+      },
+      include: { product: { select: { id: true, name: true } } },
+    });
+
+    if (variants.length !== requested.size) {
+      throw new ConflictException({
+        code: "CART_ITEM_UNAVAILABLE",
+        message: "یکی از انتخاب‌های سبد دیگر قابل خرید نیست؛ سبد را تازه‌سازی کن",
+      });
+    }
+
+    return variants.map((variant) => {
+      const quantity = requested.get(variant.id)!;
+      const available = variant.stockQuantity - variant.reservedQuantity;
+      if (available < quantity) {
+        throw new ConflictException({
+          code: "INSUFFICIENT_STOCK",
+          message: `موجودی ${variant.product.name} برای تعداد انتخاب‌شده کافی نیست`,
+        });
+      }
+      return {
+        variantId: variant.id,
+        quantity,
+        sku: variant.sku,
+        colorName: variant.colorName,
+        sizeLabel: variant.sizeLabel,
+        unitPriceToman: variant.priceToman,
+        productId: variant.product.id,
+        productName: variant.product.name,
+      };
+    });
+  }
+
+  private async releaseExpiredReservations(): Promise<void> {
+    const expired = await this.prisma.order.findMany({
+      where: { status: "pending_payment", reservationExpiresAt: { lte: new Date() } },
+      select: { id: true },
+      take: 50,
+    });
+
+    for (const candidate of expired) {
+      await this.prisma.$transaction(async (tx) => {
+        const order = await tx.order.findFirst({
+          where: {
+            id: candidate.id,
+            status: "pending_payment",
+            reservationExpiresAt: { lte: new Date() },
+          },
+          include: { items: { select: { variantId: true, quantity: true } } },
+        });
+        if (!order) return;
+
+        const claimed = await tx.order.updateMany({
+          where: {
+            id: order.id,
+            status: "pending_payment",
+            reservationExpiresAt: { lte: new Date() },
+          },
+          data: { status: "expired" },
+        });
+        if (claimed.count !== 1) return;
+
+        for (const item of order.items) {
+          if (item.variantId === null) continue;
+          await tx.productVariant.updateMany({
+            where: { id: item.variantId },
+            data: { reservedQuantity: { decrement: item.quantity } },
+          });
+          await tx.inventoryMovement.create({
+            data: {
+              variantId: item.variantId,
+              movementType: "reservation_release",
+              quantityDelta: 0,
+              reservedDelta: -item.quantity,
+              referenceType: "order",
+              referenceId: order.id,
+              note: `پایان مهلت رزرو سفارش ${order.orderNumber}`,
+            },
+          });
+        }
+        await tx.orderStatusHistory.create({
+          data: {
+            orderId: order.id,
+            oldStatus: "pending_payment",
+            newStatus: "expired",
+            note: "مهلت رزرو سفارش پایان یافت.",
+            visibleToCustomer: true,
+          },
+        });
+      });
+    }
+  }
+
+  private toCreatedOrder(order: {
+    orderNumber: string;
+    status: string;
+    paymentStatus: string;
+    totalToman: bigint;
+    reservationExpiresAt: Date | null;
+  }) {
+    return {
+      data: {
+        orderNumber: order.orderNumber,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        totalToman: toSafeNumber(order.totalToman),
+        reservationExpiresAt: order.reservationExpiresAt?.toISOString() ?? null,
+        shippingConfigured: false,
+        paymentConfigured: Boolean(process.env.PAYMENT_PROVIDER && process.env.PAYMENT_SECRET),
+      },
+    };
+  }
+}
+
+function normalizePhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.startsWith("0098")) return `+${digits.slice(2)}`;
+  if (digits.startsWith("98") && digits.length === 12) return `+${digits}`;
+  if (digits.startsWith("0")) return `+98${digits.slice(1)}`;
+  return `+98${digits}`;
+}
+
+function makeOrderNumber(): string {
+  const time = Date.now().toString(36).toUpperCase();
+  const random = randomBytes(3).toString("hex").toUpperCase();
+  return `PS-${time}-${random}`;
+}
+
+function toSafeNumber(value: bigint): number {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number)) throw new Error("Order total exceeds JavaScript's safe integer range.");
+  return number;
+}

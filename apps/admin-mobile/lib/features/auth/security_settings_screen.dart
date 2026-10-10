@@ -1,0 +1,171 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../app.dart';
+import '../../core/admin_api.dart';
+import '../../core/providers.dart';
+
+class SecuritySettingsScreen extends ConsumerStatefulWidget {
+  const SecuritySettingsScreen({super.key, required this.admin});
+  final AdminIdentity admin;
+
+  @override
+  ConsumerState<SecuritySettingsScreen> createState() => _SecuritySettingsScreenState();
+}
+
+class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _currentPassword = TextEditingController();
+  final _username = TextEditingController();
+  final _newPassword = TextEditingController();
+  final _confirmation = TextEditingController();
+  bool _busy = false;
+  bool _hideCurrent = true;
+  bool _hideNew = true;
+  String? _error;
+
+  @override
+  void dispose() {
+    _currentPassword.dispose();
+    _username.dispose();
+    _newPassword.dispose();
+    _confirmation.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    final username = _username.text.trim();
+    final newPassword = _newPassword.text;
+    if (username.isEmpty && newPassword.isEmpty) {
+      setState(() => _error = 'نام کاربری یا گذرواژهٔ جدید را وارد کن.');
+      return;
+    }
+
+    setState(() { _busy = true; _error = null; });
+    try {
+      await ref.read(adminApiProvider).updateCredentials(
+        currentPassword: _currentPassword.text,
+        username: username.isEmpty ? null : username,
+        newPassword: newPassword.isEmpty ? null : newPassword,
+      );
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          icon: const Icon(Icons.verified_user_rounded, color: panizPrimary, size: 34),
+          title: const Text('اطلاعات ورود تغییر کرد'),
+          content: const Text('برای امنیت، همهٔ نشست‌های مدیریتی بسته شدند. دوباره با اطلاعات جدید وارد شو.'),
+          actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('رفتن به صفحهٔ ورود'))],
+        ),
+      );
+      final authController = ref.read(authProvider.notifier);
+      if (!mounted) return;
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      await authController.clearLocalSession();
+    } catch (error) {
+      if (mounted) setState(() => _error = AdminApi.friendlyError(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.all(16),
+    children: [
+      Card(color: const Color(0xFFE6FFFA), child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Icon(Icons.shield_outlined, color: panizPrimary),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('حساب مدیر فروشگاه', style: TextStyle(fontWeight: FontWeight.w900, color: panizInk)),
+            const SizedBox(height: 5),
+            Text('نام کاربری فعلی: ${widget.admin.username}', style: const TextStyle(color: panizMuted, fontSize: 12)),
+            const SizedBox(height: 4),
+            const Text('برای هر تغییر، گذرواژهٔ فعلی لازم است. بعد از ذخیره همهٔ دستگاه‌ها دوباره باید وارد شوند.', style: TextStyle(color: panizMuted, fontSize: 12, height: 1.5)),
+          ])),
+        ]),
+      )),
+      const SizedBox(height: 14),
+      Card(child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Form(
+          key: _formKey,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const Text('تغییر اطلاعات ورود', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: panizInk)),
+            const SizedBox(height: 15),
+            TextFormField(
+              controller: _currentPassword,
+              obscureText: _hideCurrent,
+              textDirection: TextDirection.ltr,
+              decoration: InputDecoration(
+                labelText: 'گذرواژهٔ فعلی',
+                prefixIcon: const Icon(Icons.lock_outline_rounded),
+                suffixIcon: IconButton(onPressed: () => setState(() => _hideCurrent = !_hideCurrent), icon: Icon(_hideCurrent ? Icons.visibility_outlined : Icons.visibility_off_outlined)),
+              ),
+              validator: (value) => (value?.isNotEmpty ?? false) ? null : 'گذرواژهٔ فعلی را وارد کن',
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _username,
+              textDirection: TextDirection.ltr,
+              autocorrect: false,
+              decoration: const InputDecoration(labelText: 'نام کاربری جدید', helperText: 'برای نگه‌داشتن نام فعلی، این قسمت را خالی بگذار.', prefixIcon: Icon(Icons.person_outline_rounded)),
+              validator: (value) {
+                final next = value?.trim() ?? '';
+                if (next.isEmpty) return null;
+                return RegExp(r'^[a-zA-Z0-9._-]{3,40}$').hasMatch(next) ? null : 'نام کاربری باید ۳ تا ۴۰ نویسهٔ مجاز داشته باشد';
+              },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _newPassword,
+              obscureText: _hideNew,
+              textDirection: TextDirection.ltr,
+              decoration: InputDecoration(
+                labelText: 'گذرواژهٔ جدید',
+                helperText: 'حداقل ۱۲ نویسه؛ برای حفظ گذرواژه فعلی خالی بگذار.',
+                prefixIcon: const Icon(Icons.password_rounded),
+                suffixIcon: IconButton(onPressed: () => setState(() => _hideNew = !_hideNew), icon: Icon(_hideNew ? Icons.visibility_outlined : Icons.visibility_off_outlined)),
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) return null;
+                return value.length >= 12 ? null : 'گذرواژهٔ جدید باید دست‌کم ۱۲ نویسه باشد';
+              },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _confirmation,
+              obscureText: true,
+              textDirection: TextDirection.ltr,
+              decoration: const InputDecoration(labelText: 'تکرار گذرواژهٔ جدید', prefixIcon: Icon(Icons.check_circle_outline_rounded)),
+              validator: (value) {
+                if (_newPassword.text.isEmpty && (value?.isEmpty ?? true)) return null;
+                return value == _newPassword.text ? null : 'تکرار گذرواژه یکسان نیست';
+              },
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(_error!, style: const TextStyle(color: Color(0xFFDC2626)), textAlign: TextAlign.center),
+            ],
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _busy ? null : _save,
+              icon: _busy ? const SizedBox.square(dimension: 17, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.save_outlined),
+              label: Text(_busy ? 'در حال ذخیره…' : 'ذخیره و خروج از همهٔ دستگاه‌ها'),
+            ),
+          ]),
+        ),
+      )),
+      const SizedBox(height: 12),
+      const Card(child: ListTile(
+        leading: Icon(Icons.phonelink_lock_outlined, color: panizMuted),
+        title: Text('تأیید دومرحله‌ای'),
+        subtitle: Text('فعالسازی TOTP هنوز به API و اپ متصل نشده است.'),
+      )),
+    ],
+  );
+}

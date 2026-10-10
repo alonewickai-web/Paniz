@@ -1,0 +1,554 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model AdminUser {
+  id                    BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
+  fullName              String               @map("full_name") @db.VarChar(160)
+  username              String               @unique(map: "uq_admin_users_username") @db.VarChar(80)
+  phone                 String               @unique(map: "uq_admin_users_phone") @db.VarChar(24)
+  passwordHash          String               @map("password_hash") @db.VarChar(255)
+  role                  String               @default("owner") @db.VarChar(32)
+  isActive              Boolean              @default(true) @map("is_active")
+  lastLoginAt           DateTime?            @map("last_login_at") @db.DateTime(3)
+  createdAt             DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt             DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+  inventoryMovements    InventoryMovement[]
+  orderStatusChanges    OrderStatusHistory[]
+  updatedHomepageConfig HomepageSection[]
+  updatedStoreSettings  StoreSetting[]
+  auditLogs             AdminAuditLog[]
+  sessions              AdminSession[]
+
+  @@index([role, isActive], map: "ix_admin_users_role_active")
+  @@map("admin_users")
+}
+
+model AdminSession {
+  id         BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  adminId    BigInt     @map("admin_id") @db.UnsignedBigInt
+  tokenHash  String     @unique(map: "uq_admin_sessions_token_hash") @map("token_hash") @db.Char(64)
+  expiresAt  DateTime   @map("expires_at") @db.DateTime(3)
+  revokedAt  DateTime?  @map("revoked_at") @db.DateTime(3)
+  lastUsedAt DateTime?  @map("last_used_at") @db.DateTime(3)
+  createdAt  DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  admin      AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId, expiresAt], map: "ix_admin_sessions_admin_expiry")
+  @@index([expiresAt], map: "ix_admin_sessions_expiry")
+  @@map("admin_sessions")
+}
+
+model Customer {
+  id                BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
+  phone             String             @unique(map: "uq_customers_phone") @db.VarChar(24)
+  fullName          String?            @map("full_name") @db.VarChar(160)
+  email             String?            @db.VarChar(254)
+  phoneVerifiedAt   DateTime?          @map("phone_verified_at") @db.DateTime(3)
+  status            String             @default("active") @db.VarChar(24)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.DateTime(3)
+  addresses         CustomerAddress[]
+  carts             Cart[]
+  orders            Order[]
+  sessions          CustomerSession[]
+  couponRedemptions CouponRedemption[]
+  wishlist          Wishlist?
+  reviews           Review[]
+
+  @@index([status, createdAt], map: "ix_customers_status_created")
+  @@map("customers")
+}
+
+model CustomerSession {
+  id         BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  customerId BigInt     @map("customer_id") @db.UnsignedBigInt
+  tokenHash  String     @unique(map: "uq_customer_sessions_token_hash") @map("token_hash") @db.Char(64)
+  expiresAt  DateTime   @map("expires_at") @db.DateTime(3)
+  revokedAt  DateTime?  @map("revoked_at") @db.DateTime(3)
+  lastUsedAt DateTime?  @map("last_used_at") @db.DateTime(3)
+  createdAt  DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, expiresAt], map: "ix_customer_sessions_customer_expiry")
+  @@index([expiresAt], map: "ix_customer_sessions_expiry")
+  @@map("customer_sessions")
+}
+
+model CustomerAddress {
+  id             BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  customerId     BigInt   @map("customer_id") @db.UnsignedBigInt
+  title          String?  @db.VarChar(80)
+  recipientName  String   @map("recipient_name") @db.VarChar(160)
+  recipientPhone String   @map("recipient_phone") @db.VarChar(24)
+  province       String   @db.VarChar(100)
+  city           String   @db.VarChar(100)
+  street         String?  @db.VarChar(200)
+  alley          String?  @db.VarChar(200)
+  plaqueNumber   String?  @map("plaque_number") @db.VarChar(40)
+  unit           String?  @db.VarChar(40)
+  deliveryDetails String? @map("delivery_details") @db.VarChar(300)
+  addressLine    String   @map("address_line") @db.VarChar(500)
+  postalCode     String   @map("postal_code") @db.Char(10)
+  isDefault      Boolean  @default(false) @map("is_default")
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orders         Order[]
+
+  @@index([customerId, isDefault], map: "ix_customer_addresses_customer_default")
+  @@map("customer_addresses")
+}
+
+model Category {
+  id               BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  parentId         BigInt?          @map("parent_id") @db.UnsignedBigInt
+  name             String           @db.VarChar(120)
+  slug             String           @unique(map: "uq_categories_slug") @db.VarChar(160)
+  description      String?          @db.Text
+  imagePath        String?          @map("image_path") @db.VarChar(500)
+  sortOrder        Int              @default(0) @map("sort_order")
+  isActive         Boolean          @default(true) @map("is_active")
+  createdAt        DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
+  parent           Category?        @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children         Category[]       @relation("CategoryTree")
+  products         Product[]
+  couponCategories CouponCategory[]
+
+  @@index([parentId, isActive, sortOrder], map: "ix_categories_parent_active_order")
+  @@map("categories")
+}
+
+model Product {
+  id               BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  categoryId       BigInt?          @map("category_id") @db.UnsignedBigInt
+  name             String           @db.VarChar(220)
+  slug             String           @unique(map: "uq_products_slug") @db.VarChar(240)
+  shortDescription String?          @map("short_description") @db.VarChar(500)
+  description      String?          @db.MediumText
+  material         String?          @db.VarChar(220)
+  careInstructions String?          @map("care_instructions") @db.Text
+  sizeGuide        Json?            @map("size_guide")
+  seoTitle         String?          @map("seo_title") @db.VarChar(240)
+  seoDescription   String?          @map("seo_description") @db.VarChar(500)
+  status           String           @default("draft") @db.VarChar(24)
+  publishedAt      DateTime?        @map("published_at") @db.DateTime(3)
+  deletedAt        DateTime?        @map("deleted_at") @db.DateTime(3)
+  createdAt        DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
+  category         Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  images           ProductImage[]
+  variants         ProductVariant[]
+  couponProducts   CouponProduct[]
+  wishlistItems    WishlistItem[]
+  reviews          Review[]
+  orderItems       OrderItem[]
+
+  @@index([categoryId, status, createdAt], map: "ix_products_category_status_created")
+  @@index([status, publishedAt], map: "ix_products_status_published")
+  @@map("products")
+}
+
+model ProductImage {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  productId BigInt   @map("product_id") @db.UnsignedBigInt
+  imagePath String   @map("image_path") @db.VarChar(500)
+  altText   String?  @map("alt_text") @db.VarChar(240)
+  sortOrder Int      @default(0) @map("sort_order")
+  isPrimary Boolean  @default(false) @map("is_primary")
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, sortOrder], map: "ix_product_images_product_order")
+  @@map("product_images")
+}
+
+model ProductVariant {
+  id                  BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
+  productId           BigInt              @map("product_id") @db.UnsignedBigInt
+  sku                 String              @unique(map: "uq_product_variants_sku") @db.VarChar(80)
+  colorName           String              @default("بدون رنگ") @map("color_name") @db.VarChar(80)
+  colorHex            String?             @map("color_hex") @db.Char(7)
+  sizeLabel           String              @default("فری سایز") @map("size_label") @db.VarChar(32)
+  priceToman          BigInt              @map("price_toman") @db.UnsignedBigInt
+  compareAtPriceToman BigInt?             @map("compare_at_price_toman") @db.UnsignedBigInt
+  stockQuantity       Int                 @default(0) @map("stock_quantity") @db.UnsignedInt
+  reservedQuantity    Int                 @default(0) @map("reserved_quantity") @db.UnsignedInt
+  lowStockThreshold   Int                 @default(3) @map("low_stock_threshold") @db.UnsignedInt
+  isActive            Boolean             @default(true) @map("is_active")
+  createdAt           DateTime            @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt           DateTime            @updatedAt @map("updated_at") @db.DateTime(3)
+  product             Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventoryMovements  InventoryMovement[]
+  cartItems           CartItem[]
+  orderItems          OrderItem[]
+
+  @@unique([productId, colorName, sizeLabel], map: "uq_product_variants_product_color_size")
+  @@index([productId, isActive], map: "ix_product_variants_product_active")
+  @@index([isActive, stockQuantity, lowStockThreshold], map: "ix_product_variants_low_stock")
+  @@map("product_variants")
+}
+
+model InventoryMovement {
+  id               BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
+  variantId        BigInt         @map("variant_id") @db.UnsignedBigInt
+  movementType     String         @map("movement_type") @db.VarChar(24)
+  quantityDelta    Int            @default(0) @map("quantity_delta")
+  reservedDelta    Int            @default(0) @map("reserved_delta")
+  referenceType    String?        @map("reference_type") @db.VarChar(32)
+  referenceId      BigInt?        @map("reference_id") @db.UnsignedBigInt
+  note             String?        @db.VarChar(500)
+  createdByAdminId BigInt?        @map("created_by_admin_id") @db.UnsignedBigInt
+  createdAt        DateTime       @default(now()) @map("created_at") @db.DateTime(3)
+  variant          ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  createdByAdmin   AdminUser?     @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
+
+  @@index([variantId, createdAt], map: "ix_inventory_movements_variant_created")
+  @@index([referenceType, referenceId], map: "ix_inventory_movements_reference")
+  @@map("inventory_movements")
+}
+
+model Cart {
+  id             BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  customerId     BigInt?    @map("customer_id") @db.UnsignedBigInt
+  guestTokenHash String?    @unique(map: "uq_carts_guest_token_hash") @map("guest_token_hash") @db.Char(64)
+  status         String     @default("active") @db.VarChar(24)
+  expiresAt      DateTime?  @map("expires_at") @db.DateTime(3)
+  createdAt      DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
+  customer       Customer?  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items          CartItem[]
+
+  @@index([customerId, status], map: "ix_carts_customer_status")
+  @@index([status, expiresAt], map: "ix_carts_status_expires")
+  @@map("carts")
+}
+
+model CartItem {
+  id        BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
+  cartId    BigInt         @map("cart_id") @db.UnsignedBigInt
+  variantId BigInt         @map("variant_id") @db.UnsignedBigInt
+  quantity  Int            @db.UnsignedInt
+  createdAt DateTime       @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.DateTime(3)
+  cart      Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@unique([cartId, variantId], map: "uq_cart_items_cart_variant")
+  @@index([variantId], map: "ix_cart_items_variant")
+  @@map("cart_items")
+}
+
+model Coupon {
+  id               BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
+  code             String             @unique(map: "uq_coupons_code") @db.VarChar(64)
+  discountType     String             @map("discount_type") @db.VarChar(16)
+  discountValue    Decimal            @map("discount_value") @db.Decimal(10, 2)
+  maxDiscountToman BigInt?            @map("max_discount_toman") @db.UnsignedBigInt
+  minOrderToman    BigInt             @default(0) @map("min_order_toman") @db.UnsignedBigInt
+  usageLimit       Int?               @map("usage_limit") @db.UnsignedInt
+  perCustomerLimit Int?               @map("per_customer_limit") @db.UnsignedInt
+  firstOrderOnly   Boolean            @default(false) @map("first_order_only")
+  startsAt         DateTime?          @map("starts_at") @db.DateTime(3)
+  endsAt           DateTime?          @map("ends_at") @db.DateTime(3)
+  isActive         Boolean            @default(true) @map("is_active")
+  createdAt        DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.DateTime(3)
+  categories       CouponCategory[]
+  products         CouponProduct[]
+  redemptions      CouponRedemption[]
+
+  @@index([isActive, startsAt, endsAt], map: "ix_coupons_active_window")
+  @@map("coupons")
+}
+
+model CouponCategory {
+  couponId   BigInt   @map("coupon_id") @db.UnsignedBigInt
+  categoryId BigInt   @map("category_id") @db.UnsignedBigInt
+  coupon     Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([couponId, categoryId])
+  @@map("coupon_categories")
+}
+
+model CouponProduct {
+  couponId  BigInt  @map("coupon_id") @db.UnsignedBigInt
+  productId BigInt  @map("product_id") @db.UnsignedBigInt
+  coupon    Coupon  @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([couponId, productId])
+  @@map("coupon_products")
+}
+
+model ShippingMethod {
+  id               BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  name             String   @db.VarChar(120)
+  description      String?  @db.VarChar(500)
+  baseCostToman    BigInt   @default(0) @map("base_cost_toman") @db.UnsignedBigInt
+  freeOverToman    BigInt?  @map("free_over_toman") @db.UnsignedBigInt
+  estimatedDaysMin Int?     @map("estimated_days_min") @db.UnsignedTinyInt
+  estimatedDaysMax Int?     @map("estimated_days_max") @db.UnsignedTinyInt
+  isActive         Boolean  @default(true) @map("is_active")
+  sortOrder        Int      @default(0) @map("sort_order")
+  createdAt        DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+  orders           Order[]
+
+  @@index([isActive, sortOrder], map: "ix_shipping_methods_active_order")
+  @@map("shipping_methods")
+}
+
+model Order {
+  id                      BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
+  orderNumber             String               @unique(map: "uq_orders_order_number") @map("order_number") @db.VarChar(32)
+  idempotencyKey          String               @unique(map: "uq_orders_idempotency_key") @map("idempotency_key") @db.VarChar(100)
+  customerId              BigInt?              @map("customer_id") @db.UnsignedBigInt
+  addressId               BigInt?              @map("address_id") @db.UnsignedBigInt
+  shippingMethodId        BigInt?              @map("shipping_method_id") @db.UnsignedBigInt
+  status                  String               @default("pending_payment") @db.VarChar(32)
+  paymentStatus           String               @default("unpaid") @map("payment_status") @db.VarChar(24)
+  reservationExpiresAt    DateTime?            @map("reservation_expires_at") @db.DateTime(3)
+  currencyUnit            String               @default("TOMAN") @map("currency_unit") @db.VarChar(8)
+  subtotalToman           BigInt               @map("subtotal_toman") @db.UnsignedBigInt
+  discountToman           BigInt               @default(0) @map("discount_toman") @db.UnsignedBigInt
+  shippingToman           BigInt               @default(0) @map("shipping_toman") @db.UnsignedBigInt
+  totalToman              BigInt               @map("total_toman") @db.UnsignedBigInt
+  couponCodeSnapshot      String?              @map("coupon_code_snapshot") @db.VarChar(64)
+  recipientNameSnapshot   String               @map("recipient_name_snapshot") @db.VarChar(160)
+  recipientPhoneSnapshot  String               @map("recipient_phone_snapshot") @db.VarChar(24)
+  shippingAddressSnapshot Json                 @map("shipping_address_snapshot")
+  customerNote            String?              @map("customer_note") @db.VarChar(1000)
+  placedAt                DateTime             @default(now()) @map("placed_at") @db.DateTime(3)
+  createdAt               DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt               DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+  customer                Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  address                 CustomerAddress?     @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  shippingMethod          ShippingMethod?      @relation(fields: [shippingMethodId], references: [id], onDelete: SetNull)
+  items                   OrderItem[]
+  statusHistory           OrderStatusHistory[]
+  payments                Payment[]
+  shipments               Shipment[]
+  couponRedemptions       CouponRedemption[]
+
+  @@index([customerId, createdAt], map: "ix_orders_customer_created")
+  @@index([status, createdAt], map: "ix_orders_status_created")
+  @@index([paymentStatus, createdAt], map: "ix_orders_payment_status_created")
+  @@index([status, reservationExpiresAt], map: "ix_orders_reservation_expiry")
+  @@map("orders")
+}
+
+model OrderItem {
+  id                  BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  orderId             BigInt          @map("order_id") @db.UnsignedBigInt
+  productId           BigInt?         @map("product_id") @db.UnsignedBigInt
+  variantId           BigInt?         @map("variant_id") @db.UnsignedBigInt
+  productNameSnapshot String          @map("product_name_snapshot") @db.VarChar(220)
+  skuSnapshot         String          @map("sku_snapshot") @db.VarChar(80)
+  colorNameSnapshot   String          @map("color_name_snapshot") @db.VarChar(80)
+  sizeLabelSnapshot   String          @map("size_label_snapshot") @db.VarChar(32)
+  unitPriceToman      BigInt          @map("unit_price_toman") @db.UnsignedBigInt
+  quantity            Int             @db.UnsignedInt
+  lineTotalToman      BigInt          @map("line_total_toman") @db.UnsignedBigInt
+  createdAt           DateTime        @default(now()) @map("created_at") @db.DateTime(3)
+  order               Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product             Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant             ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  review              Review?
+
+  @@index([orderId], map: "ix_order_items_order")
+  @@index([productId], map: "ix_order_items_product")
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id                BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  orderId           BigInt     @map("order_id") @db.UnsignedBigInt
+  oldStatus         String?    @map("old_status") @db.VarChar(32)
+  newStatus         String     @map("new_status") @db.VarChar(32)
+  note              String?    @db.VarChar(500)
+  visibleToCustomer Boolean    @default(true) @map("visible_to_customer")
+  changedByAdminId  BigInt?    @map("changed_by_admin_id") @db.UnsignedBigInt
+  createdAt         DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  order             Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  changedByAdmin    AdminUser? @relation(fields: [changedByAdminId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt], map: "ix_order_status_history_order_created")
+  @@map("order_status_history")
+}
+
+model Payment {
+  id                    BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  orderId               BigInt    @map("order_id") @db.UnsignedBigInt
+  provider              String    @db.VarChar(64)
+  idempotencyKey        String    @unique(map: "uq_payments_idempotency_key") @map("idempotency_key") @db.VarChar(100)
+  amountToman           BigInt    @map("amount_toman") @db.UnsignedBigInt
+  status                String    @default("initiated") @db.VarChar(24)
+  providerTransactionId String?   @map("provider_transaction_id") @db.VarChar(160)
+  providerReference     String?   @map("provider_reference") @db.VarChar(160)
+  responseCode          String?   @map("response_code") @db.VarChar(80)
+  verifiedAt            DateTime? @map("verified_at") @db.DateTime(3)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+  order                 Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([orderId, createdAt], map: "ix_payments_order_created")
+  @@index([provider, providerTransactionId], map: "ix_payments_provider_transaction")
+  @@map("payments")
+}
+
+model Shipment {
+  id           BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  orderId      BigInt    @map("order_id") @db.UnsignedBigInt
+  provider     String?   @db.VarChar(80)
+  trackingCode String?   @map("tracking_code") @db.VarChar(120)
+  status       String    @default("pending") @db.VarChar(24)
+  shippedAt    DateTime? @map("shipped_at") @db.DateTime(3)
+  deliveredAt  DateTime? @map("delivered_at") @db.DateTime(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+  order        Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([orderId], map: "ix_shipments_order")
+  @@index([trackingCode], map: "ix_shipments_tracking")
+  @@map("shipments")
+}
+
+model CouponRedemption {
+  id            BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  couponId      BigInt    @map("coupon_id") @db.UnsignedBigInt
+  customerId    BigInt?   @map("customer_id") @db.UnsignedBigInt
+  orderId       BigInt    @map("order_id") @db.UnsignedBigInt
+  discountToman BigInt    @map("discount_toman") @db.UnsignedBigInt
+  redeemedAt    DateTime  @default(now()) @map("redeemed_at") @db.DateTime(3)
+  coupon        Coupon    @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  customer      Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@unique([couponId, orderId], map: "uq_coupon_redemptions_order")
+  @@index([couponId, customerId], map: "ix_coupon_redemptions_customer")
+  @@map("coupon_redemptions")
+}
+
+model Wishlist {
+  id         BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
+  customerId BigInt         @unique(map: "uq_wishlists_customer") @map("customer_id") @db.UnsignedBigInt
+  createdAt  DateTime       @default(now()) @map("created_at") @db.DateTime(3)
+  customer   Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items      WishlistItem[]
+
+  @@map("wishlists")
+}
+
+model WishlistItem {
+  wishlistId BigInt   @map("wishlist_id") @db.UnsignedBigInt
+  productId  BigInt   @map("product_id") @db.UnsignedBigInt
+  createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  wishlist   Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([wishlistId, productId])
+  @@index([productId], map: "ix_wishlist_items_product")
+  @@map("wishlist_items")
+}
+
+model Review {
+  id          BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  productId   BigInt    @map("product_id") @db.UnsignedBigInt
+  customerId  BigInt    @map("customer_id") @db.UnsignedBigInt
+  orderItemId BigInt    @unique(map: "uq_reviews_order_item") @map("order_item_id") @db.UnsignedBigInt
+  rating      Int       @db.UnsignedTinyInt
+  title       String?   @db.VarChar(160)
+  body        String?   @db.Text
+  status      String    @default("pending") @db.VarChar(24)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customer    Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@index([productId, status, createdAt], map: "ix_reviews_product_status_created")
+  @@map("reviews")
+}
+
+model OtpRequest {
+  id           BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  phone        String    @db.VarChar(24)
+  codeHash     String    @map("code_hash") @db.Char(64)
+  status       String    @default("pending") @db.VarChar(24)
+  attemptCount Int       @default(0) @map("attempt_count") @db.UnsignedTinyInt
+  expiresAt    DateTime  @map("expires_at") @db.DateTime(3)
+  consumedAt   DateTime? @map("consumed_at") @db.DateTime(3)
+  requestIp    Bytes?    @map("request_ip") @db.VarBinary(16)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([phone, status, createdAt], map: "ix_otp_requests_phone_status_created")
+  @@index([expiresAt], map: "ix_otp_requests_expires")
+  @@map("otp_requests")
+}
+
+model Banner {
+  id          BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  title       String    @db.VarChar(180)
+  description String?   @db.VarChar(500)
+  imagePath   String    @map("image_path") @db.VarChar(500)
+  targetUrl   String?   @map("target_url") @db.VarChar(500)
+  startsAt    DateTime? @map("starts_at") @db.DateTime(3)
+  endsAt      DateTime? @map("ends_at") @db.DateTime(3)
+  sortOrder   Int       @default(0) @map("sort_order")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@index([isActive, startsAt, endsAt, sortOrder], map: "ix_banners_active_window_order")
+  @@map("banners")
+}
+
+model HomepageSection {
+  id               BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  sectionKey       String     @unique(map: "uq_homepage_sections_key") @map("section_key") @db.VarChar(64)
+  title            String?    @db.VarChar(180)
+  config           Json?
+  isActive         Boolean    @default(true) @map("is_active")
+  sortOrder        Int        @default(0) @map("sort_order")
+  updatedByAdminId BigInt?    @map("updated_by_admin_id") @db.UnsignedBigInt
+  createdAt        DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
+  updatedByAdmin   AdminUser? @relation(fields: [updatedByAdminId], references: [id], onDelete: SetNull)
+
+  @@index([isActive, sortOrder], map: "ix_homepage_sections_active_order")
+  @@map("homepage_sections")
+}
+
+model StoreSetting {
+  settingKey       String     @id @map("setting_key") @db.VarChar(100)
+  settingValue     Json       @map("setting_value")
+  isPublic         Boolean    @default(false) @map("is_public")
+  updatedByAdminId BigInt?    @map("updated_by_admin_id") @db.UnsignedBigInt
+  updatedAt        DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
+  updatedByAdmin   AdminUser? @relation(fields: [updatedByAdminId], references: [id], onDelete: SetNull)
+
+  @@map("store_settings")
+}
+
+model AdminAuditLog {
+  id         BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  adminId    BigInt?    @map("admin_id") @db.UnsignedBigInt
+  action     String     @db.VarChar(100)
+  entityType String     @map("entity_type") @db.VarChar(64)
+  entityId   BigInt?    @map("entity_id") @db.UnsignedBigInt
+  details    Json?
+  requestIp  Bytes?     @map("request_ip") @db.VarBinary(16)
+  createdAt  DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  admin      AdminUser? @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([adminId, createdAt], map: "ix_admin_audit_logs_admin_created")
+  @@index([entityType, entityId, createdAt], map: "ix_admin_audit_logs_entity")
+  @@map("admin_audit_logs")
+}

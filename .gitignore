@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+logs/
+.dart_tool/
+build/
+.flutter-plugins*
+android/local.properties
+android/key.properties
+*.iml
+*.log
+.env*
+!.env.example
+*.tsbuildinfo
