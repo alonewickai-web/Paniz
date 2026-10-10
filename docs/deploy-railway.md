@@ -27,13 +27,13 @@ Railway بر اساس اشتراک و مصرف منابع هزینه می‌گی
 | `NODE_ENV` | `production` |
 | `DATABASE_URL` | `${{MySQL.MYSQL_URL}}` |
 | `DATABASE_CONNECTION_LIMIT` | `5` |
-| `WEB_ORIGINS` | فعلاً `http://localhost:3000`؛ پس از ساخت دامنهٔ سایت، با دامنهٔ واقعی آن جایگزین شود |
+| `WEB_ORIGINS` | پس از اتصال دامنه: `https://panizstyle.ir,https://www.panizstyle.ir` |
 | `ADMIN_BOOTSTRAP_KEY` | یک مقدار تصادفی محرمانه و حداقل ۳۲ نویسه‌ای |
 | `CUSTOMER_AUTH_SECRET` | یک مقدار تصادفی محرمانه و حداقل ۳۲ نویسه‌ای |
 
 Railway متغیر `PORT` را تزریق می‌کند؛ آن را دستی ثابت نکنید. API روی `0.0.0.0` و همان پورت اجرا می‌شود. Dockerfile پیش از شروع API، migrationهای Prisma را اعمال می‌کند.
 
-بعد از Deploy، از **Settings → Networking → Generate Domain** برای سرویس API دامنه بسازید. سپس بررسی کنید این مسیر پاسخ موفق بدهد:
+بعد از Deploy، برای API دامنهٔ Railway بسازید و بررسی کنید این مسیر پاسخ موفق بدهد:
 
 ```text
 https://<دامنه-api>/api/v1/health/ready
@@ -47,18 +47,30 @@ https://<دامنه-api>/api/v1/health/ready
 - Branch: `main`
 - Root Directory: `/`
 - Builder: Dockerfile؛ فایل `Dockerfile` در ریشهٔ مخزن استفاده می‌شود.
-- در Variables مقدار `NEXT_PUBLIC_API_BASE_URL` را ثبت کنید:
+- در Variables مقدارهای زیر را ثبت کنید:
+
+```text
+NEXT_PUBLIC_API_BASE_URL=https://api.panizstyle.ir/api/v1
+NEXT_PUBLIC_SITE_URL=https://panizstyle.ir
+```
+
+برای شروع پیش از اتصال دامنهٔ سفارشی، نشانی API Railway را در `NEXT_PUBLIC_API_BASE_URL` قرار دهید:
 
 ```text
 https://${{api.RAILWAY_PUBLIC_DOMAIN}}/api/v1
 ```
 
-پیش از Deploy سایت، برای API دامنه بسازید تا نشانی API هنگام build در سایت قرار بگیرد. سپس برای سرویس `storefront` هم از **Settings → Networking → Generate Domain** دامنه بسازید.
+سایت روی Railway با دامنهٔ موقت `paniz-production-17f9.up.railway.app` و API با دامنهٔ موقت `api-production-bbf4.up.railway.app` در دسترس‌اند. برای فعال‌کردن دامنهٔ اختصاصی:
+
+1. در سرویس سایت، **Settings → Networking → Custom Domain** را باز و `panizstyle.ir` را اضافه کنید؛ پورت مقصد سایت `8080` است.
+2. در سرویس API، همین مسیر را باز و `api.panizstyle.ir` را اضافه کنید؛ پورت مقصد API `4000` است.
+3. Railway برای هر دامنه رکوردهای CNAME و TXT مخصوص همان دامنه را نشان می‌دهد. دقیقاً همان مقادیر را در پنل DNS دامنه ثبت کنید؛ برای دامنهٔ ریشه از ALIAS/ANAME یا CNAME flattening پشتیبانی‌شدهٔ سرویس DNS استفاده کنید.
+4. پس از تأیید HTTPS، متغیرهای Railway را به نشانی‌های دامنهٔ بالا تغییر دهید و هر دو سرویس را Deploy کنید.
 
 در Variables سرویس API مقدار `WEB_ORIGINS` را به دامنهٔ واقعی سایت تغییر دهید:
 
 ```text
-https://${{storefront.RAILWAY_PUBLIC_DOMAIN}}
+https://panizstyle.ir,https://www.panizstyle.ir
 ```
 
 ## ۴. راه‌اندازی مدیر و APK
@@ -66,7 +78,7 @@ https://${{storefront.RAILWAY_PUBLIC_DOMAIN}}
 1. در APK، گزینهٔ «راه‌اندازی اولیهٔ مدیر» را باز کنید.
 2. مقدار `ADMIN_BOOTSTRAP_KEY` را از Variables سرویس API وارد کنید و حساب مدیر را بسازید.
 3. پس از ساخت مدیر، مقدار `ADMIN_BOOTSTRAP_KEY` را از Railway حذف کنید.
-4. APK Release را با دامنه‌های واقعی بسازید:
+4. APK نسخهٔ فعلی به API موقت Railway وصل است. پس از فعال‌شدن `api.panizstyle.ir` آن را با دامنهٔ جدید بسازید:
 
 ```powershell
 cd apps/admin-mobile
@@ -76,6 +88,15 @@ flutter build apk --release --split-per-abi `
 ```
 
 فایل‌های ساخته‌شده در `apps/admin-mobile/build/app/outputs/flutter-apk/` قرار می‌گیرند.
+
+## ثبت در گوگل
+
+پس از فعال‌شدن دامنه و Deploy، باز کنید:
+
+- `https://panizstyle.ir/robots.txt`
+- `https://panizstyle.ir/sitemap.xml`
+
+سپس دامنه را در Google Search Console تأیید و نشانی `https://panizstyle.ir/sitemap.xml` را در بخش Sitemaps ثبت کنید. ارسال sitemap درخواست بررسی است و زمان نمایش در نتایج جست‌وجو را تضمین نمی‌کند. برای دیده‌شدن محصولات، ابتدا محصولات و تصاویر واقعی را از اپ مدیر وارد کنید.
 
 ## وضعیت قابلیت‌های نیازمند سرویس بیرونی
 

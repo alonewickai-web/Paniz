@@ -4,6 +4,8 @@ import { ProductsExplorer } from "../components/products-explorer";
 export const metadata = {
   title: "همهٔ محصولات | PanizStyle",
   description: "جست‌وجو و خرید پوشاک زنانهٔ پانیز با فیلتر رنگ، سایز و قیمت.",
+  alternates: { canonical: "/products" },
+  openGraph: { url: "/products", title: "همهٔ محصولات | PanizStyle" },
 };
 
 export default function ProductsPage() {

@@ -6,16 +6,24 @@ import "@fontsource/vazirmatn/700.css";
 import "./globals.css";
 import "./storefront.css";
 import { StorefrontProvider } from "./lib/storefront-state";
+import { siteUrl } from "./lib/site-url";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl()),
   title: "PanizStyle | پوشاکی برای حال خوب تو",
   description:
     "جدیدترین لباس‌های زنانه، ست‌های راحتی و پوشاک روزمره را با تجربه‌ای ساده و دوست‌داشتنی در پانیز پیدا کن.",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large" },
+  },
   openGraph: {
     title: "PanizStyle | پوشاکی برای حال خوب تو",
     description: "استایل تازه‌ات را از پانیز پیدا کن.",
     locale: "fa_IR",
     type: "website",
+    siteName: "PanizStyle",
   },
 };
 

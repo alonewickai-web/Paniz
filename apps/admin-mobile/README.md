@@ -33,7 +33,7 @@
 
 اگر Android اجازهٔ نصب نداد، برای مرورگری که فایل را گرفته گزینهٔ Install unknown apps را در تنظیمات دستگاه فعال کنید. از بین این سه APK فقط فایل سازگار با معماری دستگاه را نصب کنید.
 
-APKهای پوشهٔ APK اکنون صفحهٔ ورود را نمایش می‌دهند؛ اما چون هنگام ساخت به دامنهٔ API واقعی اشاره نشده، نمی‌توانند وارد سرور فروشگاه شوند. آدرس پیش‌فرض `http://10.0.2.2:4000/api/v1/` فقط داخل Android Emulator به رایانهٔ میزبان اشاره می‌کند و در گوشی واقعی قابل استفاده نیست. پس از راه‌اندازی سرور، APK را با آدرس HTTPS واقعی طبق دستور ساخت Release پایین دوباره بسازید. APKها با کلید Debug امضا شده‌اند و برای انتشار رسمی مناسب نیستند.
+APK نسخهٔ **0.2.2+4** با HTTPS به API زندهٔ Railway وصل می‌شود و آدرس پیش‌فرض شبیه‌ساز را استفاده نمی‌کند. برای ورود، مدیر باید ابتدا مقدار `ADMIN_BOOTSTRAP_KEY` را در متغیرهای API در Railway تنظیم کند و حساب مالک را از صفحهٔ راه‌اندازی اولیه بسازد. APKها با کلید Debug امضا شده‌اند و برای انتشار در فروشگاه برنامه مناسب نیستند.
 
 ## پیش‌نیاز ساخت
 
@@ -62,10 +62,20 @@ IP را با نشانی رایانهٔ خود جایگزین کنید و دست�
 برای ساخت نسخهٔ Release باید URL واقعی HTTPS API و سایت را هنگام build تعیین کنید؛ مقادیر نمونه را با دامنهٔ واقعی عوض کنید:
 
 ~~~powershell
-flutter build apk --release --split-per-abi --dart-define=PANIZ_API_BASE_URL=https://api.example.com/api/v1/ --dart-define=PANIZ_WEB_BASE_URL=https://shop.example.com/
+flutter build apk --release --split-per-abi `
+  --dart-define=PANIZ_API_BASE_URL=https://api-production-bbf4.up.railway.app/api/v1/ `
+  --dart-define=PANIZ_WEB_BASE_URL=https://paniz-production-17f9.up.railway.app/
 ~~~
 
-فرمان بالا سه APK برای ARMV7، ARM64 و x86_64 می‌سازد. خروجی‌ها در **build/app/outputs/flutter-apk/** هستند. هر دستگاه فقط یکی از آن‌ها را نصب می‌کند. Release بدون مقدار HTTPS معتبر برای API قابل استفاده نیست؛ کد اپ در ساخت Release اتصال HTTP را نمی‌پذیرد.
+برای نسخهٔ فعلی از این مقادیر استفاده کنید:
+
+~~~powershell
+flutter build apk --release --split-per-abi `
+  --dart-define=PANIZ_API_BASE_URL=https://api-production-bbf4.up.railway.app/api/v1/ `
+  --dart-define=PANIZ_WEB_BASE_URL=https://paniz-production-17f9.up.railway.app/
+~~~
+
+وقتی دامنهٔ سفارشی فعال شد، URLها را به `https://api.panizstyle.ir/api/v1/` و `https://panizstyle.ir/` تغییر دهید. فرمان بالا سه APK برای ARMV7، ARM64 و x86_64 می‌سازد. خروجی‌ها در **build/app/outputs/flutter-apk/** هستند. هر دستگاه فقط یکی از آن‌ها را نصب می‌کند. Release بدون مقدار HTTPS معتبر برای API قابل استفاده نیست؛ کد اپ در ساخت Release اتصال HTTP را نمی‌پذیرد.
 
 برای نصب یا انتشار نسخهٔ رسمی باید در **android/app/build.gradle.kts** به‌جای signing config دیباگ، کلید امضای Release امن و اختصاصی تنظیم شود. فایل keystore و رمز آن را در Git یا APK قرار ندهید.
 

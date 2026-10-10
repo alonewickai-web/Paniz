@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { StorefrontShell } from "../../components/storefront-shell";
 import { ProductDetailView } from "../../components/product-detail-view";
 import { apiBaseUrl, type StoreProductDetail } from "../../lib/catalog";
+import { siteUrl } from "../../lib/site-url";
 
 type RouteProps = { params: Promise<{ slug: string }> };
 
@@ -24,7 +25,12 @@ export async function generateMetadata({ params }: RouteProps): Promise<Metadata
   return {
     title: `${product.name} | PanizStyle`,
     description: product.shortDescription || product.description || `مشاهدهٔ رنگ‌ها، سایزها و قیمت ${product.name} در پانیز.`,
-    openGraph: { title: `${product.name} | PanizStyle`, images: product.image ? [product.image.path] : [] },
+    alternates: { canonical: `/products/${encodeURIComponent(product.slug)}` },
+    openGraph: {
+      title: `${product.name} | PanizStyle`,
+      url: siteUrl(`/products/${encodeURIComponent(product.slug)}`),
+      images: product.image ? [product.image.path] : [],
+    },
   };
 }
 
