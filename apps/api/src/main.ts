@@ -12,12 +12,17 @@ async function bootstrap(): Promise<void> {
 
   app.setGlobalPrefix("api/v1");
   app.use(helmet());
+  const configuredOrigins = config
+    .getOrThrow<string>("WEB_ORIGINS")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const productionOrigins =
+    config.get<string>("NODE_ENV") === "production"
+      ? ["https://panizstyle.ir", "https://www.panizstyle.ir"]
+      : [];
   app.enableCors({
-    origin: config
-      .getOrThrow<string>("WEB_ORIGINS")
-      .split(",")
-      .map((origin) => origin.trim())
-      .filter(Boolean),
+    origin: [...new Set([...configuredOrigins, ...productionOrigins])],
     credentials: true,
   });
   app.useGlobalPipes(
