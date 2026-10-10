@@ -14,3 +14,4 @@ android/key.properties
 .env*
 !.env.example
 *.tsbuildinfo
+.railway/
