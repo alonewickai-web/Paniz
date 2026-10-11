@@ -299,8 +299,19 @@ class AdminApi {
   }
 
   Future<JsonMap> uploadImage(Uint8List bytes, String filename) async {
+    final extension = filename.split('.').last.toLowerCase();
+    final mediaType = switch (extension) {
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      _ => 'application/octet-stream',
+    };
     final form = FormData.fromMap({
-      'file': MultipartFile.fromBytes(bytes, filename: filename),
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: filename,
+        contentType: DioMediaType.parse(mediaType),
+      ),
     });
     return _data(await dio.post('admin/uploads/product-image', data: form));
   }

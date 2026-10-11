@@ -349,7 +349,8 @@ class _ProductCard extends StatelessWidget {
                     AdminApi.imageUrl(imagePath),
                     width: 52,
                     height: 58,
-                    fit: BoxFit.cover,
+                    cacheWidth: 180,
+                    fit: BoxFit.contain,
                     errorBuilder:
                         (_, __, ___) => Container(
                           width: 52,
@@ -1353,6 +1354,7 @@ class _AddProductImageDialogState extends State<_AddProductImageDialog> {
             AdminImagePickerField(
               label: 'تصویر گالری محصول',
               imagePath: _imagePath,
+              aspectRatio: 4 / 5,
               errorText: _imageError ? 'برای افزودن تصویر، یک فایل انتخاب کن.' : null,
               onChanged: (value) => setState(() {
                 _imagePath = value;
