@@ -223,6 +223,8 @@
   .store-checkout-layout { grid-template-columns: minmax(0, 1fr) 300px; }
 }
 @media (max-width: 760px) {
+  .header-search-autocomplete { grid-column: 1 / -1; grid-row: 2; min-width: 0; }
+  .header-actions { grid-column: 3; grid-row: 1; }
   .store-page { padding-top: 18px; padding-bottom: 108px; }
   .store-breadcrumb { margin-bottom: 15px; font-size: 11px; }
   .store-page-heading { align-items: start; margin-bottom: 19px; }

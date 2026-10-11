@@ -239,7 +239,7 @@ img { display: block; }
 .hero-proof-stars svg { width: 12px; height: 12px; fill: currentColor; }
 .hero-visual { position: relative; min-height: 480px; align-self: stretch; }
 .hero-image-wrap { position: absolute; top: 0; right: 7%; bottom: 0; width: 79%; overflow: hidden; border-radius: 48% 48% 18px 18px / 45% 45% 18px 18px; }
-.hero-image { object-fit: cover; object-position: center 28%; mix-blend-mode: multiply; }
+.hero-image { object-fit: contain; object-position: center; mix-blend-mode: multiply; }
 .hero-sticker { position: absolute; z-index: 2; top: 55px; left: 9%; width: 120px; height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border: 1px solid rgba(255,255,255,.8); border-radius: 50%; background: rgba(255,250,247,.86); color: #a25561; box-shadow: var(--shadow-soft); transform: rotate(-9deg); }
 .hero-sticker span { font-size: 10px; }
 .hero-sticker strong { color: #514044; font-size: 13px; line-height: 1.5; text-align: center; }
@@ -521,7 +521,7 @@ html[data-theme="dark"] .store-suggestions { background: var(--surface); border-
 
 @media (max-width: 760px) {
   html { scroll-padding-top: 122px; }
-  body { padding-bottom: 70px; }
+  body { padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
   .page-shell { width: calc(100% - 32px); }
   .announcement-bar { min-height: 30px; font-size: 10px; }
   .site-header { position: sticky; }
@@ -540,7 +540,7 @@ html[data-theme="dark"] .store-suggestions { background: var(--surface); border-
   .account-button { display: none; }
   .desktop-nav { display: none; }
   .page-content { padding-top: 13px; }
-  .hero { min-height: 500px; grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; border-radius: 21px; }
+  .hero { min-height: 500px; grid-template-columns: 1fr; grid-template-rows: clamp(255px, 78vw, 355px) auto; border-radius: 21px; }
   .hero-copy { grid-row: 2; align-self: start; padding: 11px 22px 34px; }
   .hero h1 { font-size: clamp(36px, 9vw, 48px); }
   .hero-copy > p { max-width: 390px; margin: 8px 0 13px; font-size: 12px; line-height: 1.9; }
@@ -548,9 +548,9 @@ html[data-theme="dark"] .store-suggestions { background: var(--surface); border-
   .button-primary { min-height: 44px; padding-inline: 16px; font-size: 11px; }
   .hero-note { font-size: 9px; }
   .hero-proof { margin-top: 18px; }
-  .hero-visual { grid-row: 1; min-height: 245px; }
-  .hero-image-wrap { top: 0; right: 19%; bottom: 0; width: 60%; border-radius: 0 0 46% 46% / 0 0 40% 40%; }
-  .hero-image { object-position: center 24%; }
+  .hero-visual { grid-row: 1; min-height: 0; }
+  .hero-image-wrap { top: 0; right: 50%; bottom: 0; width: min(70%, 340px); transform: translateX(50%); border-radius: 0 0 46% 46% / 0 0 40% 40%; }
+  .hero-image { object-position: center; }
   .hero-sticker { top: 25px; left: 8%; width: 87px; height: 87px; }
   .hero-sticker span { font-size: 8px; }
   .hero-sticker strong { font-size: 10px; }
@@ -646,6 +646,7 @@ html[data-theme="dark"] .store-suggestions { background: var(--surface); border-
   .modal-close { top: 10px; right: 10px; width: 36px; height: 36px; }
   .cart-drawer { width: min(420px, 100%); padding: 18px 16px calc(16px + env(safe-area-inset-bottom)); }
   .toast-message { right: 16px; bottom: calc(75px + env(safe-area-inset-bottom)); left: 16px; justify-content: center; font-size: 10px; transform: none; }
+  .search-box input, .store-search-field input, .store-field input, .store-field select, .store-field textarea, .store-price-fields input, .store-track-form input { font-size: 16px; }
   @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 }
 
@@ -653,6 +654,7 @@ html[data-theme="dark"] .store-suggestions { background: var(--surface); border-
   .page-shell { width: calc(100% - 26px); }
   .header-main { grid-template-columns: 33px 1fr 78px; }
   .category-list { margin-inline: -13px; padding-inline: 13px; }
+  .filter-chips { margin-inline: -13px; padding-inline: 13px; }
   .hero-copy { padding-inline: 17px; }
   .hero h1 { font-size: 35px; }
   .hero-proof { gap: 8px; }
