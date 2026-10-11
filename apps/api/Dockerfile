@@ -30,4 +30,5 @@ COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/dist ./dist
 
 EXPOSE 4000
-CMD ["sh", "-c", "npx prisma migrate deploy && exec npm run start:prod"]
+# Run migrations separately from API startup so a failed migration does not keep the service offline.
+CMD ["npm", "run", "start:prod"]
