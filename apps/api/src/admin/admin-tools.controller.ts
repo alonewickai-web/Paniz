@@ -55,6 +55,26 @@ export class AdminToolsController {
     return this.tools.sendSmsCampaign(request.admin!, id);
   }
 
+  @Post("rubika-campaigns/preview")
+  previewRubika(@Req() request: AdminRequest, @Body() body: Record<string, unknown>) {
+    return this.tools.previewRubikaAudience(request.admin!, body.filters);
+  }
+
+  @Get("rubika-campaigns")
+  rubikaCampaigns(@Req() request: AdminRequest) {
+    return this.tools.listRubikaCampaigns(request.admin!);
+  }
+
+  @Post("rubika-campaigns")
+  createRubika(@Req() request: AdminRequest, @Body() body: Record<string, unknown>) {
+    return this.tools.createRubikaCampaign(request.admin!, body);
+  }
+
+  @Post("rubika-campaigns/:id/send")
+  sendRubika(@Req() request: AdminRequest, @Param("id") id: string) {
+    return this.tools.sendRubikaCampaign(request.admin!, id);
+  }
+
   @Get("social/status")
   socialStatus(@Req() request: AdminRequest) {
     return this.tools.socialStatus(request.admin!);

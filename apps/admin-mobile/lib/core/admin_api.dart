@@ -152,6 +152,20 @@ class AdminApi {
   Future<JsonMap> sendSmsCampaign(String id) async =>
       _data(await dio.post('admin/sms-campaigns/$id/send'));
 
+  String _campaignPath(String channel) => channel == 'rubika' ? 'admin/rubika-campaigns' : 'admin/sms-campaigns';
+
+  Future<JsonMap> previewCampaignAudience(String channel, JsonMap filters) async =>
+      _data(await dio.post('${_campaignPath(channel)}/preview', data: {'filters': filters}));
+
+  Future<List<JsonMap>> marketingCampaigns(String channel) async =>
+      _list(_payload(await dio.get(_campaignPath(channel))));
+
+  Future<JsonMap> createMarketingCampaign(String channel, String title, String message, JsonMap filters) async =>
+      _data(await dio.post(_campaignPath(channel), data: {'title': title, 'message': message, 'filters': filters}));
+
+  Future<JsonMap> sendMarketingCampaign(String channel, String id) async =>
+      _data(await dio.post('${_campaignPath(channel)}/$id/send'));
+
   Future<List<JsonMap>> coupons() async => _list(_payload(await dio.get('admin/coupons')));
 
   Future<JsonMap> saveCoupon(JsonMap input, {String? id}) async =>

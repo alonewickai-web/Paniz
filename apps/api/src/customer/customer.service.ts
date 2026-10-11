@@ -4,10 +4,11 @@ import { CustomerRequest } from "./customer-session.guard";
 import { normalizeIranPhone } from "./dto/phone.dto";
 import { UpdateCustomerProfileDto } from "./dto/update-customer-profile.dto";
 import { SaveCustomerAddressDto } from "./dto/save-customer-address.dto";
+import { RubikaBotService } from "../integrations/rubika/rubika.service";
 
 @Injectable()
 export class CustomerService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly rubika: RubikaBotService) {}
 
   async getProfile(request: CustomerRequest) {
     const customer = await this.prisma.customer.findUniqueOrThrow({
@@ -22,6 +23,8 @@ export class CustomerService {
         email: customer.email,
         phoneVerifiedAt: customer.phoneVerifiedAt?.toISOString() ?? null,
         marketingOptIn: customer.marketingOptIn,
+        rubikaMarketingOptIn: customer.rubikaMarketingOptIn,
+        rubikaLinked: Boolean(customer.rubikaChatId),
         addresses: customer.addresses.map(toPublicAddress),
       },
     };
@@ -37,9 +40,33 @@ export class CustomerService {
           marketingOptIn: input.marketingOptIn,
           marketingOptInAt: input.marketingOptIn ? new Date() : null,
         }),
+        ...(input.rubikaMarketingOptIn === undefined ? {} : {
+          rubikaMarketingOptIn: input.rubikaMarketingOptIn,
+          rubikaMarketingOptInAt: input.rubikaMarketingOptIn ? new Date() : null,
+        }),
       },
     });
-    return { data: { id: customer.id.toString(), phone: customer.phone, fullName: customer.fullName, email: customer.email, marketingOptIn: customer.marketingOptIn } };
+    return { data: {
+      id: customer.id.toString(), phone: customer.phone, fullName: customer.fullName, email: customer.email,
+      marketingOptIn: customer.marketingOptIn, rubikaMarketingOptIn: customer.rubikaMarketingOptIn,
+      rubikaLinked: Boolean(customer.rubikaChatId),
+    } };
+  }
+
+  async createRubikaLinkCode(request: CustomerRequest) {
+    const result = await this.rubika.createLinkCode(request.customer!.id);
+    return { data: result };
+  }
+
+  async unlinkRubika(request: CustomerRequest) {
+    await this.prisma.customer.update({
+      where: { id: request.customer!.id },
+      data: { rubikaChatId: null, rubikaMarketingOptIn: false, rubikaMarketingOptInAt: null },
+    });
+    await this.prisma.customerRubikaLinkCode.updateMany({
+      where: { customerId: request.customer!.id, usedAt: null }, data: { expiresAt: new Date() },
+    });
+    return { data: { unlinked: true } };
   }
 
   async listAddresses(request: CustomerRequest) {

@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { AuthenticatedAdmin } from "../admin-auth/admin-session.guard";
 import { PrismaService } from "../database/prisma.service";
+import { RubikaBotService } from "../integrations/rubika/rubika.service";
 
 const execFile = promisify(execFileCallback);
 const MAX_AUDIENCE = 20_000;
@@ -36,12 +37,18 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AdminToolsService.name);
   private socialTimer?: NodeJS.Timeout;
   private smsTimer?: NodeJS.Timeout;
+  private rubikaTimer?: NodeJS.Timeout;
   private backupTimer?: NodeJS.Timeout;
   private socialBusy = false;
   private smsBusy = false;
+  private rubikaBusy = false;
   private backupBusy = false;
 
-  constructor(private readonly prisma: PrismaService, private readonly config: ConfigService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+    private readonly rubika: RubikaBotService,
+  ) {}
 
   async onModuleInit(): Promise<void> {
     try { await this.recoverInterruptedJobs(); }
@@ -50,16 +57,20 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     this.socialTimer.unref();
     this.smsTimer = setInterval(() => void this.processQueuedSms(), 15_000);
     this.smsTimer.unref();
+    this.rubikaTimer = setInterval(() => void this.processQueuedRubika(), 15_000);
+    this.rubikaTimer.unref();
     this.backupTimer = setInterval(() => void this.ensureDailyBackup(), 60 * 60_000);
     this.backupTimer.unref();
     setTimeout(() => void this.publishDuePosts(), 5_000).unref();
     setTimeout(() => void this.processQueuedSms(), 8_000).unref();
+    setTimeout(() => void this.processQueuedRubika(), 8_000).unref();
     setTimeout(() => void this.ensureDailyBackup(), 15_000).unref();
   }
 
   onModuleDestroy(): void {
     if (this.socialTimer) clearInterval(this.socialTimer);
     if (this.smsTimer) clearInterval(this.smsTimer);
+    if (this.rubikaTimer) clearInterval(this.rubikaTimer);
     if (this.backupTimer) clearInterval(this.backupTimer);
   }
 
@@ -68,7 +79,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     const filters = normalizeFilters(query);
     const page = boundedInt(query.page, 1, 1, 100_000);
     const pageSize = boundedInt(query.pageSize, 30, 1, 100);
-    const { customers, total, capped } = await this.loadCustomers(filters, false);
+    const { customers, total, capped } = await this.loadCustomers(filters, "all", false);
     const start = (page - 1) * pageSize;
     return { data: {
       items: customers.slice(start, start + pageSize).map(toCustomerSummary),
@@ -129,13 +140,13 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   async previewSmsAudience(admin: AuthenticatedAdmin, rawFilters: unknown) {
     requireManager(admin);
     const filters = normalizeFilters(asObject(rawFilters));
-    const audience = await this.loadCustomers(filters, true);
+    const audience = await this.loadCustomers(filters, "sms", true);
     return { data: { count: audience.total, capped: audience.capped, filters } };
   }
 
   async listSmsCampaigns(admin: AuthenticatedAdmin) {
     requireManager(admin);
-    const campaigns = await this.prisma.smsCampaign.findMany({ orderBy: { createdAt: "desc" }, take: 50 });
+    const campaigns = await this.prisma.smsCampaign.findMany({ where: { channel: "sms" }, orderBy: { createdAt: "desc" }, take: 50 });
     return { data: campaigns.map((item) => ({
       id: item.id.toString(), title: item.title, message: item.message, recipientCount: item.recipientCount,
       sentCount: item.sentCount, failedCount: item.failedCount, status: item.status,
@@ -148,9 +159,9 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     const title = requiredText(input.title, "title", 160);
     const message = requiredText(input.message, "message", 1000);
     const filters = normalizeFilters(asObject(input.filters));
-    const audience = await this.loadCustomers(filters, true);
+    const audience = await this.loadCustomers(filters, "sms", true);
     const campaign = await this.prisma.smsCampaign.create({ data: {
-      title, message, targetFilters: filters as Prisma.InputJsonValue,
+      channel: "sms", title, message, targetFilters: filters as Prisma.InputJsonValue,
       recipientCount: audience.total, status: "draft", createdByAdminId: admin.id,
     } });
     await this.audit(admin, "sms_campaign.created", "sms_campaign", campaign.id, { recipientCount: audience.total });
@@ -160,7 +171,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   async sendSmsCampaign(admin: AuthenticatedAdmin, idText: string) {
     requireManager(admin);
     const campaignId = parseId(idText, "campaign id");
-    const campaign = await this.prisma.smsCampaign.findUnique({ where: { id: campaignId } });
+    const campaign = await this.prisma.smsCampaign.findFirst({ where: { id: campaignId, channel: "sms" } });
     if (!campaign) throw new NotFoundException({ code: "SMS_CAMPAIGN_NOT_FOUND", message: "Campaign was not found." });
     if (campaign.status !== "draft") throw new ConflictException({ code: "SMS_CAMPAIGN_ALREADY_PROCESSED", message: "Only a draft can be sent. Check SMS.ir delivery records before creating a replacement campaign." });
     const apiKey = this.config.get<string>("SMSIR_API_KEY", "");
@@ -168,7 +179,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     if (!apiKey || !lineNumber) throw new ServiceUnavailableException({ code: "SMSIR_NOT_CONFIGURED", message: "Set SMSIR_API_KEY and SMSIR_LINE_NUMBER in the API environment before sending." });
 
     const filters = normalizeFilters(asObject(campaign.targetFilters));
-    const audience = await this.loadCustomers(filters, true);
+    const audience = await this.loadCustomers(filters, "sms", true);
     if (!audience.customers.length) throw new ConflictException({ code: "SMS_AUDIENCE_EMPTY", message: "No customers with SMS marketing consent match these filters." });
     if (audience.capped) throw new ConflictException({ code: "SMS_AUDIENCE_TOO_LARGE", message: `This campaign exceeds the ${MAX_AUDIENCE.toLocaleString()} recipient limit. Narrow its filters.` });
     await this.prisma.smsCampaign.update({ where: { id: campaignId }, data: { status: "queued", recipientCount: audience.customers.length, sentCount: 0, failedCount: 0, providerResponse: Prisma.JsonNull } });
@@ -181,7 +192,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     this.smsBusy = true;
     try {
       for (let count = 0; count < 2; count++) {
-        const campaign = await this.prisma.smsCampaign.findFirst({ where: { status: "queued" }, orderBy: { createdAt: "asc" } });
+        const campaign = await this.prisma.smsCampaign.findFirst({ where: { status: "queued", channel: "sms" }, orderBy: { createdAt: "asc" } });
         if (!campaign) break;
         const claim = await this.prisma.smsCampaign.updateMany({ where: { id: campaign.id, status: "queued" }, data: { status: "sending", startedAt: new Date() } });
         if (claim.count !== 1) continue;
@@ -200,7 +211,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     const endpoint = this.config.get<string>("SMSIR_BULK_URL", "https://api.sms.ir/v1/send/bulk");
     try {
         const filters = normalizeFilters(asObject(campaign.targetFilters));
-        const audience = await this.loadCustomers(filters, true);
+        const audience = await this.loadCustomers(filters, "sms", true);
         recipientCount = audience.total;
         await this.prisma.smsCampaign.update({ where: { id: campaign.id }, data: { recipientCount } });
         if (audience.capped) throw new Error(`Campaign exceeds the ${MAX_AUDIENCE} recipient limit.`);
@@ -235,6 +246,142 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
         providerResponse: { batches: responses, error: message } as Prisma.InputJsonObject,
       } });
       this.logger.error(`SMS campaign ${campaign.id} failed after ${sentCount} accepted recipients: ${message}`);
+    }
+  }
+
+  async previewRubikaAudience(admin: AuthenticatedAdmin, rawFilters: unknown) {
+    requireManager(admin);
+    const filters = normalizeFilters(asObject(rawFilters));
+    const audience = await this.loadCustomers(filters, "rubika", true);
+    return { data: { count: audience.total, capped: audience.capped, filters } };
+  }
+
+  async listRubikaCampaigns(admin: AuthenticatedAdmin) {
+    requireManager(admin);
+    const campaigns = await this.prisma.smsCampaign.findMany({
+      where: { channel: "rubika" }, orderBy: { createdAt: "desc" }, take: 50,
+    });
+    return { data: campaigns.map((item) => ({
+      id: item.id.toString(), title: item.title, message: item.message, recipientCount: item.recipientCount,
+      sentCount: item.sentCount, failedCount: item.failedCount, status: item.status,
+      createdAt: item.createdAt.toISOString(), completedAt: item.completedAt?.toISOString() ?? null,
+    })) };
+  }
+
+  async createRubikaCampaign(admin: AuthenticatedAdmin, input: Record<string, unknown>) {
+    requireManager(admin);
+    if (!(await this.rubika.integrationStatus()).configured) {
+      throw new ServiceUnavailableException({ code: "RUBIKA_NOT_CONFIGURED", message: "توکن بات روبیکا در تنظیمات API ثبت نشده است." });
+    }
+    const title = requiredText(input.title, "title", 160);
+    const message = requiredText(input.message, "message", 1000);
+    const filters = normalizeFilters(asObject(input.filters));
+    const audience = await this.loadCustomers(filters, "rubika", true);
+    const campaign = await this.prisma.smsCampaign.create({ data: {
+      channel: "rubika", title, message, targetFilters: filters as Prisma.InputJsonValue,
+      recipientCount: audience.total, status: "draft", createdByAdminId: admin.id,
+    } });
+    await this.audit(admin, "rubika_campaign.created", "sms_campaign", campaign.id, { recipientCount: audience.total });
+    return { data: { id: campaign.id.toString(), recipientCount: campaign.recipientCount, status: campaign.status } };
+  }
+
+  async sendRubikaCampaign(admin: AuthenticatedAdmin, idText: string) {
+    requireManager(admin);
+    if (!(await this.rubika.integrationStatus()).configured) {
+      throw new ServiceUnavailableException({ code: "RUBIKA_NOT_CONFIGURED", message: "توکن بات روبیکا در تنظیمات API ثبت نشده است." });
+    }
+    const campaignId = parseId(idText, "campaign id");
+    const campaign = await this.prisma.smsCampaign.findFirst({ where: { id: campaignId, channel: "rubika" } });
+    if (!campaign) throw new NotFoundException({ code: "RUBIKA_CAMPAIGN_NOT_FOUND", message: "کمپین روبیکا پیدا نشد." });
+    if (campaign.status !== "draft") throw new ConflictException({ code: "RUBIKA_CAMPAIGN_ALREADY_PROCESSED", message: "این کمپین قبلاً در صف ارسال قرار گرفته است." });
+    const audience = await this.loadCustomers(normalizeFilters(asObject(campaign.targetFilters)), "rubika", true);
+    if (!audience.customers.length) {
+      throw new ConflictException({ code: "RUBIKA_AUDIENCE_EMPTY", message: "مشتریِ متصل و دارای رضایت روبیکا با این فیلتر پیدا نشد." });
+    }
+    if (audience.capped) {
+      throw new ConflictException({ code: "RUBIKA_AUDIENCE_TOO_LARGE", message: "تعداد مخاطبان از سقف " + MAX_AUDIENCE.toLocaleString() + " بیشتر است؛ فیلترها را محدودتر کن." });
+    }
+    await this.prisma.smsCampaign.update({ where: { id: campaignId }, data: {
+      status: "queued", recipientCount: audience.customers.length, sentCount: 0, failedCount: 0, providerResponse: Prisma.JsonNull,
+    } });
+    await this.audit(admin, "rubika_campaign.queued", "sms_campaign", campaignId, { recipientCount: audience.customers.length });
+    setTimeout(() => void this.processQueuedRubika(), 250).unref();
+    return { data: { id: campaign.id.toString(), status: "queued", recipientCount: audience.customers.length } };
+  }
+
+  private async processQueuedRubika(): Promise<void> {
+    if (this.rubikaBusy) return;
+    this.rubikaBusy = true;
+    try {
+      for (let count = 0; count < 2; count++) {
+        const campaign = await this.prisma.smsCampaign.findFirst({
+          where: { status: "queued", channel: "rubika" }, orderBy: { createdAt: "asc" },
+        });
+        if (!campaign) break;
+        const claim = await this.prisma.smsCampaign.updateMany({
+          where: { id: campaign.id, status: "queued", channel: "rubika" },
+          data: { status: "sending", startedAt: new Date() },
+        });
+        if (claim.count !== 1) continue;
+        await this.dispatchRubikaCampaign(campaign);
+      }
+    } catch (error) {
+      this.logger.error("Rubika campaign worker failed: " + (error instanceof Error ? error.message : "unknown error"));
+    } finally { this.rubikaBusy = false; }
+  }
+
+  private async dispatchRubikaCampaign(campaign: Prisma.SmsCampaignGetPayload<object>): Promise<void> {
+    let sentCount = 0;
+    let failedCount = 0;
+    let suppressedCount = 0;
+    let lastError: string | null = null;
+    let recipientCount = campaign.recipientCount;
+    try {
+      const audience = await this.loadCustomers(normalizeFilters(asObject(campaign.targetFilters)), "rubika", true);
+      if (audience.capped) throw new Error("Campaign exceeds the " + MAX_AUDIENCE + " recipient limit.");
+      recipientCount = campaign.recipientCount;
+      for (let index = 0; index < audience.customers.length; index += 25) {
+        const batch = audience.customers.slice(index, index + 25);
+        const current = await this.prisma.customer.findMany({
+          where: {
+            id: { in: batch.map((customer) => customer.id) },
+            status: "active", rubikaMarketingOptIn: true, rubikaChatId: { not: null },
+          },
+          select: { id: true, rubikaChatId: true },
+        });
+        const currentById = new Map(current.map((customer) => [customer.id, customer.rubikaChatId]));
+        suppressedCount += batch.length - current.length;
+        for (const customer of batch) {
+          const chatId = currentById.get(customer.id);
+          if (!chatId) continue;
+          try {
+            await this.rubika.sendMessage(chatId, campaign.message);
+            sentCount += 1;
+          } catch (error) {
+            failedCount += 1;
+            lastError = error instanceof Error ? error.message.slice(0, 300) : "Rubika delivery failed.";
+          }
+          const delayMs = boundedInt(this.config.get<string>("RUBIKA_SEND_DELAY_MS", "150"), 150, 0, 5000);
+          if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+        await this.prisma.smsCampaign.update({ where: { id: campaign.id }, data: { sentCount, failedCount } });
+      }
+      const status = failedCount === 0 ? "sent" : sentCount > 0 ? "partial" : "failed";
+      await this.prisma.smsCampaign.update({ where: { id: campaign.id }, data: {
+        status, recipientCount, sentCount, failedCount, completedAt: new Date(),
+        providerResponse: {
+          provider: "rubika", suppressedCount,
+          ...(lastError ? { lastError } : {}),
+        },
+      } });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Rubika provider request failed.";
+      await this.prisma.smsCampaign.update({ where: { id: campaign.id }, data: {
+        status: sentCount ? "partial" : "failed", recipientCount, sentCount,
+        failedCount: Math.max(failedCount, recipientCount - sentCount - suppressedCount), completedAt: new Date(),
+        providerResponse: { provider: "rubika", suppressedCount, error: message },
+      } });
+      this.logger.error("Rubika campaign " + campaign.id + " failed after " + sentCount + " accepted recipients: " + message);
     }
   }
 
@@ -293,12 +440,15 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
       const files = await this.listBackupFiles();
       backupVolume = { available: true, persistentConfigured: Boolean(this.config.get<string>("BACKUP_DIR")), backupCount: files.length, latestAt: files[0]?.createdAt ?? null, path: directory };
     } catch { /* a missing Railway volume is reported as unavailable */ }
+    const rubikaStatus = await this.rubika.integrationStatus();
     return { data: {
       api: "online", database, backupVolume,
       backupTool: process.platform === "win32" ? "external mysqldump required" : "mysqldump",
       integrations: {
         smsIr: Boolean(this.config.get("SMSIR_API_KEY") && this.config.get("SMSIR_LINE_NUMBER")),
         rubika: Boolean(this.config.get("RUBIKA_BOT_TOKEN") && this.config.get("RUBIKA_CHANNEL_ID")),
+        rubikaBotMessaging: rubikaStatus.configured,
+        rubikaWebhook: rubikaStatus.webhookConfigured,
         instagram: Boolean(this.config.get("INSTAGRAM_USER_ID") && this.config.get("INSTAGRAM_ACCESS_TOKEN") && this.config.get("INSTAGRAM_GRAPH_API_VERSION")),
       },
     } };
@@ -317,12 +467,13 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     return { data: file };
   }
 
-  private async loadCustomers(filters: AudienceFilters, consentOnly: boolean) {
+  private async loadCustomers(filters: AudienceFilters, channel: "all" | "sms" | "rubika", consentOnly: boolean) {
     const now = new Date();
     const cutoff = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
     const where: Prisma.CustomerWhereInput = {
       status: "active",
-      ...(consentOnly ? { marketingOptIn: true } : {}),
+      ...(consentOnly && channel === "sms" ? { marketingOptIn: true } : {}),
+      ...(channel === "rubika" ? { rubikaMarketingOptIn: true, rubikaChatId: { not: null } } : {}),
       ...(filters.q ? { OR: [
         { fullName: { contains: filters.q } }, { phone: { contains: filters.q } }, { email: { contains: filters.q } },
       ] } : {}),
@@ -339,6 +490,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
         where, orderBy: { createdAt: filters.registration === "over_year" ? "asc" : "desc" }, take: MAX_AUDIENCE,
         select: {
           id: true, phone: true, fullName: true, email: true, marketingOptIn: true,
+          rubikaMarketingOptIn: true, rubikaChatId: true,
           createdAt: true, addresses: { orderBy: { updatedAt: "desc" }, take: 1, select: { city: true, province: true } },
           orders: { where: { paymentStatus: "paid" }, orderBy: { placedAt: "desc" }, take: 1, select: { placedAt: true, orderNumber: true } },
         },
@@ -439,7 +591,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     const smsCutoff = new Date(Date.now() - 3 * 60_000);
     const postCutoff = new Date(Date.now() - 5 * 60_000);
     const [sms, posts] = await Promise.all([
-      this.prisma.smsCampaign.findMany({ where: { status: "sending", updatedAt: { lt: smsCutoff } }, select: { id: true, recipientCount: true, sentCount: true } }),
+        this.prisma.smsCampaign.findMany({ where: { status: "sending", updatedAt: { lt: smsCutoff } }, select: { id: true, channel: true, recipientCount: true, sentCount: true } }),
       this.prisma.socialPost.findMany({ where: { status: "publishing", updatedAt: { lt: postCutoff } }, select: { id: true } }),
     ]);
     let recoveredSms = 0;
@@ -450,7 +602,12 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
         data: {
           status: campaign.sentCount ? "partial" : "failed", failedCount: campaign.recipientCount - campaign.sentCount,
           completedAt: new Date(),
-          providerResponse: { error: "The API restarted during delivery. Check SMS.ir before creating another campaign.", manualReviewRequired: true },
+          providerResponse: {
+            error: campaign.channel === "rubika"
+              ? "The API restarted during delivery. Check the bot delivery before creating another campaign."
+              : "The API restarted during delivery. Check SMS.ir before creating another campaign.",
+            manualReviewRequired: true,
+          },
         },
       });
       recoveredSms += result.count;
@@ -540,12 +697,14 @@ function normalizeFilters(raw: Record<string, unknown>): AudienceFilters {
 }
 
 function toCustomerSummary(customer: {
-  id: bigint; phone: string; fullName: string | null; email: string | null; marketingOptIn: boolean; createdAt: Date;
+  id: bigint; phone: string; fullName: string | null; email: string | null; marketingOptIn: boolean;
+  rubikaMarketingOptIn: boolean; rubikaChatId: string | null; createdAt: Date;
   addresses: { city: string; province: string }[]; orders: { placedAt: Date; orderNumber: string }[];
 }) {
   return {
     id: customer.id.toString(), phone: customer.phone, fullName: customer.fullName, email: customer.email,
-    marketingOptIn: customer.marketingOptIn, createdAt: customer.createdAt.toISOString(),
+    marketingOptIn: customer.marketingOptIn, rubikaMarketingOptIn: customer.rubikaMarketingOptIn,
+    rubikaLinked: Boolean(customer.rubikaChatId), createdAt: customer.createdAt.toISOString(),
     city: customer.addresses[0]?.city ?? null, province: customer.addresses[0]?.province ?? null,
     lastPurchaseAt: customer.orders[0]?.placedAt.toISOString() ?? null,
     lastOrderNumber: customer.orders[0]?.orderNumber ?? null,

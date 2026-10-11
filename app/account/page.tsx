@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { ArrowLeft, Check, LogOut, MapPin, Package, Pencil, Plus, ShieldCheck, Smartphone, Trash2, UserRound } from "lucide-react";
+import { ArrowLeft, Check, Copy, ExternalLink, LogOut, MapPin, MessageCircle, Package, Pencil, Plus, ShieldCheck, Smartphone, Trash2, Unlink, UserRound } from "lucide-react";
 import { StorefrontShell } from "../components/storefront-shell";
 import { formatToman } from "../lib/catalog";
 import { CustomerApiError, customerApi, type CustomerAddress, type CustomerOrder, type CustomerProfile } from "../lib/customer-api";
@@ -25,6 +25,8 @@ type AddressForm = {
   isDefault: boolean;
 };
 
+type RubikaLink = { code: string; expiresAt: string; botUrl: string | null; botUsername: string | null };
+
 const emptyAddress = (phone = "", recipientName = ""): AddressForm => ({
   title: "خانه", recipientName, recipientPhone: phone, province: "", city: "", street: "", alley: "",
   plaqueNumber: "", unit: "", deliveryDetails: "", postalCode: "", isDefault: false,
@@ -44,7 +46,8 @@ export default function AccountPage() {
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [developmentCode, setDevelopmentCode] = useState(false);
-  const [profileForm, setProfileForm] = useState({ fullName: "", email: "", marketingOptIn: false });
+  const [profileForm, setProfileForm] = useState({ fullName: "", email: "", marketingOptIn: false, rubikaMarketingOptIn: false });
+  const [rubikaLink, setRubikaLink] = useState<RubikaLink | null>(null);
   const [addressForm, setAddressForm] = useState<AddressForm>(emptyAddress());
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [addressFormOpen, setAddressFormOpen] = useState(false);
@@ -63,7 +66,10 @@ export default function AccountPage() {
     const customerOrders = await customerApi<CustomerOrder[]>("/customer/orders");
     setProfile(customer);
     setOrders(customerOrders);
-    setProfileForm({ fullName: customer.fullName ?? "", email: customer.email ?? "", marketingOptIn: customer.marketingOptIn });
+    setProfileForm({
+      fullName: customer.fullName ?? "", email: customer.email ?? "",
+      marketingOptIn: customer.marketingOptIn, rubikaMarketingOptIn: customer.rubikaMarketingOptIn,
+    });
     setAddressForm((current) => ({ ...current, recipientPhone: current.recipientPhone || customer.phone, recipientName: current.recipientName || customer.fullName || "" }));
     return customer;
   }
@@ -120,6 +126,42 @@ export default function AccountPage() {
       setNotice("اطلاعات حساب ذخیره شد.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "ذخیرهٔ اطلاعات انجام نشد."); }
     finally { setBusy(false); }
+  }
+
+  async function connectRubika() {
+    if (!profileForm.rubikaMarketingOptIn) {
+      setError("برای اتصال روبیکا، گزینهٔ رضایت را فعال و سپس ذخیره کن.");
+      return;
+    }
+    setBusy(true); setError(""); setNotice(""); setRubikaLink(null);
+    try {
+      await customerApi("/customer/profile", { method: "PATCH", body: JSON.stringify(profileForm) });
+      const result = await customerApi<RubikaLink>("/customer/rubika/link-code", { method: "POST" });
+      setRubikaLink(result);
+      await refreshAccount();
+      setNotice("کد اتصال ساخته شد. ربات روبیکا را باز کن و کد را برایش بفرست.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "ساخت کد اتصال روبیکا انجام نشد."); }
+    finally { setBusy(false); }
+  }
+
+  async function unlinkRubika() {
+    if (!window.confirm("اتصال روبیکا قطع و رضایت دریافت پیام‌های روبیکا غیرفعال شود؟")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await customerApi("/customer/rubika/link", { method: "DELETE" });
+      setRubikaLink(null);
+      await refreshAccount();
+      setNotice("اتصال روبیکا قطع شد.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "قطع اتصال روبیکا انجام نشد."); }
+    finally { setBusy(false); }
+  }
+
+  async function copyRubikaCode() {
+    if (!rubikaLink) return;
+    try {
+      await navigator.clipboard.writeText(rubikaLink.code);
+      setNotice("کد اتصال کپی شد.");
+    } catch { setNotice("کد را انتخاب و کپی کن: " + rubikaLink.code); }
   }
 
   function beginAddressEdit(address?: CustomerAddress) {
@@ -203,6 +245,24 @@ export default function AccountPage() {
               <label className="customer-default-check store-form-wide"><input type="checkbox" checked={profileForm.marketingOptIn} onChange={(event) => setProfileForm((form) => ({ ...form, marketingOptIn: event.target.checked }))} /><span>مایلم پیامک‌های اطلاع‌رسانی و پیشنهادهای فروشگاه را دریافت کنم. هر زمان بخواهم می‌توانم این گزینه را غیرفعال کنم.</span></label>
               <button className="outline-button customer-save-profile" type="submit" disabled={busy}>ذخیرهٔ اطلاعات</button>
             </form>
+            <div className="customer-rubika-card">
+              <label className="customer-default-check"><input type="checkbox" checked={profileForm.rubikaMarketingOptIn} onChange={(event) => setProfileForm((form) => ({ ...form, rubikaMarketingOptIn: event.target.checked }))} /><span>مایلم پیشنهادها و پیام‌های فروشگاه را از طریق ربات روبیکا دریافت کنم. این رضایت مستقل از پیامک است و هر زمان می‌توانم لغوش کنم.</span></label>
+              <div className="customer-rubika-actions">
+                <span className={profile.rubikaLinked ? "is-connected" : ""}><MessageCircle size={16} />{profile.rubikaLinked ? "حساب روبیکا متصل است" : "حساب روبیکا هنوز متصل نیست"}</span>
+                {profile.rubikaLinked
+                  ? <button className="outline-button" type="button" onClick={() => void unlinkRubika()} disabled={busy}><Unlink size={16} /> قطع اتصال</button>
+                  : <button className="button-primary" type="button" onClick={() => void connectRubika()} disabled={busy || !profileForm.rubikaMarketingOptIn}>{busy ? "در حال ساخت کد…" : "ذخیره رضایت و اتصال روبیکا"}<ArrowLeft size={17} /></button>}
+              </div>
+              {rubikaLink && <div className="customer-rubika-code" role="status">
+                <p>در روبیکا، گفت‌وگوی ربات را باز کن و این کد را برایش بفرست. کد تا ۱۰ دقیقه معتبر است.</p>
+                <strong dir="ltr">{rubikaLink.code}</strong>
+                <div>
+                  <button className="outline-button" type="button" onClick={() => void copyRubikaCode()}><Copy size={15} /> کپی کد</button>
+                  {rubikaLink.botUrl && <a className="outline-button" href={rubikaLink.botUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} /> باز کردن ربات</a>}
+                  {!rubikaLink.botUrl && rubikaLink.botUsername && <span>نام ربات در روبیکا: @{rubikaLink.botUsername}</span>}
+                </div>
+              </div>}
+            </div>
           </section>
 
           <section className="customer-section">

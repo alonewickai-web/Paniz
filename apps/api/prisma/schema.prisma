@@ -52,6 +52,9 @@ model Customer {
   email             String?            @db.VarChar(254)
   marketingOptIn     Boolean            @default(false) @map("marketing_opt_in")
   marketingOptInAt  DateTime?          @map("marketing_opt_in_at") @db.DateTime(3)
+  rubikaChatId      String?            @unique(map: "uq_customers_rubika_chat_id") @map("rubika_chat_id") @db.VarChar(128)
+  rubikaMarketingOptIn Boolean         @default(false) @map("rubika_marketing_opt_in")
+  rubikaMarketingOptInAt DateTime?     @map("rubika_marketing_opt_in_at") @db.DateTime(3)
   phoneVerifiedAt   DateTime?          @map("phone_verified_at") @db.DateTime(3)
   status            String             @default("active") @db.VarChar(24)
   createdAt         DateTime           @default(now()) @map("created_at") @db.DateTime(3)
@@ -60,12 +63,14 @@ model Customer {
   carts             Cart[]
   orders            Order[]
   sessions          CustomerSession[]
+  rubikaLinkCodes   CustomerRubikaLinkCode[]
   couponRedemptions CouponRedemption[]
   wishlist          Wishlist?
   reviews           Review[]
 
   @@index([status, createdAt], map: "ix_customers_status_created")
   @@index([marketingOptIn, createdAt], map: "ix_customers_marketing_consent_created")
+  @@index([rubikaMarketingOptIn, createdAt], map: "ix_customers_rubika_marketing_created")
   @@map("customers")
 }
 
@@ -82,6 +87,19 @@ model CustomerSession {
   @@index([customerId, expiresAt], map: "ix_customer_sessions_customer_expiry")
   @@index([expiresAt], map: "ix_customer_sessions_expiry")
   @@map("customer_sessions")
+}
+
+model CustomerRubikaLinkCode {
+  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  customerId BigInt    @map("customer_id") @db.UnsignedBigInt
+  tokenHash  String    @unique(map: "uq_customer_rubika_link_codes_token_hash") @map("token_hash") @db.Char(64)
+  expiresAt  DateTime  @map("expires_at") @db.DateTime(3)
+  usedAt     DateTime? @map("used_at") @db.DateTime(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, expiresAt], map: "ix_customer_rubika_link_codes_customer_expiry")
+  @@map("customer_rubika_link_codes")
 }
 
 model CustomerAddress {
@@ -560,6 +578,7 @@ model AdminAuditLog {
 
 model SmsCampaign {
   id                BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  channel           String     @default("sms") @db.VarChar(16)
   title             String     @db.VarChar(160)
   message           String     @db.VarChar(1000)
   targetFilters     Json       @map("target_filters")
@@ -575,7 +594,7 @@ model SmsCampaign {
   updatedAt         DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
   createdByAdmin    AdminUser  @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
 
-  @@index([status, createdAt], map: "ix_sms_campaigns_status_created")
+  @@index([channel, status, createdAt], map: "ix_sms_campaigns_channel_status_created")
   @@index([createdByAdminId], map: "ix_sms_campaigns_created_by_admin")
   @@map("sms_campaigns")
 }

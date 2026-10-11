@@ -23,6 +23,18 @@ export class CustomerController {
     return this.customers.updateProfile(request, body);
   }
 
+  @Post("rubika/link-code")
+  @ApiOperation({ summary: "ساخت کد یک‌بارمصرف اتصال حساب روبیکا" })
+  createRubikaLinkCode(@Req() request: CustomerRequest) {
+    return this.customers.createRubikaLinkCode(request);
+  }
+
+  @Delete("rubika/link")
+  @ApiOperation({ summary: "قطع اتصال روبیکا از حساب مشتری" })
+  unlinkRubika(@Req() request: CustomerRequest) {
+    return this.customers.unlinkRubika(request);
+  }
+
   @Get("orders")
   @ApiOperation({ summary: "نمایش سفارش‌های حساب مشتری" })
   listOrders(@Req() request: CustomerRequest) {

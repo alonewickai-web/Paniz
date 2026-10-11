@@ -24,6 +24,8 @@ export type CustomerProfile = {
   email: string | null;
   phoneVerifiedAt: string | null;
   marketingOptIn: boolean;
+  rubikaMarketingOptIn: boolean;
+  rubikaLinked: boolean;
   addresses: CustomerAddress[];
 };
 

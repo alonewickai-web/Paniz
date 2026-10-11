@@ -16,4 +16,8 @@ export class UpdateCustomerProfileDto {
   @IsOptional()
   @IsBoolean()
   marketingOptIn?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  rubikaMarketingOptIn?: boolean;
 }

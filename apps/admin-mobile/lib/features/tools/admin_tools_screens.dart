@@ -54,7 +54,7 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
   Widget build(BuildContext context) => RefreshIndicator(
     onRefresh: _load,
     child: ListView(padding: const EdgeInsets.all(16), children: [
-      const _PageIntro(icon: Icons.people_alt_outlined, title: 'مدیریت مشتریان', subtitle: 'جست‌وجو، خریدهای قبلی و رضایت دریافت پیامک'),
+      const _PageIntro(icon: Icons.people_alt_outlined, title: 'مدیریت مشتریان', subtitle: 'جست‌وجو، خریدهای قبلی و رضایت پیامک و روبیکا'),
       const SizedBox(height: 12),
       TextField(controller: _query, textInputAction: TextInputAction.search, onSubmitted: (_) { _page = 1; _load(); }, decoration: const InputDecoration(labelText: 'نام، شماره یا ایمیل', prefixIcon: Icon(Icons.search))),
       const SizedBox(height: 9),
@@ -102,6 +102,16 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
             dense: true, contentPadding: EdgeInsets.zero,
             leading: Icon(customer['marketingOptIn'] == true ? Icons.mark_email_read_outlined : Icons.unsubscribe_outlined, size: 19),
             title: Text(customer['marketingOptIn'] == true ? 'با رضایت دریافت پیامک' : 'بدون رضایت پیامکی', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+          ),
+          ListTile(
+            dense: true, contentPadding: EdgeInsets.zero,
+            leading: Icon(customer['rubikaLinked'] == true ? Icons.link_outlined : Icons.link_off_outlined, size: 19),
+            title: Text(
+              customer['rubikaLinked'] == true && customer['rubikaMarketingOptIn'] == true
+                ? 'روبیکا متصل · رضایت فعال'
+                : customer['rubikaLinked'] == true ? 'روبیکا متصل · بدون رضایت' : 'روبیکا متصل نیست',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
           ),
         ])),
       )),
@@ -223,6 +233,7 @@ class _SmsCampaignScreenState extends ConsumerState<SmsCampaignScreen> {
   final _query = TextEditingController();
   String _registration = 'any';
   String _purchaseSort = 'none';
+  String _channel = 'sms';
   String? _productId;
   List<JsonMap> _products = const [];
   List<JsonMap> _history = const [];
@@ -241,11 +252,11 @@ class _SmsCampaignScreenState extends ConsumerState<SmsCampaignScreen> {
   };
 
   Future<void> _loadProducts() async { try { final list = await ref.read(adminApiProvider).productOptions(); if (mounted) setState(() => _products = list); } catch (_) { } }
-  Future<void> _refreshHistory() async { try { final list = await ref.read(adminApiProvider).smsCampaigns(); if (mounted) setState(() => _history = list); } catch (_) { } }
+  Future<void> _refreshHistory() async { try { final list = await ref.read(adminApiProvider).marketingCampaigns(_channel); if (mounted) setState(() => _history = list); } catch (_) { } }
 
   Future<void> _preview() async {
     setState(() { _loading = true; _error = null; });
-    try { final result = await ref.read(adminApiProvider).previewSmsAudience(_filters); if (mounted) setState(() => _audienceCount = (result['count'] as num?)?.toInt() ?? 0); }
+    try { final result = await ref.read(adminApiProvider).previewCampaignAudience(_channel, _filters); if (mounted) setState(() => _audienceCount = (result['count'] as num?)?.toInt() ?? 0); }
     catch (error) { if (mounted) setState(() => _error = AdminApi.friendlyError(error)); }
     finally { if (mounted) setState(() => _loading = false); }
   }
@@ -253,18 +264,20 @@ class _SmsCampaignScreenState extends ConsumerState<SmsCampaignScreen> {
   Future<void> _send() async {
     if (_title.text.trim().isEmpty || _message.text.trim().isEmpty) { showAppMessage(context, 'عنوان و متن پیام را وارد کن.', error: true); return; }
     if (_audienceCount == null) { await _preview(); if (!mounted || _audienceCount == null) return; }
-    if (_audienceCount == 0) { showAppMessage(context, 'مشتری دارای رضایت پیامکی با این فیلتر پیدا نشد.', error: true); return; }
+    if (_audienceCount == 0) { showAppMessage(context, _channel == 'rubika' ? 'مشتری متصل و دارای رضایت روبیکا با این فیلتر پیدا نشد.' : 'مشتری دارای رضایت پیامکی با این فیلتر پیدا نشد.', error: true); return; }
     final confirmed = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(
-      title: const Text('ارسال پیامک'),
-      content: Text('این پیام برای ${persianNumber(_audienceCount!)} مشتری رضایت‌داده ارسال می‌شود و هزینهٔ سرویس پیامک دارد. ادامه می‌دهی؟'),
+      title: Text(_channel == 'rubika' ? 'ارسال پیام روبیکا' : 'ارسال پیامک'),
+      content: Text(_channel == 'rubika'
+        ? 'این پیام برای ' + persianNumber(_audienceCount!) + ' مشتری متصل و دارای رضایت روبیکا ارسال می‌شود. ادامه می‌دهی؟'
+        : 'این پیام برای ' + persianNumber(_audienceCount!) + ' مشتری دارای رضایت پیامکی ارسال می‌شود و هزینهٔ سرویس پیامک دارد. ادامه می‌دهی؟'),
       actions: [TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('بازبینی')),
         FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('ساخت و ارسال'))],
     ));
     if (confirmed != true || !mounted) return;
     setState(() { _loading = true; _error = null; });
     try {
-      final created = await ref.read(adminApiProvider).createSmsCampaign(_title.text.trim(), _message.text.trim(), _filters);
-      await ref.read(adminApiProvider).sendSmsCampaign('${created['id']}');
+      final created = await ref.read(adminApiProvider).createMarketingCampaign(_channel, _title.text.trim(), _message.text.trim(), _filters);
+      await ref.read(adminApiProvider).sendMarketingCampaign(_channel, created['id'].toString());
       _title.clear(); _message.clear();
       await _refreshHistory();
       if (mounted) showAppMessage(context, 'درخواست ارسال ثبت شد. نتیجه در سابقهٔ کمپین نمایش داده می‌شود.');
@@ -274,11 +287,15 @@ class _SmsCampaignScreenState extends ConsumerState<SmsCampaignScreen> {
 
   @override
   Widget build(BuildContext context) => RefreshIndicator(onRefresh: () async { await _preview(); await _refreshHistory(); }, child: ListView(padding: const EdgeInsets.all(16), children: [
-    const _PageIntro(icon: Icons.sms_outlined, title: 'پیامک به مشتریان', subtitle: 'فیلتر مخاطب، پیش‌نمایش تعداد و مشاهدهٔ سوابق ارسال'),
+    const _PageIntro(icon: Icons.campaign_outlined, title: 'پیام‌رسانی به مشتریان', subtitle: 'ارسال از پیامک یا ربات روبیکا با فیلتر و پیش‌نمایش مخاطبان'),
     const SizedBox(height: 12),
+    DropdownButtonFormField<String>(key: ValueKey(_channel), initialValue: _channel, decoration: const InputDecoration(labelText: 'روش ارسال'), items: const [
+      DropdownMenuItem(value: 'sms', child: Text('پیامک از SMS.ir')),
+      DropdownMenuItem(value: 'rubika', child: Text('پیام خصوصی ربات روبیکا')),
+    ], onChanged: (value) { if (value == null || value == _channel) return; setState(() { _channel = value; _audienceCount = null; _error = null; }); _refreshHistory(); }),
     TextField(controller: _title, maxLength: 160, decoration: const InputDecoration(labelText: 'عنوان کمپین')),
     const SizedBox(height: 8),
-    TextField(controller: _message, maxLength: 1000, minLines: 5, maxLines: 8, keyboardType: TextInputType.multiline, textAlignVertical: TextAlignVertical.top, decoration: const InputDecoration(labelText: 'متن پیامک', alignLabelWithHint: true, hintText: 'متن پیام را بنویس…')),
+    TextField(controller: _message, maxLength: 1000, minLines: 5, maxLines: 8, keyboardType: TextInputType.multiline, textAlignVertical: TextAlignVertical.top, decoration: InputDecoration(labelText: _channel == 'rubika' ? 'متن پیام روبیکا' : 'متن پیامک', alignLabelWithHint: true, hintText: 'متن پیام را بنویس…')),
     const SizedBox(height: 12),
     Text('فیلتر مخاطبان', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
     const SizedBox(height: 8),
@@ -305,7 +322,11 @@ class _SmsCampaignScreenState extends ConsumerState<SmsCampaignScreen> {
       ], onChanged: (value) => setState(() { _productId = value; _audienceCount = null; })),
     ],
     const SizedBox(height: 8),
-    Card(child: SwitchListTile.adaptive(value: true, onChanged: null, title: const Text('فقط مشتریان دارای رضایت پیامکی'), subtitle: const Text('این محدودیت هنگام ارسال نیز دوباره بررسی می‌شود.'))),
+    Card(child: SwitchListTile.adaptive(
+      value: true, onChanged: null,
+      title: Text(_channel == 'rubika' ? 'فقط مشتریان متصل و دارای رضایت روبیکا' : 'فقط مشتریان دارای رضایت پیامکی'),
+      subtitle: Text(_channel == 'rubika' ? 'مشتری باید از حساب کاربری، ربات را به حسابش وصل کرده باشد.' : 'این محدودیت هنگام ارسال نیز دوباره بررسی می‌شود.'),
+    )),
     FilledButton.tonalIcon(onPressed: _loading ? null : _preview, icon: const Icon(Icons.groups_outlined), label: Text(_audienceCount == null ? 'شمارش مخاطبان' : 'مخاطبان منطبق: ${persianNumber(_audienceCount!)}')),
     const SizedBox(height: 8),
     FilledButton.icon(onPressed: _loading ? null : _send, icon: const Icon(Icons.send_outlined), label: Text(_loading ? 'در حال پردازش…' : 'ارسال کمپین')),
@@ -315,7 +336,7 @@ class _SmsCampaignScreenState extends ConsumerState<SmsCampaignScreen> {
     const SizedBox(height: 8),
     if (_history.isEmpty) const _EmptyCard(text: 'هنوز کمپینی ثبت نشده است.'),
     ..._history.map((item) => Card(child: ListTile(
-      leading: const Icon(Icons.mark_email_read_outlined), title: Text('${item['title']}', maxLines: 1, overflow: TextOverflow.ellipsis),
+      leading: Icon(_channel == 'rubika' ? Icons.send_outlined : Icons.mark_email_read_outlined), title: Text('${item['title']}', maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text('${_statusLabel(item['status'])} · ${persianNumber(item['sentCount'] ?? 0)} ارسال از ${persianNumber(item['recipientCount'] ?? 0)}'),
       isThreeLine: false, trailing: Text(_date(item['createdAt']), style: Theme.of(context).textTheme.labelSmall),
     ))),
@@ -385,7 +406,7 @@ class _SocialPublishingScreenState extends ConsumerState<SocialPublishingScreen>
     return RefreshIndicator(onRefresh: _load, child: ListView(padding: const EdgeInsets.all(16), children: [
       const _PageIntro(icon: Icons.campaign_outlined, title: 'انتشار تبلیغات', subtitle: 'ارسال به روبیکا یا انتشار زمان‌بندی‌شده در اینستاگرام'),
       const SizedBox(height: 10),
-      _IntegrationTile(title: 'ربات روبیکا', configured: rubika['configured'] == true, hint: 'RUBIKA_BOT_TOKEN و RUBIKA_CHANNEL_ID'),
+      _IntegrationTile(title: 'ربات روبیکا', configured: rubika['configured'] == true, hint: 'توکن محرمانه و وب‌هوک HTTPS'),
       _IntegrationTile(title: 'Instagram Graph API', configured: instagram['configured'] == true, hint: 'INSTAGRAM_USER_ID، token و Graph API version مجاز'),
       const SizedBox(height: 8),
       TextField(controller: _caption, maxLength: 2200, minLines: 4, maxLines: 7, textAlignVertical: TextAlignVertical.top, decoration: const InputDecoration(labelText: 'متن تبلیغ', alignLabelWithHint: true)),
@@ -457,7 +478,9 @@ class _OperationsScreenState extends ConsumerState<OperationsScreen> {
         const Text('اتصال سرویس‌ها', style: TextStyle(fontWeight: FontWeight.w900)),
         const SizedBox(height: 9),
         _statusLine('SMS.ir', integrations['smsIr'] == true),
-        _statusLine('Rubika', integrations['rubika'] == true),
+        _statusLine('پیام خصوصی بات روبیکا', integrations['rubikaBotMessaging'] == true),
+        _statusLine('وب‌هوک اتصال حساب روبیکا', integrations['rubikaWebhook'] == true),
+        _statusLine('انتشار در کانال روبیکا', integrations['rubika'] == true),
         _statusLine('Instagram', integrations['instagram'] == true),
       ]))),
       Card(child: Padding(padding: const EdgeInsets.all(14), child: Text('مسیر پشتیبان: ${volume['path'] ?? 'BACKUP_DIR'}\nبرای نگهداری پس از restart در Railway یک Volume با mount path برابر /data بساز و BACKUP_DIR را روی /data/backups قرار بده. ابزار mysqldump باید داخل image نصب باشد.', style: Theme.of(context).textTheme.bodySmall))),

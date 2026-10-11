@@ -44,6 +44,8 @@ Backend مستقل پروژه، با NestJS و API نسخه‌دار `/api/v1`.
 - `GET /api/v1/products/:slug`: جزئیات محصول، تصاویر و تنوع‌های فعال.
 - `/api/v1/customer/auth/*`: ورود و ساخت حساب مشتری با کد یک‌بارمصرف.
 - `/api/v1/customer/profile`, `/api/v1/customer/addresses`, `/api/v1/customer/orders`: حساب و اطلاعات ذخیره‌شدهٔ مشتری؛ نیازمند کوکی نشست.
+- POST /api/v1/customer/rubika/link-code و DELETE /api/v1/customer/rubika/link: ساخت کد اتصال بات و قطع اتصال؛ نیازمند کوکی نشست.
+- /api/v1/admin/rubika-campaigns/*: پیش‌نمایش مخاطب، ثبت کمپین و ارسال پیام خصوصی روبیکا؛ نیازمند نشست مدیر.
 - `POST /api/v1/orders`: ثبت سفارش برای مشتری واردشده با شناسهٔ نشانی متعلق به همان حساب.
 - `/api/docs`: مستندات OpenAPI/Swagger.
 
