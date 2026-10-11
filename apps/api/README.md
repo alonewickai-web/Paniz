@@ -49,6 +49,10 @@ Backend مستقل پروژه، با NestJS و API نسخه‌دار `/api/v1`.
 - `POST /api/v1/orders`: ثبت سفارش برای مشتری واردشده با شناسهٔ نشانی متعلق به همان حساب.
 - `/api/docs`: مستندات OpenAPI/Swagger.
 
+## Migration در Railway
+
+در سرویس API، فرمان Pre-deploy روی `npm run prisma:migrate:deploy` تنظیم شده است تا پیش از هر انتشار، migrationهای جدید دیتابیس اعمال شوند. اگر migration در production با وضعیت failed متوقف شد، ابتدا لاگ و schema را بررسی کنید؛ فقط وقتی هیچ بخشی از آن اعمال نشده باشد، آن را با `prisma migrate resolve --rolled-back <migration-name>` resolve و deployment را دوباره اجرا کنید.
+
 برای ورود واقعی مشتری، سرویس پیامک و `CUSTOMER_AUTH_SECRET` حداقل ۳۲ کاراکتری را تنظیم کنید. حالت توسعه کد آزمایشی را در پاسخ API برمی‌گرداند؛ این مسیر در production غیرفعال است. شرح جریان و محدودیت‌ها در `docs/customer-account.md` است.
 
 `prisma:seed` هشت محصول نمایشی و دسته‌بندی‌های آنها را وارد دیتابیس توسعه می‌کند. اجرای دوبارهٔ seed موجودی SKUهای موجود را بازنشانی نمی‌کند. از داده‌های نمونه برای فروش واقعی استفاده نکنید.
