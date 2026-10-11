@@ -6,7 +6,7 @@
 - API: <https://api-production-bbf4.up.railway.app>
 - سلامت API و اتصال MySQL: <https://api-production-bbf4.up.railway.app/api/v1/health/ready>
 - دامنهٔ موردنظر: `panizstyle.ir`
-- فایل‌های APK نسخهٔ `0.2.2+4` با HTTPS به API Railway وصل می‌شوند.
+- فایل‌های APK نسخهٔ `0.2.4+6` با HTTPS به API Railway وصل می‌شوند.
 
 ## اتصال دامنه به Railway
 
@@ -30,7 +30,7 @@ WEB_ORIGINS=https://panizstyle.ir,https://www.panizstyle.ir
 CUSTOMER_AUTH_SECRET=<راز تصادفی و محرمانه، حداقل ۳۲ نویسه>
 ```
 
-این مقادیر را در **Variables** سرویس‌های Railway وارد کنید، نه در GitHub. برای ساخت مدیر، کد یک‌بارمصرفی که در لاگ خصوصی API پس از Deploy ثبت می‌شود را در صفحهٔ راه‌اندازی اولیهٔ اپ وارد کنید. پس از ساخت اولین مدیر، کد باطل می‌شود. نیازی به افزودن متغیر جداگانه برای راه‌اندازی مدیر نیست.
+این مقادیر را در **Variables** سرویس‌های Railway وارد کنید، نه در GitHub. در محیط آزمایشی، پس از Deploy با نام کاربری `erfan` و گذرواژهٔ `2018` وارد اپ شوید؛ API حساب را فقط یک‌بار هنگام راه‌اندازی ایجاد می‌کند. این گذرواژهٔ آزمایشی را پیش از استفاده روی سرور اصلی تغییر دهید.
 
 ## تکمیل فروشگاه
 

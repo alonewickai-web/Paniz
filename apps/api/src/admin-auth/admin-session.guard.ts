@@ -7,7 +7,7 @@ export type AuthenticatedAdmin = {
   id: bigint;
   fullName: string;
   username: string;
-  phone: string;
+  phone: string | null;
   role: string;
 };
 

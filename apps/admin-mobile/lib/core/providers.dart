@@ -19,17 +19,6 @@ class AuthController extends AsyncNotifier<AdminIdentity?> {
     state = AsyncData(admin);
   }
 
-  Future<void> bootstrap({required String setupKey, required String fullName, required String username, required String phone, required String password}) async {
-    final admin = await ref.read(adminApiProvider).bootstrap(
-      setupKey: setupKey,
-      fullName: fullName,
-      username: username,
-      phone: phone,
-      password: password,
-    );
-    state = AsyncData(admin);
-  }
-
   Future<void> logout() async {
     try {
       await ref.read(adminApiProvider).logout();

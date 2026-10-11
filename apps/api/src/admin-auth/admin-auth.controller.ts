@@ -4,21 +4,12 @@ import { Throttle } from "@nestjs/throttler";
 import { AdminAuthService } from "./admin-auth.service";
 import { AdminSessionGuard, AdminRequest } from "./admin-session.guard";
 import { AdminLoginDto } from "./dto/admin-login.dto";
-import { BootstrapAdminDto } from "./dto/bootstrap-admin.dto";
 import { UpdateAdminCredentialsDto } from "./dto/update-admin-credentials.dto";
 
 @ApiTags("مدیریت فروشگاه | احراز هویت")
 @Controller("admin/auth")
 export class AdminAuthController {
   constructor(private readonly auth: AdminAuthService) {}
-
-  @Post("bootstrap")
-  @Throttle({ default: { limit: 2, ttl: 60_000 } })
-  @ApiOperation({ summary: "راه‌اندازی یک‌بارهٔ مدیر مالک با کد یک‌بارمصرف ثبت‌شده در لاگ خصوصی API" })
-  @ApiBody({ type: BootstrapAdminDto })
-  bootstrap(@Body() body: BootstrapAdminDto) {
-    return this.auth.bootstrap(body);
-  }
 
   @Post("login")
   @HttpCode(HttpStatus.OK)

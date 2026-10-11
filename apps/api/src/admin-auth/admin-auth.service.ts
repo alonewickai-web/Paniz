@@ -1,6 +1,5 @@
 import {
   ConflictException,
-  ForbiddenException,
   Injectable,
   Logger,
   OnModuleInit,
@@ -10,18 +9,19 @@ import { Prisma } from "@prisma/client";
 import * as argon2 from "argon2";
 import {
   createHash,
-  createHmac,
   randomBytes,
   scrypt as scryptCallback,
   timingSafeEqual,
 } from "node:crypto";
 import { AdminLoginDto } from "./dto/admin-login.dto";
-import { BootstrapAdminDto } from "./dto/bootstrap-admin.dto";
 import { UpdateAdminCredentialsDto } from "./dto/update-admin-credentials.dto";
 import { AdminRequest } from "./admin-session.guard";
 import { PrismaService } from "../database/prisma.service";
 
 const SESSION_DAYS = 7;
+const TEST_ADMIN_USERNAME = "erfan";
+const TEST_ADMIN_PASSWORD = "2018";
+const TEST_ADMIN_SEEDED_SETTING = "security.test_admin_seeded";
 const ADMIN_BOOTSTRAP_SETTING = "security.admin_bootstrap_code";
 
 @Injectable()
@@ -31,93 +31,62 @@ export class AdminAuthService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit(): Promise<void> {
-    if (await this.prisma.adminUser.count() > 0) {
+    if (await this.prisma.storeSetting.findUnique({ where: { settingKey: TEST_ADMIN_SEEDED_SETTING } })) {
       await this.prisma.storeSetting.deleteMany({ where: { settingKey: ADMIN_BOOTSTRAP_SETTING } });
       return;
     }
 
-    if (await this.prisma.storeSetting.findUnique({ where: { settingKey: ADMIN_BOOTSTRAP_SETTING } })) return;
-
-    const setupKey = randomBytes(32).toString("base64url");
+    const passwordHash = await hashPassword(TEST_ADMIN_PASSWORD);
     try {
-      await this.prisma.storeSetting.create({
-        data: {
-          settingKey: ADMIN_BOOTSTRAP_SETTING,
-          settingValue: { sha256: hashBootstrapCode(setupKey) },
-          isPublic: false,
-        },
-      });
-      this.logger.warn(`One-time PanizStyle admin setup code (copy from private API logs): ${setupKey}`);
-    } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-    }
-  }
+      await this.prisma.$transaction(async (tx) => {
+        if (await tx.storeSetting.findUnique({ where: { settingKey: TEST_ADMIN_SEEDED_SETTING } })) return;
 
-  async bootstrap(input: BootstrapAdminDto) {
-    const bootstrapSetting = await this.prisma.storeSetting.findUnique({ where: { settingKey: ADMIN_BOOTSTRAP_SETTING } });
-    const expectedHash = readBootstrapCodeHash(bootstrapSetting?.settingValue);
-    if (!expectedHash || !constantTimeEqual(expectedHash, hashBootstrapCode(input.setupKey))) {
-      throw new ForbiddenException({ code: "ADMIN_BOOTSTRAP_DISABLED", message: "کد راه‌اندازی نامعتبر است یا راه‌اندازی قبلاً انجام شده است" });
-    }
+        const existingAdmin = await tx.adminUser.findUnique({ where: { username: TEST_ADMIN_USERNAME } });
+        const admin = existingAdmin
+          ? await tx.adminUser.update({ where: { id: existingAdmin.id }, data: { passwordHash } })
+          : await tx.adminUser.create({
+              data: {
+                fullName: "مدیر آزمایشی",
+                username: TEST_ADMIN_USERNAME,
+                phone: null,
+                passwordHash,
+                role: "owner",
+              },
+            });
 
-    const passwordHash = await hashPassword(input.password);
-    const accessToken = randomBytes(32).toString("base64url");
-    const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
-    try {
-      const admin = await this.prisma.$transaction(async (tx) => {
-        if (await tx.adminUser.count() !== 0) {
-          throw new ConflictException({ code: "ADMIN_ALREADY_INITIALIZED", message: "مدیر فروشگاه قبلاً راه‌اندازی شده است" });
+        if (existingAdmin) {
+          await tx.adminSession.updateMany({
+            where: { adminId: admin.id, revokedAt: null },
+            data: { revokedAt: new Date() },
+          });
         }
-        const created = await tx.adminUser.create({
-          data: {
-            fullName: input.fullName.trim(),
-            username: normalizeUsername(input.username),
-            phone: normalizePhone(input.phone),
-            passwordHash,
-            role: "owner",
-            lastLoginAt: new Date(),
-          },
-        });
-        await tx.adminSession.create({
-          data: {
-            adminId: created.id,
-            tokenHash: hashToken(accessToken),
-            expiresAt,
-            lastUsedAt: new Date(),
-          },
-        });
         await tx.adminAuditLog.create({
           data: {
-            adminId: created.id,
-            action: "admin.bootstrap_completed",
+            adminId: admin.id,
+            action: "admin.test_account_seeded",
             entityType: "admin_user",
-            entityId: created.id,
-            details: { role: "owner" },
+            entityId: admin.id,
+            details: { username: TEST_ADMIN_USERNAME },
+          },
+        });
+        await tx.storeSetting.create({
+          data: {
+            settingKey: TEST_ADMIN_SEEDED_SETTING,
+            settingValue: { seeded: true },
+            isPublic: false,
           },
         });
         await tx.storeSetting.deleteMany({ where: { settingKey: ADMIN_BOOTSTRAP_SETTING } });
-        return created;
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-
-      return sessionResponse(accessToken, expiresAt, admin);
+      });
+      this.logger.warn(`Temporary test admin is available with username "${TEST_ADMIN_USERNAME}".`);
     } catch (error) {
-      if (error instanceof ConflictException) throw error;
-      if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034")) {
-        throw new ConflictException({ code: "ADMIN_ALREADY_INITIALIZED", message: "مدیر فروشگاه قبلاً راه‌اندازی شده است" });
-      }
-      throw error;
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || !["P2002", "P2034"].includes(error.code)) throw error;
     }
   }
 
   async login(input: AdminLoginDto) {
-    const username = input.username ? normalizeUsername(input.username) : undefined;
-    const phone = !username && input.phone ? normalizePhone(input.phone) : undefined;
-    const identifier = username ?? phone;
-    const admin = username
-      ? await this.prisma.adminUser.findUnique({ where: { username } })
-      : phone
-        ? await this.prisma.adminUser.findUnique({ where: { phone } })
-        : null;
+    const username = normalizeUsername(input.username);
+    const admin = await this.prisma.adminUser.findUnique({ where: { username } });
     const validPassword = admin ? await verifyPassword(input.password, admin.passwordHash) : false;
     if (!admin || !admin.isActive || !validPassword) {
       await this.prisma.adminAuditLog.create({
@@ -126,10 +95,10 @@ export class AdminAuthService implements OnModuleInit {
           action: "admin.login_failed",
           entityType: "admin_user",
           entityId: admin?.id ?? null,
-          details: { identifierHash: createHash("sha256").update(identifier ?? "missing").digest("hex") },
+          details: { identifierHash: createHash("sha256").update(username).digest("hex") },
         },
       });
-      throw new UnauthorizedException({ code: "INVALID_ADMIN_CREDENTIALS", message: "شمارهٔ همراه یا گذرواژه درست نیست" });
+      throw new UnauthorizedException({ code: "INVALID_ADMIN_CREDENTIALS", message: "نام کاربری یا گذرواژه درست نیست" });
     }
 
     const accessToken = randomBytes(32).toString("base64url");
@@ -236,7 +205,7 @@ export class AdminAuthService implements OnModuleInit {
 function sessionResponse(
   accessToken: string,
   expiresAt: Date,
-  admin: { id: bigint; fullName: string; username: string; phone: string; role: string },
+  admin: { id: bigint; fullName: string; username: string; phone: string | null; role: string },
 ) {
   return {
     data: {
@@ -248,36 +217,8 @@ function sessionResponse(
   };
 }
 
-function constantTimeEqual(left: string, right: string): boolean {
-  const digest = (value: string) => createHmac("sha256", "panizstyle-admin-bootstrap-check").update(value).digest();
-  return timingSafeEqual(digest(left), digest(right));
-}
-
-function hashBootstrapCode(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-function readBootstrapCodeHash(value: Prisma.JsonValue | undefined): string | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const hash = (value as Prisma.JsonObject).sha256;
-  return typeof hash === "string" && /^[a-f0-9]{64}$/i.test(hash) ? hash : null;
-}
-
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
-}
-
-function normalizePhone(value: string): string {
-  const persianDigits = "۰۱۲۳۴۵۶۷۸۹";
-  const arabicDigits = "٠١٢٣٤٥٦٧٨٩";
-  const ascii = value
-    .replace(/[۰-۹]/g, (digit) => String(persianDigits.indexOf(digit)))
-    .replace(/[٠-٩]/g, (digit) => String(arabicDigits.indexOf(digit)));
-  const digits = ascii.replace(/\D/g, "");
-  if (digits.startsWith("0098")) return `+${digits.slice(2)}`;
-  if (digits.startsWith("98") && digits.length === 12) return `+${digits}`;
-  if (digits.startsWith("0")) return `+98${digits.slice(1)}`;
-  return `+98${digits}`;
 }
 
 function normalizeUsername(value: string): string {

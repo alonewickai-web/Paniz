@@ -63,21 +63,8 @@ class AdminApi {
   }
 
   Future<AdminIdentity> login(String username, String password) async {
-    final identifier = username.trim();
-    final looksLikePhone = RegExp(r'^(?:\+98|0098|0)?9[0-9۰-۹٠-٩]{9}$').hasMatch(identifier);
     final response = await dio.post('admin/auth/login', data: {
-      if (looksLikePhone) 'phone': identifier else 'username': identifier,
-      'password': password,
-    });
-    return _acceptSession(_data(response));
-  }
-
-  Future<AdminIdentity> bootstrap({required String setupKey, required String fullName, required String username, required String phone, required String password}) async {
-    final response = await dio.post('admin/auth/bootstrap', data: {
-      'setupKey': setupKey,
-      'fullName': fullName.trim(),
       'username': username.trim(),
-      'phone': phone.trim(),
       'password': password,
     });
     return _acceptSession(_data(response));
