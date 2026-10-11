@@ -87,7 +87,7 @@ export default function CartPage() {
         <div className="page-shell">
           <nav className="store-breadcrumb" aria-label="مسیر صفحه"><Link href="/">خانه</Link><span>/</span><span>سبد خرید</span></nav>
           <div className="store-page-heading"><div><span className="section-kicker">انتخاب‌های قشنگت</span><h1>سبد خرید</h1><p>رنگ، سایز و تعداد انتخاب‌هایت را بررسی کن.</p></div><span className="store-result-count">{new Intl.NumberFormat("fa-IR").format(cart.reduce((sum, line) => sum + line.quantity, 0))} کالا</span></div>
-          {!ready ? <div className="store-message">در حال آماده‌کردن سبد خرید…</div> : !cart.length ? <div className="store-empty-page"><span><ShoppingBag size={32} /></span><h2>سبدت هنوز خالیه</h2><p>از بین لباس‌های پانیز یک انتخاب دوست‌داشتنی پیدا کن.</p><Link className="button-primary" href="/products">دیدن محصولات <ArrowLeft size={17} /></Link></div> : (
+          {!ready ? <div className="store-message">در حال آماده‌کردن سبد خرید…</div> : !cart.length ? <div className="store-empty-page"><span><ShoppingBag size={32} /></span><h2>سبدت هنوز خالیه</h2><p>از بین لباس‌های پانیذ یک انتخاب دوست‌داشتنی پیدا کن.</p><Link className="button-primary" href="/products">دیدن محصولات <ArrowLeft size={17} /></Link></div> : (
             <div className="store-cart-layout">
               <section className="store-cart-lines" aria-label="اقلام سبد خرید">
                 {cart.map((line) => {

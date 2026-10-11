@@ -217,7 +217,7 @@ export default function AccountPage() {
     <StorefrontShell>
       <main className="store-page"><div className="page-shell customer-account-page">
         <nav className="store-breadcrumb" aria-label="مسیر صفحه"><Link href="/">خانه</Link><span>/</span><span>حساب کاربری</span></nav>
-        <div className="store-page-heading customer-heading"><div><span className="section-kicker">همراه پانیز</span><h1>{profile ? `سلام ${profile.fullName || "عزیزم"}` : "ورود به حساب کاربری"}</h1><p>{profile ? "اطلاعات و نشانی‌های ذخیره‌شده‌ات را مدیریت کن." : "برای خرید، پیگیری سفارش‌ها و ذخیرهٔ نشانی‌ها با شمارهٔ موبایلت وارد شو."}</p></div>
+        <div className="store-page-heading customer-heading"><div><span className="section-kicker">همراه پانیذ</span><h1>{profile ? `سلام ${profile.fullName || "عزیزم"}` : "ورود به حساب کاربری"}</h1><p>{profile ? "اطلاعات و نشانی‌های ذخیره‌شده‌ات را مدیریت کن." : "برای خرید، پیگیری سفارش‌ها و ذخیرهٔ نشانی‌ها با شمارهٔ موبایلت وارد شو."}</p></div>
           {profile && <button className="outline-button customer-logout" type="button" onClick={() => void logout()} disabled={busy}><LogOut size={17} /> خروج از حساب</button>}
         </div>
 

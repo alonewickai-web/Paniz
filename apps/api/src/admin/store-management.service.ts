@@ -12,7 +12,7 @@ const defaultSections = [
   { sectionKey: "hero", title: "بنر اصلی", isActive: true, sortOrder: 0 },
   { sectionKey: "categories", title: "دسته‌بندی‌ها", isActive: true, sortOrder: 1 },
   { sectionKey: "products", title: "محصولات", isActive: true, sortOrder: 2 },
-  { sectionKey: "story", title: "پیشنهاد پانیز", isActive: true, sortOrder: 3 },
+  { sectionKey: "story", title: "پیشنهاد پانیذ", isActive: true, sortOrder: 3 },
   { sectionKey: "benefits", title: "خدمات فروشگاه", isActive: true, sortOrder: 4 },
 ] as const;
 

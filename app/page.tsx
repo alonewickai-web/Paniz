@@ -518,7 +518,7 @@ export default function Home() {
     <main>
       <div className="announcement-bar">
         <Sparkles size={15} aria-hidden="true" />
-        <span>کالکشن‌های تازه و انتخاب‌های دوست‌داشتنی پانیز</span>
+        <span>کالکشن‌های تازه و انتخاب‌های دوست‌داشتنی پانیذ</span>
         <ArrowLeft size={14} aria-hidden="true" />
       </div>
 
@@ -527,9 +527,9 @@ export default function Home() {
           <button className="icon-button mobile-menu" onClick={() => document.getElementById("categories")?.scrollIntoView({ behavior: "smooth" })} aria-label="رفتن به دسته‌بندی‌ها">
             <Menu size={23} />
           </button>
-          <a className="brand" href="#top" aria-label="صفحه اصلی پانیز">
-            <span className="brand-mark">P</span>
-            <span className="brand-word">PANIZ<span>STYLE</span></span>
+          <a className="brand" href="#top" aria-label="صفحه اصلی پانیذ">
+            <span className="brand-mark">پ</span>
+            <span className="brand-word">پانیذ</span>
           </a>
 
           <form className="search-box" action="/products" method="get">
@@ -584,7 +584,7 @@ export default function Home() {
       <div className="page-shell page-content" id="top">
         {sectionIsActive("hero") && <section className="hero" aria-labelledby="hero-title" style={{ order: sectionOrder("hero", 0) }}>
           <div className="hero-copy">
-            <span className="eyebrow"><span className="eyebrow-dot" /> {activeBanner ? "پیشنهاد تازهٔ پانیز" : "کالکشن تازهٔ پانیز"}</span>
+            <span className="eyebrow"><span className="eyebrow-dot" /> {activeBanner ? "پیشنهاد تازهٔ پانیذ" : "کالکشن تازهٔ پانیذ"}</span>
             <h1 id="hero-title">{activeBanner?.title ?? <>هر روز،<br />با <em>حالِ خوب</em> بپوش</>}</h1>
             <p>{activeBanner?.description || "لباس‌هایی برای روزهای پرجنب‌وجوش و لحظه‌های آرام تو. راحت، خوش‌دوخت و دوست‌داشتنی."}</p>
             <div className="hero-buttons">
@@ -612,7 +612,7 @@ export default function Home() {
             <div className="hero-image-wrap">
               <StoreImage
                 src={activeBanner?.imagePath || "/images/paniz-sage.webp"}
-                alt={activeBanner?.title || "استایل زنانهٔ تازه و راحت از کالکشن پانیز"}
+                alt={activeBanner?.title || "استایل زنانهٔ تازه و راحت از کالکشن پانیذ"}
                 fill
                 priority
                 sizes="(max-width: 760px) 92vw, 55vw"
@@ -747,13 +747,13 @@ export default function Home() {
           <div className="load-more-wrap"><span>{money(visibleProducts.length)} محصول از {money(catalogProducts.length)}</span><Link className="outline-button" href="/products">دیدن همه محصولات <ArrowLeft size={17} /></Link></div>
         </section>}
 
-        {sectionIsActive("story") && <section className="story-banner" aria-label="پیشنهاد پانیز" style={{ order: sectionOrder("story", 3) }}>
+        {sectionIsActive("story") && <section className="story-banner" aria-label="پیشنهاد پانیذ" style={{ order: sectionOrder("story", 3) }}>
           <div className="story-art"><span className="story-orb" /><StoreImage src={catalogProducts[2]?.image ?? products[2].image} alt="" fill sizes="35vw" /></div>
-          <div className="story-copy"><span className="section-kicker">یک انتخاب کوچک، یک حس تازه</span><h2>برای خودت<br />یه چیز <em>قشنگ</em> بردار</h2><p>با انتخاب‌های دوست‌داشتنی پانیز، حال خوب رو به روزمرگی‌هات اضافه کن.</p><button className="button-primary" onClick={() => chooseCategory("همه محصولات")}>انتخاب من <ArrowLeft size={18} /></button></div>
+          <div className="story-copy"><span className="section-kicker">یک انتخاب کوچک، یک حس تازه</span><h2>برای خودت<br />یه چیز <em>قشنگ</em> بردار</h2><p>با انتخاب‌های دوست‌داشتنی پانیذ، حال خوب رو به روزمرگی‌هات اضافه کن.</p><button className="button-primary" onClick={() => chooseCategory("همه محصولات")}>انتخاب من <ArrowLeft size={18} /></button></div>
           <div className="story-stamp"><span>با عشق</span><Heart size={19} fill="currentColor" /></div>
         </section>}
 
-        {sectionIsActive("benefits") && <section className="benefits-strip" aria-label="خدمات پانیز" style={{ order: sectionOrder("benefits", 4) }}>
+        {sectionIsActive("benefits") && <section className="benefits-strip" aria-label="خدمات پانیذ" style={{ order: sectionOrder("benefits", 4) }}>
           <div className="benefit"><span className="benefit-icon mint-icon"><ShoppingBag size={20} /></span><div><strong>خرید آسوده</strong><span>قیمت و موجودی از فروشگاه بررسی می‌شود</span></div></div>
           <span className="benefit-separator" />
           <div className="benefit"><span className="benefit-icon peach-icon"><ArrowRight size={20} /></span><div><strong>روش‌های ارسال</strong><span>هزینه پس از واردکردن نشانی مشخص می‌شود</span></div></div>
@@ -766,12 +766,12 @@ export default function Home() {
 
       <footer className="site-footer" id="footer">
         <div className="footer-inner page-shell">
-          <div className="footer-brand"><a className="brand" href="#top"><span className="brand-mark">P</span><span className="brand-word">PANIZ<span>STYLE</span></span></a><p>پانیز؛ برای روزهایی که می‌خوای خودت باشی.</p></div>
+          <div className="footer-brand"><a className="brand" href="#top"><span className="brand-mark">پ</span><span className="brand-word">پانیذ</span></a><p>پانیذ؛ برای روزهایی که می‌خوای خودت باشی.</p></div>
           <div><strong>راهنمای خرید</strong><Link href="/help/shipping">روش‌های ارسال</Link><Link href="/policies/returns">شرایط تعویض</Link><Link href="/help/faq">سؤالات پرتکرار</Link></div>
-          <div><strong>همراه پانیز</strong><Link href="/about">دربارهٔ ما</Link><Link href="/contact">تماس با ما</Link><Link href="/policies/privacy">حریم خصوصی</Link></div>
+          <div><strong>همراه پانیذ</strong><Link href="/about">دربارهٔ ما</Link><Link href="/contact">تماس با ما</Link><Link href="/policies/privacy">حریم خصوصی</Link></div>
           <div className="newsletter"><strong>خبرهای خوب رو از دست نده</strong><span>خبرنامه بعد از اتصال سرویس اطلاع‌رسانی فعال می‌شود.</span></div>
         </div>
-        <div className="footer-bottom page-shell"><span>© پانیز استایل، برای تو و روزهای خوبت</span><span>ساخته‌شده با <Heart size={13} fill="currentColor" /> در ایران</span></div>
+        <div className="footer-bottom page-shell"><span>© پانیذ، برای تو و روزهای خوبت</span><span>ساخته‌شده با <Heart size={13} fill="currentColor" /> در ایران</span></div>
       </footer>
 
       <nav className="mobile-bottom-nav" aria-label="ناوبری پایین">

@@ -10,20 +10,20 @@ import { siteUrl } from "./lib/site-url";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
-  title: "PanizStyle | پوشاکی برای حال خوب تو",
+  title: "پانیذ | پوشاکی برای حال خوب تو",
   description:
-    "جدیدترین لباس‌های زنانه، ست‌های راحتی و پوشاک روزمره را با تجربه‌ای ساده و دوست‌داشتنی در پانیز پیدا کن.",
+    "جدیدترین لباس‌های زنانه، ست‌های راحتی و پوشاک روزمره را با تجربه‌ای ساده و دوست‌داشتنی در پانیذ پیدا کن.",
   robots: {
     index: true,
     follow: true,
     googleBot: { index: true, follow: true, "max-image-preview": "large" },
   },
   openGraph: {
-    title: "PanizStyle | پوشاکی برای حال خوب تو",
-    description: "استایل تازه‌ات را از پانیز پیدا کن.",
+    title: "پانیذ | پوشاکی برای حال خوب تو",
+    description: "استایل تازه‌ات را از پانیذ پیدا کن.",
     locale: "fa_IR",
     type: "website",
-    siteName: "PanizStyle",
+    siteName: "پانیذ",
   },
 };
 

@@ -29,7 +29,7 @@ const policies: Record<string, { title: string; sections: { heading: string; bod
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  return { title: `${policies[slug]?.title ?? "قوانین"} | PanizStyle` };
+  return { title: `${policies[slug]?.title ?? "قوانین"} | پانیذ` };
 }
 
 export default async function PolicyPage({ params }: { params: Promise<{ slug: string }> }) {

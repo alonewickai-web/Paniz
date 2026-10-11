@@ -182,7 +182,7 @@ export default function CheckoutPage() {
               <aside className="store-order-summary store-checkout-summary"><h2>خلاصهٔ انتخاب‌ها</h2>
                 {(quote?.items ?? []).map((item) => <div className="store-checkout-item" key={item.variantId}><span>{item.productName}<small>{item.color} · {item.size} · {new Intl.NumberFormat("fa-IR").format(item.quantity)} عدد</small></span><strong>{formatToman(item.lineTotalToman)}</strong></div>)}
                 <form className="store-coupon-form" onSubmit={(event) => { event.preventDefault(); setQuoteError(""); setAppliedCoupon(couponDraft.trim().toUpperCase()); }}>
-                  <label className="store-field"><span>کد تخفیف</span><input dir="ltr" maxLength={64} value={couponDraft} onChange={(event) => setCouponDraft(event.target.value)} placeholder="مثلاً PANIZ20" /></label>
+                  <label className="store-field"><span>کد تخفیف</span><input dir="ltr" maxLength={64} value={couponDraft} onChange={(event) => setCouponDraft(event.target.value)} placeholder="مثلاً PANI20" /></label>
                   <button className="outline-button" type="submit" disabled={!couponDraft.trim() || loadingQuote}>اعمال کد</button>
                   {appliedCoupon && <button className="customer-text-button" type="button" onClick={() => { setAppliedCoupon(""); setCouponDraft(""); setQuoteError(""); }}>حذف کد</button>}
                 </form>

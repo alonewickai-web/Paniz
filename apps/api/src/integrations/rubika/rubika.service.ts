@@ -99,7 +99,7 @@ export class RubikaBotService implements OnModuleInit {
     }
 
     if (type === "StartedBot") {
-      await this.sendMessage(chatId, "سلام! برای اتصال حساب فروشگاه PanizStyle، کد یک‌بارمصرف صفحهٔ حساب کاربری‌ات را همین‌جا بفرست. برای لغو پیام‌های تبلیغاتی هم /stop را بفرست.");
+      await this.sendMessage(chatId, "سلام! برای اتصال حساب فروشگاه پانیذ، کد یک‌بارمصرف صفحهٔ حساب کاربری‌ات را همین‌جا بفرست. برای لغو پیام‌های تبلیغاتی هم /stop را بفرست.");
       return { ok: true };
     }
 
@@ -121,7 +121,7 @@ export class RubikaBotService implements OnModuleInit {
     }
 
     if (/^\/?start$/i.test(text)) {
-      await this.sendMessage(chatId, "برای اتصال حساب، کد یک‌بارمصرف صفحهٔ حساب کاربری PanizStyle را بفرست. برای لغو پیام‌های تبلیغاتی /stop را بفرست.");
+      await this.sendMessage(chatId, "برای اتصال حساب، کد یک‌بارمصرف صفحهٔ حساب کاربری پانیذ را بفرست. برای لغو پیام‌های تبلیغاتی /stop را بفرست.");
       return { ok: true };
     }
 
@@ -145,8 +145,8 @@ export class RubikaBotService implements OnModuleInit {
         return true;
       });
       await this.sendMessage(chatId, connected
-        ? "حساب PanizStyle با موفقیت متصل شد. برای لغو پیام‌های تبلیغاتی هر زمان /stop را بفرست."
-        : "کد معتبر نیست یا منقضی شده است. از حساب PanizStyle کد تازه بگیر.");
+        ? "حساب پانیذ با موفقیت متصل شد. برای لغو پیام‌های تبلیغاتی هر زمان /stop را بفرست."
+        : "کد معتبر نیست یا منقضی شده است. از حساب پانیذ کد تازه بگیر.");
     } catch (error) {
       if (isUniqueError(error)) {
         await this.sendMessage(chatId, "این حساب فروشگاه به گفت‌وگوی روبیکای دیگری متصل است. ابتدا اتصال قبلی را از حساب کاربری قطع کن.");

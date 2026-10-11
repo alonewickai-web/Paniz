@@ -30,8 +30,8 @@ export function StorefrontHeader() {
       <div className="announcement-bar">انتخاب‌های دوست‌داشتنی برای روزهای پیشِ رو</div>
       <header className="site-header">
         <div className="header-main page-shell">
-          <Link className="brand" href="/" aria-label="صفحهٔ اصلی پانیز">
-            <span className="brand-mark">P</span><span className="brand-word">PANIZ<span>STYLE</span></span>
+          <Link className="brand" href="/" aria-label="صفحهٔ اصلی پانیذ">
+            <span className="brand-mark">پ</span><span className="brand-word">پانیذ</span>
           </Link>
           <form className="search-box" action="/products" method="get">
             <Search size={19} aria-hidden="true" />
@@ -66,11 +66,11 @@ export function StorefrontFooter() {
   return (
     <footer className="site-footer store-footer">
       <div className="footer-inner page-shell">
-        <div className="footer-brand"><Link className="brand" href="/"><span className="brand-mark">P</span><span className="brand-word">PANIZ<span>STYLE</span></span></Link><p>پانیز؛ برای روزهایی که می‌خوای خودت باشی.</p></div>
+        <div className="footer-brand"><Link className="brand" href="/"><span className="brand-mark">پ</span><span className="brand-word">پانیذ</span></Link><p>پانیذ؛ برای روزهایی که می‌خوای خودت باشی.</p></div>
         <div><strong>راهنمای خرید</strong><Link href="/help/shipping">روش‌های ارسال</Link><Link href="/policies/returns">تعویض و مرجوعی</Link><Link href="/help/faq">پرسش‌های پرتکرار</Link></div>
-        <div><strong>همراه پانیز</strong><Link href="/about">دربارهٔ ما</Link><Link href="/contact">تماس با ما</Link><Link href="/policies/privacy">حریم خصوصی</Link></div>
+        <div><strong>همراه پانیذ</strong><Link href="/about">دربارهٔ ما</Link><Link href="/contact">تماس با ما</Link><Link href="/policies/privacy">حریم خصوصی</Link></div>
       </div>
-      <div className="footer-bottom page-shell"><span>© پانیز استایل</span><span>پوشاک زنانه، با انتخاب تو</span></div>
+      <div className="footer-bottom page-shell"><span>© پانیذ</span><span>پوشاک زنانه، با انتخاب تو</span></div>
     </footer>
   );
 }

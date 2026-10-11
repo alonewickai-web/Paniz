@@ -5,7 +5,7 @@ import { StorefrontShell } from "../../components/storefront-shell";
 const pages: Record<string, { title: string; description: string; sections: { heading: string; body: string }[] }> = {
   shipping: {
     title: "روش‌های ارسال",
-    description: "اطلاعات ارسال سفارش‌های پانیز",
+    description: "اطلاعات ارسال سفارش‌های پانیذ",
     sections: [
       { heading: "هزینهٔ ارسال", body: "هزینهٔ ارسال هنوز در تنظیمات فروشگاه تعریف نشده است. مبلغ نهایی بعد از مشخص‌شدن شهر و روش ارسال به شما اعلام می‌شود؛ جمع کالاها در صفحهٔ تسویه‌حساب شامل ارسال نیست." },
       { heading: "زمان تحویل", body: "زمان تقریبی تحویل به مقصد و روش ارسال وابسته است و پیش از تأیید نهایی سفارش اعلام خواهد شد." },
@@ -14,7 +14,7 @@ const pages: Record<string, { title: string; description: string; sections: { he
   },
   faq: {
     title: "پرسش‌های پرتکرار",
-    description: "پاسخ به پرسش‌های رایج خرید از پانیز",
+    description: "پاسخ به پرسش‌های رایج خرید از پانیذ",
     sections: [
       { heading: "چطور سایز مناسب را انتخاب کنم؟", body: "در صفحهٔ هر محصول، سایزهای موجود مشخص هستند. جدول اندازه‌گیری پس از ثبت اندازه‌های واقعی هر مدل نمایش داده می‌شود؛ اگر برای محصولی جدول نمی‌بینی، اطلاعات تکمیلی هنوز ثبت نشده است." },
       { heading: "آیا محصولات موجود هستند؟", body: "موجودی رنگ و سایز از دیتابیس بررسی می‌شود. هنگام ثبت درخواست خرید نیز موجودی دوباره کنترل و برای مدت کوتاهی رزرو می‌شود." },
@@ -26,7 +26,7 @@ const pages: Record<string, { title: string; description: string; sections: { he
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  return { title: `${pages[slug]?.title ?? "راهنما"} | PanizStyle`, description: pages[slug]?.description };
+  return { title: `${pages[slug]?.title ?? "راهنما"} | پانیذ`, description: pages[slug]?.description };
 }
 
 export default async function HelpPage({ params }: { params: Promise<{ slug: string }> }) {

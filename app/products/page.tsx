@@ -2,10 +2,10 @@ import { Suspense } from "react";
 import { ProductsExplorer } from "../components/products-explorer";
 
 export const metadata = {
-  title: "همهٔ محصولات | PanizStyle",
-  description: "جست‌وجو و خرید پوشاک زنانهٔ پانیز با فیلتر رنگ، سایز و قیمت.",
+  title: "همهٔ محصولات | پانیذ",
+  description: "جست‌وجو و خرید پوشاک زنانهٔ پانیذ با فیلتر رنگ، سایز و قیمت.",
   alternates: { canonical: "/products" },
-  openGraph: { url: "/products", title: "همهٔ محصولات | PanizStyle" },
+  openGraph: { url: "/products", title: "همهٔ محصولات | پانیذ" },
 };
 
 export default function ProductsPage() {

@@ -23,30 +23,48 @@ export class CustomerSmsService {
       });
     }
 
-    if (provider === "smsir") {
-      const apiKey = this.config.get<string>("SMSIR_API_KEY", "");
+    const sandbox = provider === "smsir-sandbox";
+    if (sandbox && environment === "production") {
+      throw new ServiceUnavailableException({
+        code: "SMS_PROVIDER_NOT_CONFIGURED",
+        message: "حالت آزمایشی پیامک در محیط عملیاتی مجاز نیست.",
+      });
+    }
+
+    if (provider === "smsir" || sandbox) {
+      const apiKey = this.config.get<string>(sandbox ? "SMSIR_SANDBOX_API_KEY" : "SMSIR_API_KEY", "");
       const lineNumber = this.config.get<string>("SMSIR_LINE_NUMBER", "");
-      if (!apiKey || !lineNumber) {
+      const configuredTemplate = this.config.get<string>("SMSIR_OTP_TEMPLATE_ID", "").trim();
+      const templateId = sandbox ? 123456 : Number(configuredTemplate);
+      const useTemplate = sandbox || Boolean(configuredTemplate);
+      const parameterName = sandbox ? "Code" : this.config.get<string>("SMSIR_OTP_PARAMETER", "Code");
+      if (!apiKey || (useTemplate ? !Number.isSafeInteger(templateId) || templateId < 1 || !parameterName : !lineNumber)) {
         throw new ServiceUnavailableException({
           code: "SMS_PROVIDER_NOT_CONFIGURED",
           message: "تنظیمات API پیامک SMS.ir کامل نیست.",
         });
       }
       try {
-        const endpoint = this.config.get<string>("SMSIR_BULK_URL", "https://api.sms.ir/v1/send/bulk");
+        const endpoint = useTemplate
+          ? this.config.get<string>("SMSIR_VERIFY_URL", "https://api.sms.ir/v1/send/verify")
+          : this.config.get<string>("SMSIR_BULK_URL", "https://api.sms.ir/v1/send/bulk");
         const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-API-KEY": apiKey },
-          body: JSON.stringify({
+          body: JSON.stringify(useTemplate ? {
+            mobile: toSmsIranPhone(phone),
+            templateId,
+            parameters: [{ name: parameterName, value: code }],
+          } : {
             lineNumber,
-            MessageText: `کد ورود به PANIZ: ${code}`,
+            MessageText: `کد ورود به پانیذ: ${code}`,
             Mobiles: [toSmsIranPhone(phone)],
           }),
           signal: AbortSignal.timeout(15_000),
         });
         const result = await response.json().catch(() => ({})) as Record<string, unknown>;
         if (!response.ok || smsIrRejected(result)) throw new Error(`SMS.ir returned HTTP ${response.status}.`);
-        return {};
+        return sandbox ? { developmentCode: code } : {};
       } catch {
         throw new ServiceUnavailableException({
           code: "SMS_PROVIDER_UNAVAILABLE",
@@ -70,7 +88,7 @@ function toSmsIranPhone(phone: string): string {
 
 function smsIrRejected(result: Record<string, unknown>): boolean {
   const status = result.status ?? result.Status;
-  return result.IsSuccessful === false || result.isSuccessful === false || status === 0 || status === "0" || status === "ERROR" || status === "error";
+  return result.IsSuccessful === false || result.isSuccessful === false || (status !== 1 && status !== "1");
 }
 
 function maskPhone(phone: string): string {

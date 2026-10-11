@@ -21,13 +21,13 @@ async function loadProduct(slug: string): Promise<StoreProductDetail | null> {
 export async function generateMetadata({ params }: RouteProps): Promise<Metadata> {
   const { slug } = await params;
   const product = await loadProduct(slug);
-  if (!product) return { title: "محصول پیدا نشد | PanizStyle" };
+  if (!product) return { title: "محصول پیدا نشد | پانیذ" };
   return {
-    title: `${product.name} | PanizStyle`,
-    description: product.shortDescription || product.description || `مشاهدهٔ رنگ‌ها، سایزها و قیمت ${product.name} در پانیز.`,
+    title: `${product.name} | پانیذ`,
+    description: product.shortDescription || product.description || `مشاهدهٔ رنگ‌ها، سایزها و قیمت ${product.name} در پانیذ.`,
     alternates: { canonical: `/products/${encodeURIComponent(product.slug)}` },
     openGraph: {
-      title: `${product.name} | PanizStyle`,
+      title: `${product.name} | پانیذ`,
       url: siteUrl(`/products/${encodeURIComponent(product.slug)}`),
       images: product.image ? [product.image.path] : [],
     },

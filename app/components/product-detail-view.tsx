@@ -115,7 +115,7 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
           <section className="store-product-info">
             <span className="section-kicker">{product.category?.name || "پوشاک زنانه"}</span>
             <h1>{product.name}</h1>
-            <p className="store-product-lead">{product.shortDescription || "انتخابی راحت و دوست‌داشتنی از کالکشن پانیز."}</p>
+            <p className="store-product-lead">{product.shortDescription || "انتخابی راحت و دوست‌داشتنی از کالکشن پانیذ."}</p>
             <div className="store-detail-price">
               <strong>{variant ? formatToman(variant.priceToman) : product.priceToman === null ? "قیمت نامشخص" : formatToman(product.priceToman)}</strong>
               {variant?.compareAtPriceToman && <del>{formatToman(variant.compareAtPriceToman)}</del>}

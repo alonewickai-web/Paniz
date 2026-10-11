@@ -55,14 +55,18 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     catch (error) { this.logger.warn(`Could not recover interrupted work: ${error instanceof Error ? error.message : "unknown error"}`); }
     this.socialTimer = setInterval(() => void this.publishDuePosts(), 20_000);
     this.socialTimer.unref();
-    this.smsTimer = setInterval(() => void this.processQueuedSms(), 15_000);
-    this.smsTimer.unref();
+    if (this.smsCampaignWorkerEnabled()) {
+      this.smsTimer = setInterval(() => void this.processQueuedSms(), 15_000);
+      this.smsTimer.unref();
+    } else {
+      this.logger.log("SMS campaign worker is disabled by configuration.");
+    }
     this.rubikaTimer = setInterval(() => void this.processQueuedRubika(), 15_000);
     this.rubikaTimer.unref();
     this.backupTimer = setInterval(() => void this.ensureDailyBackup(), 60 * 60_000);
     this.backupTimer.unref();
     setTimeout(() => void this.publishDuePosts(), 5_000).unref();
-    setTimeout(() => void this.processQueuedSms(), 8_000).unref();
+    if (this.smsCampaignWorkerEnabled()) setTimeout(() => void this.processQueuedSms(), 8_000).unref();
     setTimeout(() => void this.processQueuedRubika(), 8_000).unref();
     setTimeout(() => void this.ensureDailyBackup(), 15_000).unref();
   }
@@ -170,6 +174,9 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
 
   async sendSmsCampaign(admin: AuthenticatedAdmin, idText: string) {
     requireManager(admin);
+    if (!this.smsCampaignWorkerEnabled()) {
+      throw new ServiceUnavailableException({ code: "SMS_CAMPAIGNS_DISABLED", message: "ارسال کمپین پیامکی فعلاً غیرفعال است." });
+    }
     const campaignId = parseId(idText, "campaign id");
     const campaign = await this.prisma.smsCampaign.findFirst({ where: { id: campaignId, channel: "sms" } });
     if (!campaign) throw new NotFoundException({ code: "SMS_CAMPAIGN_NOT_FOUND", message: "Campaign was not found." });
@@ -188,7 +195,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async processQueuedSms(): Promise<void> {
-    if (this.smsBusy) return;
+    if (!this.smsCampaignWorkerEnabled() || this.smsBusy) return;
     this.smsBusy = true;
     try {
       for (let count = 0; count < 2; count++) {
@@ -201,6 +208,11 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       this.logger.error(`SMS campaign worker failed: ${error instanceof Error ? error.message : "unknown error"}`);
     } finally { this.smsBusy = false; }
+  }
+
+  private smsCampaignWorkerEnabled(): boolean {
+    return this.config.get<string>("NODE_ENV", "development") !== "production"
+      || this.config.get<string>("SMS_CAMPAIGNS_ENABLED") === "true";
   }
 
   private async dispatchSmsCampaign(campaign: Prisma.SmsCampaignGetPayload<object>): Promise<void> {

@@ -49,8 +49,8 @@ async function bootstrap(): Promise<void> {
 
   if (config.get<string>("NODE_ENV") !== "production") {
     const openApiConfig = new DocumentBuilder()
-      .setTitle("PanizStyle API")
-      .setDescription("API نسخه‌دار فروشگاه PanizStyle")
+      .setTitle("پانیذ | API")
+      .setDescription("API نسخه‌دار فروشگاه پانیذ")
       .setVersion("1.0.0")
       .addBearerAuth({ type: "http", scheme: "bearer", bearerFormat: "opaque" }, "admin-session")
       .build();

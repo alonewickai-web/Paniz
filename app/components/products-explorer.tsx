@@ -139,7 +139,7 @@ export function ProductsExplorer() {
         <div className="page-shell">
           <nav className="store-breadcrumb" aria-label="مسیر صفحه"><Link href="/">خانه</Link><span>/</span><span>محصولات</span></nav>
           <div className="store-page-heading">
-            <div><span className="section-kicker">کالکشن پانیز</span><h1>لباسِ حال خوبت رو پیدا کن</h1><p>مدل، رنگ و سایزی رو که دوست داری انتخاب کن.</p></div>
+            <div><span className="section-kicker">کالکشن پانیذ</span><h1>لباسِ حال خوبت رو پیدا کن</h1><p>مدل، رنگ و سایزی رو که دوست داری انتخاب کن.</p></div>
             <span className="store-result-count">{new Intl.NumberFormat("fa-IR").format(total)} محصول</span>
           </div>
 
