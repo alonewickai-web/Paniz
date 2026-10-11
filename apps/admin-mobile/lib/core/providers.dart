@@ -65,5 +65,14 @@ class AdminThemeController extends AsyncNotifier<ThemeMode> {
 final dashboardProvider = FutureProvider.autoDispose<JsonMap>((ref) => ref.watch(adminApiProvider).dashboard());
 final storeConfigurationProvider = FutureProvider.autoDispose<JsonMap>((ref) => ref.watch(adminApiProvider).storeConfiguration());
 final productsProvider = FutureProvider.autoDispose<List<JsonMap>>((ref) => ref.watch(adminApiProvider).products());
-final categoriesProvider = FutureProvider.autoDispose<List<JsonMap>>((ref) => ref.watch(adminApiProvider).categories());
+final categoriesProvider = FutureProvider.autoDispose<List<JsonMap>>((ref) async {
+  final configuration = await ref.watch(storeConfigurationProvider.future);
+  final categories = configuration['categories'];
+  if (categories is! List) return const <JsonMap>[];
+  return categories
+      .whereType<Map>()
+      .map((category) => Map<String, dynamic>.from(category))
+      .where((category) => category['isActive'] == true)
+      .toList();
+});
 final ordersProvider = FutureProvider.autoDispose<List<JsonMap>>((ref) => ref.watch(adminApiProvider).orders());

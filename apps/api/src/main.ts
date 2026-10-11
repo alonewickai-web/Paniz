@@ -1,10 +1,15 @@
 import "reflect-metadata";
+import express from "express";
+import type { NextFunction, Request, Response } from "express";
 import helmet from "helmet";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module";
+import { uploadRoot } from "./uploads/upload-storage";
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
@@ -12,6 +17,15 @@ async function bootstrap(): Promise<void> {
 
   app.setGlobalPrefix("api/v1");
   app.use(helmet());
+  await mkdir(join(uploadRoot(), "products"), { recursive: true });
+  app.use(
+    "/uploads",
+    (_request: Request, response: Response, next: NextFunction) => {
+      response.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      next();
+    },
+    express.static(uploadRoot(), { dotfiles: "deny", immutable: true, maxAge: "30d" }),
+  );
   const configuredOrigins = config
     .getOrThrow<string>("WEB_ORIGINS")
     .split(",")

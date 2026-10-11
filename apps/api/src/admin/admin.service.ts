@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
   ConflictException,
@@ -255,7 +256,7 @@ export class AdminService {
           data: {
             categoryId,
             name: input.name.trim(),
-            slug: input.slug.trim(),
+            slug: input.slug?.trim() || `pending-${randomUUID()}`,
             shortDescription: input.shortDescription?.trim() || null,
             description: input.description?.trim() || null,
             material: input.material?.trim() || null,
@@ -270,22 +271,37 @@ export class AdminService {
                 isPrimary: index === primaryIndex,
               })),
             },
-            variants: {
-              create: input.variants.map((variant) => ({
-                sku: variant.sku.trim().toUpperCase(),
-                colorName: variant.colorName.trim(),
-                colorHex: variant.colorHex?.toUpperCase() ?? null,
-                sizeLabel: variant.sizeLabel.trim(),
-                priceToman: BigInt(variant.priceToman),
-                compareAtPriceToman: variant.compareAtPriceToman ? BigInt(variant.compareAtPriceToman) : null,
-                stockQuantity: variant.stockQuantity ?? 0,
-                isActive: true,
-              })),
-            },
           },
-          include: { variants: { select: { id: true, sku: true, stockQuantity: true } } },
         });
-        const initialStock = product.variants.filter((variant) => variant.stockQuantity > 0);
+        const productCode = `PDC-${product.id.toString().padStart(3, "0")}`;
+        const requestedSlug = input.slug?.trim();
+        const slugBase = `${toAsciiSlug(product.name) || "product"}-${product.id.toString()}`;
+        let generatedSlug = requestedSlug || slugBase;
+        let slugSuffix = 2;
+        while (await tx.product.findUnique({ where: { slug: generatedSlug }, select: { id: true } })) {
+          generatedSlug = `${requestedSlug || slugBase}-${slugSuffix++}`;
+        }
+        const updatedProduct = requestedSlug ? product : await tx.product.update({ where: { id: product.id }, data: { slug: generatedSlug } });
+        const variants = [];
+        for (const variant of input.variants) {
+          const sku = variant.sku?.trim().toUpperCase() || await nextProductSku(tx, product.id);
+          const createdVariant = await tx.productVariant.create({
+            data: {
+              productId: product.id,
+              sku,
+              colorName: variant.colorName.trim(),
+              colorHex: variant.colorHex?.toUpperCase() ?? null,
+              sizeLabel: variant.sizeLabel.trim(),
+              priceToman: BigInt(variant.priceToman),
+              compareAtPriceToman: variant.compareAtPriceToman ? BigInt(variant.compareAtPriceToman) : null,
+              stockQuantity: variant.stockQuantity ?? 0,
+              isActive: true,
+            },
+            select: { id: true, sku: true, stockQuantity: true },
+          });
+          variants.push(createdVariant);
+        }
+        const initialStock = variants.filter((variant) => variant.stockQuantity > 0);
         if (initialStock.length) {
           await tx.inventoryMovement.createMany({
             data: initialStock.map((variant) => ({
@@ -304,10 +320,10 @@ export class AdminService {
             action: "product.created",
             entityType: "product",
             entityId: product.id,
-            details: { slug: product.slug, status: product.status, variantCount: product.variants.length },
+            details: { slug: updatedProduct.slug, status: updatedProduct.status, variantCount: variants.length },
           },
         });
-        return { data: { id: product.id.toString(), slug: product.slug, status: product.status } };
+        return { data: { id: product.id.toString(), slug: updatedProduct.slug, status: updatedProduct.status, sku: variants[0]?.sku ?? productCode } };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (error) {
       if (error instanceof HttpException) throw error;
@@ -382,7 +398,7 @@ export class AdminService {
         const created = await tx.productVariant.create({
           data: {
             productId,
-            sku: input.sku.trim().toUpperCase(),
+            sku: input.sku?.trim().toUpperCase() || await nextProductSku(tx, productId),
             colorName: input.colorName.trim(),
             colorHex: input.colorHex?.toUpperCase() ?? null,
             sizeLabel: input.sizeLabel.trim(),
@@ -741,7 +757,13 @@ function toSafeNumber(value: bigint): number {
 
 function validateVariants(variants: CreateAdminProductDto["variants"]): void {
   const combinations = new Set<string>();
+  const skus = new Set<string>();
   for (const variant of variants) {
+    if (variant.sku?.trim()) {
+      const sku = variant.sku.trim().toUpperCase();
+      if (skus.has(sku)) throw new BadRequestException({ code: "DUPLICATE_VARIANT_SKU", message: "کد کالا تکراری است" });
+      skus.add(sku);
+    }
     if (variant.compareAtPriceToman && BigInt(variant.compareAtPriceToman) <= BigInt(variant.priceToman)) {
       throw new BadRequestException({ code: "INVALID_COMPARE_AT_PRICE", message: "قیمت قبل از تخفیف باید بیشتر از قیمت فروش باشد" });
     }
@@ -751,4 +773,30 @@ function validateVariants(variants: CreateAdminProductDto["variants"]): void {
     }
     combinations.add(combination);
   }
+}
+
+function toAsciiSlug(value: string): string {
+  const transliteration: Record<string, string> = {
+    ا: "a", آ: "a", ب: "b", پ: "p", ت: "t", ث: "s", ج: "j", چ: "ch", ح: "h", خ: "kh",
+    د: "d", ذ: "z", ر: "r", ز: "z", ژ: "zh", س: "s", ش: "sh", ص: "s", ض: "z", ط: "t",
+    ظ: "z", ع: "a", غ: "gh", ف: "f", ق: "gh", ک: "k", گ: "g", ل: "l", م: "m", ن: "n",
+    و: "v", ه: "h", ی: "y", ئ: "y", ؤ: "v", ء: "",
+  };
+  return [...value.toLowerCase()]
+    .map((character) => transliteration[character] ?? character)
+    .join("")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+async function nextProductSku(tx: Prisma.TransactionClient, productId: bigint): Promise<string> {
+  const base = `PDC-${productId.toString().padStart(3, "0")}`;
+  const existingCount = await tx.productVariant.count({ where: { productId } });
+  const ordinal = existingCount === 0 ? "" : `-${String(existingCount + 1).padStart(2, "0")}`;
+  let sku = `${base}${ordinal}`;
+  let suffix = 2;
+  while (await tx.productVariant.findUnique({ where: { sku }, select: { id: true } })) {
+    sku = `${base}${ordinal}-${suffix++}`;
+  }
+  return sku;
 }

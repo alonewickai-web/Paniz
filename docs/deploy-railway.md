@@ -29,6 +29,9 @@ Railway بر اساس اشتراک و مصرف منابع هزینه می‌گی
 | `DATABASE_CONNECTION_LIMIT` | `5` |
 | `WEB_ORIGINS` | پس از اتصال دامنه: `https://panizstyle.ir,https://www.panizstyle.ir` |
 | `CUSTOMER_AUTH_SECRET` | یک مقدار تصادفی محرمانه و حداقل ۳۲ نویسه‌ای |
+| `UPLOADS_DIR` | `/data/uploads` |
+
+برای ماندگاری تصاویر محصول، در سرویس API از **Settings → Volumes** یک Volume با Mount Path برابر `/data` بسازید. فایل‌های عکس در `UPLOADS_DIR` ذخیره می‌شوند؛ بدون Volume، فایل‌های آپلودی روی دیسک موقت کانتینرند و با جایگزینی آن از بین می‌روند.
 
 Railway متغیر `PORT` را تزریق می‌کند؛ آن را دستی ثابت نکنید. API روی `0.0.0.0` و همان پورت اجرا می‌شود. Dockerfile پیش از شروع API، migrationهای Prisma را اعمال می‌کند.
 

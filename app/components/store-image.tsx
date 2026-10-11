@@ -1,4 +1,7 @@
 import Image from "next/image";
+import { apiBaseUrl } from "../lib/catalog";
+
+const apiOrigin = apiBaseUrl().replace(/\/api\/v1$/, "");
 
 type StoreImageProps = {
   src: string;
@@ -12,9 +15,11 @@ type StoreImageProps = {
 };
 
 export function StoreImage({ src, alt, fill, width, height, sizes, priority, className }: StoreImageProps) {
-  if (/^https:\/\//i.test(src)) {
+  const imageSrc = src.startsWith("/uploads/") ? `${apiOrigin}${src}` : src;
+
+  if (/^https?:\/\//i.test(imageSrc)) {
     return <img
-      src={src}
+      src={imageSrc}
       alt={alt}
       width={fill ? undefined : width}
       height={fill ? undefined : height}

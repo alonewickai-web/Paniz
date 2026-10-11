@@ -15,3 +15,4 @@ android/key.properties
 !.env.example
 *.tsbuildinfo
 .railway/
+apps/api/uploads/

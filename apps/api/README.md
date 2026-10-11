@@ -40,6 +40,7 @@ Backend مستقل پروژه، با NestJS و API نسخه‌دار `/api/v1`.
 - `GET /api/v1/health/ready`: بررسی اتصال API به MySQL.
 - `GET /api/v1/categories`: دسته‌بندی‌های فعال.
 - `GET /api/v1/products?page=1&pageSize=12&category=...&q=...`: فهرست محصولات منتشرشده.
+- `POST /api/v1/admin/uploads/product-image`: بارگذاری تصویر محصول برای مدیر؛ فایل‌های قابل قبول JPG، PNG و WebP تا ۸ مگابایت هستند.
 - `GET /api/v1/products/:slug`: جزئیات محصول، تصاویر و تنوع‌های فعال.
 - `/api/v1/customer/auth/*`: ورود و ساخت حساب مشتری با کد یک‌بارمصرف.
 - `/api/v1/customer/profile`, `/api/v1/customer/addresses`, `/api/v1/customer/orders`: حساب و اطلاعات ذخیره‌شدهٔ مشتری؛ نیازمند کوکی نشست.
@@ -51,3 +52,5 @@ Backend مستقل پروژه، با NestJS و API نسخه‌دار `/api/v1`.
 `prisma:seed` هشت محصول نمایشی و دسته‌بندی‌های آنها را وارد دیتابیس توسعه می‌کند. اجرای دوبارهٔ seed موجودی SKUهای موجود را بازنشانی نمی‌کند. از داده‌های نمونه برای فروش واقعی استفاده نکنید.
 
 برای Dockerfile و راه‌اندازی روی Railway، [راهنمای استقرار پروژه](../../docs/deploy-railway.md) را ببینید.
+
+تصاویر آپلودشده در مسیر `UPLOADS_DIR` و زیرشاخهٔ `products` نگهداری می‌شوند. برای ماندگاری روی Railway، Volume سرویس API را روی `/data` سوار و `UPLOADS_DIR=/data/uploads` تنظیم کنید.

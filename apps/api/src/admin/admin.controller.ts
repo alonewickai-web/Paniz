@@ -1,6 +1,10 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, BadRequestException, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, Req, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
+import { randomUUID } from "node:crypto";
+import { diskStorage } from "multer";
 import { AdminRequest, AdminSessionGuard } from "../admin-auth/admin-session.guard";
+import { productImageRoot } from "../uploads/upload-storage";
 import { AdminService } from "./admin.service";
 import { AdjustInventoryDto } from "./dto/adjust-inventory.dto";
 import { AddAdminProductVariantDto } from "./dto/add-admin-product-variant.dto";
@@ -23,6 +27,30 @@ export class AdminController {
   @ApiOperation({ summary: "خلاصهٔ فروش، سفارش‌ها و هشدار کمبود موجودی" })
   dashboard(@Req() request: AdminRequest) {
     return this.admin.dashboard(request.admin!);
+  }
+
+  @Post("uploads/product-image")
+  @UseInterceptors(FileInterceptor("file", {
+    storage: diskStorage({
+      destination: productImageRoot(),
+      filename: (_request, file, callback) => {
+        const extension = ({ "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" } as Record<string, string>)[file.mimetype];
+        callback(null, `${randomUUID()}${extension ?? ".img"}`);
+      },
+    }),
+    limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+    fileFilter: (_request, file, callback) => {
+      const supported = ["image/jpeg", "image/png", "image/webp"].includes(file.mimetype);
+      callback(supported ? null : new BadRequestException({ code: "UNSUPPORTED_IMAGE_TYPE", message: "Only JPG, PNG, and WebP images are supported." }), supported);
+    },
+  }))
+  @ApiOperation({ summary: "Upload a product image from the admin app" })
+  uploadProductImage(@Req() request: AdminRequest, @UploadedFile() file?: { filename: string; mimetype: string }) {
+    if (request.admin?.role !== "owner" && request.admin?.role !== "admin") {
+      throw new ForbiddenException({ code: "ADMIN_PERMISSION_REQUIRED", message: "Manager access is required." });
+    }
+    if (!file) throw new BadRequestException({ code: "PRODUCT_IMAGE_REQUIRED", message: "Select a product image first." });
+    return { data: { imagePath: `/uploads/products/${file.filename}`, mimeType: file.mimetype } };
   }
 
   @Get("orders")

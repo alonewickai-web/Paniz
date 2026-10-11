@@ -137,7 +137,8 @@ export class StoreManagementService {
     const parentId = await this.validateParent(input.parentId);
     try {
       const category = await this.prisma.$transaction(async (tx) => {
-        const created = await tx.category.create({ data: { ...values, parentId } as Prisma.CategoryUncheckedCreateInput });
+        const slug = values.slug ?? await this.uniqueCategorySlug(tx, values.name!);
+        const created = await tx.category.create({ data: { ...values, slug, parentId } as Prisma.CategoryUncheckedCreateInput });
         await tx.adminAuditLog.create({
           data: { adminId: admin.id, action: "category.created", entityType: "category", entityId: created.id, details: { name: created.name, slug: created.slug } },
         });
@@ -244,8 +245,8 @@ export class StoreManagementService {
   }
 
   private categoryValues(input: SaveAdminCategoryDto, create: boolean): CategoryWriteData {
-    if (create && (!input.name?.trim() || !input.slug?.trim())) {
-      throw new BadRequestException({ code: "CATEGORY_FIELDS_REQUIRED", message: "نام و نشانی انگلیسی دسته‌بندی الزامی است" });
+    if (create && !input.name?.trim()) {
+      throw new BadRequestException({ code: "CATEGORY_NAME_REQUIRED", message: "نام دسته‌بندی را وارد کن" });
     }
     if (input.name !== undefined && !input.name.trim()) throw new BadRequestException({ code: "CATEGORY_NAME_REQUIRED", message: "نام دسته‌بندی را وارد کن" });
     if (input.slug !== undefined && !input.slug.trim()) throw new BadRequestException({ code: "CATEGORY_SLUG_REQUIRED", message: "نشانی دسته‌بندی را وارد کن" });
@@ -260,6 +261,16 @@ export class StoreManagementService {
       ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
       ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
     };
+  }
+
+  private async uniqueCategorySlug(tx: Prisma.TransactionClient, name: string): Promise<string> {
+    const base = persianSlug(name) || "category";
+    let slug = base;
+    let suffix = 2;
+    while (await tx.category.findUnique({ where: { slug }, select: { id: true } })) {
+      slug = `${base}-${suffix++}`;
+    }
+    return slug;
   }
 
   private async validateParent(rawParentId?: string | null, currentId?: bigint): Promise<bigint | null> {
@@ -297,6 +308,17 @@ export class StoreManagementService {
       ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
     };
   }
+}
+
+function persianSlug(value: string): string {
+  const replacements: Record<string, string> = {
+    ا: "a", آ: "a", ب: "b", پ: "p", ت: "t", ث: "s", ج: "j", چ: "ch", ح: "h", خ: "kh",
+    د: "d", ذ: "z", ر: "r", ز: "z", ژ: "zh", س: "s", ش: "sh", ص: "s", ض: "z", ط: "t",
+    ظ: "z", ع: "a", غ: "gh", ف: "f", ق: "gh", ک: "k", گ: "g", ل: "l", م: "m", ن: "n",
+    و: "v", ه: "h", ی: "y", ئ: "y", ؤ: "v", ء: "",
+  };
+  return [...value.toLowerCase()].map((character) => replacements[character] ?? character).join("")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
 function requireManager(admin: AuthenticatedAdmin): void {

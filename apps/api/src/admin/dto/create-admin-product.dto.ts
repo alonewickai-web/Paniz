@@ -39,10 +39,11 @@ export class AdminProductImageDto {
 }
 
 export class AdminProductVariantDto {
+  @IsOptional()
   @IsString()
   @MaxLength(80)
   @Matches(/^[A-Za-z0-9._-]+$/)
-  sku!: string;
+  sku?: string;
 
   @IsString()
   @MaxLength(80)
@@ -79,10 +80,11 @@ export class CreateAdminProductDto {
   @MaxLength(220)
   name!: string;
 
+  @IsOptional()
   @IsString()
   @MaxLength(240)
   @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-  slug!: string;
+  slug?: string;
 
   @IsString()
   @Matches(/^\d{1,20}$/)
