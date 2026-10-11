@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app.dart';
 import '../../core/admin_api.dart';
 import '../../core/providers.dart';
 import '../../core/ui_helpers.dart';
@@ -85,24 +84,24 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   Widget build(BuildContext context) {
     final orders = ref.watch(ordersProvider);
     return orders.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: panizRose)),
+      loading: () => Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
       error: (error, _) => Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Text(AdminApi.friendlyError(error), textAlign: TextAlign.center), const SizedBox(height: 12), OutlinedButton.icon(onPressed: () => ref.invalidate(ordersProvider), icon: const Icon(Icons.refresh), label: const Text('تلاش دوباره'))]))),
       data: (items) {
         final filtered = _filter == 'all' ? items : items.where((order) => order['status'] == _filter).toList();
         return RefreshIndicator(
           onRefresh: () => ref.refresh(ordersProvider.future),
-          color: panizRose,
+          color: Theme.of(context).colorScheme.primary,
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             children: [
-              const Text('سفارش‌های فروشگاه', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: panizInk)),
+              Text('سفارش‌های فروشگاه', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.onSurface)),
               const SizedBox(height: 5),
-              Text('${persianNumber(filtered.length)} سفارش در این فهرست', style: const TextStyle(color: Color(0xFF807477))),
+              Text('${persianNumber(filtered.length)} سفارش در این فهرست', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               const SizedBox(height: 13),
               SizedBox(height: 42, child: ListView(scrollDirection: Axis.horizontal, children: _filters.entries.map((filter) => Padding(
                 padding: const EdgeInsetsDirectional.only(end: 7),
-                child: ChoiceChip(label: Text(filter.value), selected: _filter == filter.key, selectedColor: const Color(0xFFFFE6EB), onSelected: (_) => setState(() => _filter = filter.key)),
+                child: ChoiceChip(label: Text(filter.value), selected: _filter == filter.key, onSelected: (_) => setState(() => _filter = filter.key)),
               )).toList())),
               const SizedBox(height: 13),
               if (filtered.isEmpty)
@@ -140,18 +139,18 @@ class _OrderCard extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(child: Text('${order['orderNumber'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w900))),
-          Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: statusColor(status).withValues(alpha: .1), borderRadius: BorderRadius.circular(18)), child: Text(statusLabel(status), style: TextStyle(fontSize: 11, color: statusColor(status), fontWeight: FontWeight.w800))),
+          Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: statusColor(context, status).withValues(alpha: .1), borderRadius: BorderRadius.circular(18)), child: Text(statusLabel(status), style: TextStyle(fontSize: 11, color: statusColor(context, status), fontWeight: FontWeight.w800))),
         ]),
         const SizedBox(height: 9),
         Text('${order['recipientName'] ?? ''} · ${order['recipientPhone'] ?? ''}', style: const TextStyle(fontSize: 12)),
         if (items.isNotEmpty) ...[
           const Divider(height: 18),
           ...items.take(3).map((item) => Padding(padding: const EdgeInsets.only(bottom: 5), child: Text('${item['name']} · ${item['color']} / ${item['size']} × ${persianNumber(item['quantity'])}', style: const TextStyle(fontSize: 12)))),
-          if (items.length > 3) Text('و ${persianNumber(items.length - 3)} مورد دیگر', style: const TextStyle(fontSize: 11, color: Color(0xFF7A6D71))),
+          if (items.length > 3) Text('و ${persianNumber(items.length - 3)} مورد دیگر', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ],
         const SizedBox(height: 8),
         Row(children: [
-          Expanded(child: Text(toman(order['totalToman'] ?? 0), style: const TextStyle(fontWeight: FontWeight.w900, color: panizInk))),
+          Expanded(child: Text(toman(order['totalToman'] ?? 0), style: TextStyle(fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.onSurface))),
           if (next != null) OutlinedButton(onPressed: onAdvance, child: Text(next)),
         ]),
       ]),

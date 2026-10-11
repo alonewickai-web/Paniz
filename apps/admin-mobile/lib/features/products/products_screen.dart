@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app.dart';
 import '../../core/admin_api.dart';
 import '../../core/providers.dart';
 import '../../core/ui_helpers.dart';
@@ -117,19 +116,19 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     final products = ref.watch(productsProvider);
     return Stack(children: [
       products.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: panizRose)),
+        loading: () => Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
         error: (error, _) => _InlineError(message: AdminApi.friendlyError(error), onRetry: () => ref.invalidate(productsProvider)),
         data: (items) => RefreshIndicator(
           onRefresh: () => ref.refresh(productsProvider.future),
-          color: panizRose,
+          color: Theme.of(context).colorScheme.primary,
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 96),
             children: [
               Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('کاتالوگ فروشگاه', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 19, color: panizInk)),
-                  Text('${persianNumber(items.length)} محصول', style: const TextStyle(color: Color(0xFF807477))),
+                  Text('کاتالوگ فروشگاه', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 19, color: Theme.of(context).colorScheme.onSurface)),
+                  Text('${persianNumber(items.length)} محصول', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 ])),
                 IconButton(tooltip: 'به‌روزرسانی', onPressed: () => ref.invalidate(productsProvider), icon: const Icon(Icons.refresh_rounded)),
               ]),
@@ -147,7 +146,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                   onDeleteImage: (image) => _deleteImage(product, image),
                 ),
               )),
-              if (_saving) const LinearProgressIndicator(color: panizRose),
+              if (_saving) LinearProgressIndicator(color: Theme.of(context).colorScheme.primary),
             ],
           ),
         ),
@@ -157,7 +156,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
         bottom: 18,
         child: FloatingActionButton.extended(
           onPressed: _saving ? null : _createProduct,
-          backgroundColor: panizRose,
+          backgroundColor: Theme.of(context).colorScheme.primary,
           foregroundColor: Colors.white,
           icon: const Icon(Icons.add_rounded),
           label: const Text('محصول جدید'),
@@ -187,8 +186,8 @@ class _ProductCard extends StatelessWidget {
       leading: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: imagePath.isEmpty
-            ? Container(width: 52, height: 58, color: panizLilac, child: const Icon(Icons.checkroom_rounded, color: panizRose))
-            : Image.network(AdminApi.imageUrl(imagePath), width: 52, height: 58, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 52, height: 58, color: panizLilac, child: const Icon(Icons.image_not_supported_outlined, color: panizRose))),
+            ? Container(width: 52, height: 58, color: Theme.of(context).colorScheme.secondaryContainer, child: Icon(Icons.checkroom_rounded, color: Theme.of(context).colorScheme.primary))
+            : Image.network(AdminApi.imageUrl(imagePath), width: 52, height: 58, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 52, height: 58, color: Theme.of(context).colorScheme.secondaryContainer, child: Icon(Icons.image_not_supported_outlined, color: Theme.of(context).colorScheme.primary))),
       ),
       title: Text('${product['name'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
       subtitle: Text('${product['category']?['name'] ?? 'بدون دسته'} · ${persianNumber(variants.length)} تنوع', maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -199,25 +198,25 @@ class _ProductCard extends StatelessWidget {
         Row(children: [
           Expanded(child: OutlinedButton.icon(onPressed: onStatus, icon: Icon(status == 'published' ? Icons.visibility_off_outlined : Icons.publish_rounded, size: 17), label: Text(status == 'published' ? 'پیش‌نویس' : 'انتشار'))),
           const SizedBox(width: 8),
-          IconButton(tooltip: 'افزودن رنگ یا سایز', onPressed: onAddVariant, color: const Color(0xFF6E5A9D), icon: const Icon(Icons.add_box_outlined)),
-          IconButton(tooltip: 'افزودن تصویر', onPressed: onAddImage, color: const Color(0xFF6E5A9D), icon: const Icon(Icons.add_photo_alternate_outlined)),
-          IconButton(tooltip: 'بایگانی', onPressed: onArchive, color: panizRose, icon: const Icon(Icons.archive_outlined)),
+          IconButton(tooltip: 'افزودن رنگ یا سایز', onPressed: onAddVariant, color: Theme.of(context).colorScheme.primary, icon: const Icon(Icons.add_box_outlined)),
+          IconButton(tooltip: 'افزودن تصویر', onPressed: onAddImage, color: Theme.of(context).colorScheme.primary, icon: const Icon(Icons.add_photo_alternate_outlined)),
+          IconButton(tooltip: 'بایگانی', onPressed: onArchive, color: Theme.of(context).colorScheme.primary, icon: Icon(Icons.archive_outlined)),
         ]),
-        Align(alignment: AlignmentDirectional.centerStart, child: Text('تصاویر محصول', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.grey.shade700))),
+        Align(alignment: AlignmentDirectional.centerStart, child: Text('تصاویر محصول', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurfaceVariant))),
         ...images.map((image) => ListTile(
           contentPadding: EdgeInsets.zero,
           dense: true,
-          leading: const Icon(Icons.image_outlined, color: Color(0xFF6E5A9D)),
+          leading: Icon(Icons.image_outlined, color: Theme.of(context).colorScheme.primary),
           title: Text('${image['altText'] ?? image['imagePath'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
-          subtitle: image['isPrimary'] == true ? const Text('تصویر اصلی', style: TextStyle(fontSize: 10, color: panizRose)) : null,
-          trailing: IconButton(tooltip: 'حذف تصویر', onPressed: () => onDeleteImage(Map<String, dynamic>.from(image)), icon: const Icon(Icons.delete_outline, color: panizRose, size: 20)),
+          subtitle: image['isPrimary'] == true ? Text('تصویر اصلی', style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.primary)) : null,
+          trailing: IconButton(tooltip: 'حذف تصویر', onPressed: () => onDeleteImage(Map<String, dynamic>.from(image)), icon: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.primary, size: 20)),
         )),
         ...variants.map((variant) => ListTile(
           contentPadding: EdgeInsets.zero,
           dense: true,
           title: Text('${variant['colorName'] ?? ''} · ${variant['sizeLabel'] ?? ''}  (${variant['sku'] ?? ''})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
           subtitle: Text('${toman(variant['priceToman'] ?? 0)} · موجود ${persianNumber(variant['availableQuantity'] ?? 0)}'),
-          trailing: IconButton(tooltip: 'ویرایش قیمت', onPressed: () => onEditVariant(variant), icon: const Icon(Icons.edit_outlined, color: panizRose)),
+          trailing: IconButton(tooltip: 'ویرایش قیمت', onPressed: () => onEditVariant(variant), icon: Icon(Icons.edit_outlined, color: Theme.of(context).colorScheme.primary)),
         )),
       ],
     ));
@@ -230,8 +229,8 @@ class _StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-    decoration: BoxDecoration(color: statusColor(status).withValues(alpha: .1), borderRadius: BorderRadius.circular(20)),
-    child: Text(statusLabel(status), style: TextStyle(color: statusColor(status), fontSize: 10, fontWeight: FontWeight.w700)),
+    decoration: BoxDecoration(color: statusColor(context, status).withValues(alpha: .1), borderRadius: BorderRadius.circular(20)),
+    child: Text(statusLabel(status), style: TextStyle(color: statusColor(context, status), fontSize: 10, fontWeight: FontWeight.w700)),
   );
 }
 
@@ -444,7 +443,7 @@ class _AddProductImageDialogState extends State<_AddProductImageDialog> {
 class _ProductsEmpty extends StatelessWidget {
   const _ProductsEmpty();
   @override
-  Widget build(BuildContext context) => Card(child: Padding(padding: const EdgeInsets.all(26), child: Column(children: [const Icon(Icons.checkroom_outlined, size: 34, color: panizRose), const SizedBox(height: 10), const Text('محصولی ثبت نشده'), const SizedBox(height: 8), Text('برای شروع روی «محصول جدید» بزن.', style: TextStyle(color: Colors.grey.shade700))])));
+  Widget build(BuildContext context) => Card(child: Padding(padding: EdgeInsets.all(26), child: Column(children: [Icon(Icons.checkroom_outlined, size: 34, color: Theme.of(context).colorScheme.primary), SizedBox(height: 10), Text('محصولی ثبت نشده'), SizedBox(height: 8), Text('برای شروع روی «محصول جدید» بزن.', style: TextStyle(color: Colors.grey.shade700))])));
 }
 
 class _InlineError extends StatelessWidget {

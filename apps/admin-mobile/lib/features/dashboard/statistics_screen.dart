@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app.dart';
 import '../../core/admin_api.dart';
 import '../../core/providers.dart';
 import '../../core/ui_helpers.dart';
@@ -13,7 +12,7 @@ class StatisticsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final report = ref.watch(dashboardProvider);
     return report.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: panizPrimary)),
+      loading: () => Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
       error: (error, _) => Center(child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -28,28 +27,28 @@ class StatisticsScreen extends ConsumerWidget {
         final counts = _map(data['orderCounts']);
         final totalOrders = counts.values.fold<int>(0, (total, value) => total + (value is num ? value.toInt() : 0));
         final statuses = <(String, String, Color)>[
-          ('pending_payment', 'در انتظار پرداخت', panizPeach),
-          ('paid', 'پرداخت‌شده', panizPrimary),
-          ('confirmed', 'تأییدشده', const Color(0xFF14B8A6)),
-          ('preparing', 'در حال آماده‌سازی', const Color(0xFF8B5CF6)),
-          ('shipped', 'ارسال‌شده', const Color(0xFFF97316)),
-          ('delivered', 'تحویل‌شده', const Color(0xFF22A06B)),
-          ('cancelled', 'لغوشده', panizCoral),
+          ('pending_payment', 'در انتظار پرداخت', Theme.of(context).colorScheme.tertiary),
+          ('paid', 'پرداخت‌شده', Theme.of(context).colorScheme.primary),
+          ('confirmed', 'تأییدشده', Theme.of(context).colorScheme.primary),
+          ('preparing', 'در حال آماده‌سازی', Theme.of(context).colorScheme.secondary),
+          ('shipped', 'ارسال‌شده', Theme.of(context).colorScheme.tertiary),
+          ('delivered', 'تحویل‌شده', Theme.of(context).colorScheme.primary),
+          ('cancelled', 'لغوشده', Theme.of(context).colorScheme.error),
         ];
         return RefreshIndicator(
           onRefresh: () => ref.refresh(dashboardProvider.future),
-          color: panizPrimary,
+          color: Theme.of(context).colorScheme.primary,
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             children: [
-              const Text('آمار فروشگاه', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: panizInk)),
+              Text('آمار فروشگاه', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.onSurface)),
               const SizedBox(height: 5),
-              const Text('خلاصهٔ فروش ثبت‌شده از اطلاعات واقعی سرور', style: TextStyle(color: panizMuted)),
+              Text('خلاصهٔ فروش ثبت‌شده از اطلاعات واقعی سرور', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               const SizedBox(height: 16),
               _PeriodCard(
                 title: 'امروز',
-                tint: const Color(0xFFE6FFFA),
+                tint: Theme.of(context).colorScheme.primaryContainer,
                 amount: toman(today['paidSalesToman'] ?? 0),
                 detail: '${persianNumber(today['paidOrderCount'] ?? 0)} سفارش پرداخت‌شده',
                 icon: Icons.today_rounded,
@@ -57,7 +56,7 @@ class StatisticsScreen extends ConsumerWidget {
               const SizedBox(height: 10),
               _PeriodCard(
                 title: 'این ماه',
-                tint: const Color(0xFFF1ECFF),
+                tint: Theme.of(context).colorScheme.secondaryContainer,
                 amount: toman(month['paidSalesToman'] ?? 0),
                 detail: '${persianNumber(month['paidOrderCount'] ?? 0)} سفارش پرداخت‌شده',
                 icon: Icons.calendar_month_rounded,
@@ -67,8 +66,8 @@ class StatisticsScreen extends ConsumerWidget {
                 padding: const EdgeInsets.all(16),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
-                    const Expanded(child: Text('وضعیت سفارش‌ها', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: panizInk))),
-                    Text('${persianNumber(totalOrders)} سفارش', style: const TextStyle(color: panizMuted, fontSize: 12)),
+                    Expanded(child: Text('وضعیت سفارش‌ها', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Theme.of(context).colorScheme.onSurface))),
+                    Text('${persianNumber(totalOrders)} سفارش', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
                   ]),
                   const SizedBox(height: 15),
                   ...statuses.map((item) {
@@ -78,13 +77,13 @@ class StatisticsScreen extends ConsumerWidget {
                       padding: const EdgeInsets.only(bottom: 14),
                       child: Column(children: [
                         Row(children: [
-                          Expanded(child: Text(item.$2, style: const TextStyle(fontSize: 12, color: panizInk))),
-                          Text(persianNumber(count), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: panizInk)),
+                          Expanded(child: Text(item.$2, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface))),
+                          Text(persianNumber(count), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
                         ]),
                         const SizedBox(height: 7),
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: LinearProgressIndicator(value: ratio, minHeight: 8, backgroundColor: const Color(0xFFF1F5F9), color: item.$3),
+                          child: LinearProgressIndicator(value: ratio, minHeight: 8, backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh, color: item.$3),
                         ),
                       ]),
                     );
@@ -92,12 +91,12 @@ class StatisticsScreen extends ConsumerWidget {
                 ]),
               )),
               const SizedBox(height: 12),
-              Card(color: const Color(0xFFFFF7ED), child: const Padding(
+              Card(color: Theme.of(context).colorScheme.tertiaryContainer, child: Padding(
                 padding: EdgeInsets.all(14),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Icon(Icons.info_outline_rounded, color: Color(0xFFB45309)),
+                  Icon(Icons.info_outline_rounded, color: Theme.of(context).colorScheme.onTertiaryContainer),
                   SizedBox(width: 10),
-                  Expanded(child: Text('گزارش نمودار روزانه و خروجی مالی در API فعلی موجود نیست؛ این صفحه فقط آمارهای ثبت‌شدهٔ امروز، ماه و سفارش‌ها را نشان می‌دهد.', style: TextStyle(color: Color(0xFF7C4A12), height: 1.6, fontSize: 12))),
+                  Expanded(child: Text('گزارش نمودار روزانه و خروجی مالی در API فعلی موجود نیست؛ این صفحه فقط آمارهای ثبت‌شدهٔ امروز، ماه و سفارش‌ها را نشان می‌دهد.', style: TextStyle(color: Theme.of(context).colorScheme.onTertiaryContainer, height: 1.6, fontSize: 12))),
                 ]),
               )),
             ],
@@ -120,14 +119,14 @@ class _PeriodCard extends StatelessWidget {
   Widget build(BuildContext context) => Card(child: Padding(
     padding: const EdgeInsets.all(16),
     child: Row(children: [
-      Container(width: 48, height: 48, decoration: BoxDecoration(color: tint, borderRadius: BorderRadius.circular(15)), child: Icon(icon, color: panizPrimary)),
+      Container(width: 48, height: 48, decoration: BoxDecoration(color: tint, borderRadius: BorderRadius.circular(15)), child: Icon(icon, color: Theme.of(context).colorScheme.primary)),
       const SizedBox(width: 13),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: const TextStyle(color: panizMuted, fontSize: 12)),
+        Text(title, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
         const SizedBox(height: 4),
-        Text(amount, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: panizInk, fontWeight: FontWeight.w900, fontSize: 18)),
+        Text(amount, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontWeight: FontWeight.w900, fontSize: 18)),
         const SizedBox(height: 3),
-        Text(detail, style: const TextStyle(color: panizMuted, fontSize: 11)),
+        Text(detail, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
       ])),
     ]),
   ));

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app.dart';
 import '../../core/admin_api.dart';
 import '../../core/providers.dart';
 
@@ -54,7 +53,7 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
         context: context,
         barrierDismissible: false,
         builder: (context) => AlertDialog(
-          icon: const Icon(Icons.verified_user_rounded, color: panizPrimary, size: 34),
+          icon: Icon(Icons.verified_user_rounded, color: Theme.of(context).colorScheme.primary, size: 34),
           title: const Text('اطلاعات ورود تغییر کرد'),
           content: const Text('برای امنیت، همهٔ نشست‌های مدیریتی بسته شدند. دوباره با اطلاعات جدید وارد شو.'),
           actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('رفتن به صفحهٔ ورود'))],
@@ -75,17 +74,17 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(16),
     children: [
-      Card(color: const Color(0xFFE6FFFA), child: Padding(
+      Card(color: Theme.of(context).colorScheme.primaryContainer, child: Padding(
         padding: const EdgeInsets.all(15),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Icon(Icons.shield_outlined, color: panizPrimary),
+          Icon(Icons.shield_outlined, color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 10),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('حساب مدیر فروشگاه', style: TextStyle(fontWeight: FontWeight.w900, color: panizInk)),
+            Text('حساب مدیر فروشگاه', style: TextStyle(fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.onSurface)),
             const SizedBox(height: 5),
-            Text('نام کاربری فعلی: ${widget.admin.username}', style: const TextStyle(color: panizMuted, fontSize: 12)),
+            Text('نام کاربری فعلی: ${widget.admin.username}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
             const SizedBox(height: 4),
-            const Text('برای هر تغییر، گذرواژهٔ فعلی لازم است. بعد از ذخیره همهٔ دستگاه‌ها دوباره باید وارد شوند.', style: TextStyle(color: panizMuted, fontSize: 12, height: 1.5)),
+            Text('برای هر تغییر، گذرواژهٔ فعلی لازم است. بعد از ذخیره همهٔ دستگاه‌ها دوباره باید وارد شوند.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12, height: 1.5)),
           ])),
         ]),
       )),
@@ -95,7 +94,7 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
         child: Form(
           key: _formKey,
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            const Text('تغییر اطلاعات ورود', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: panizInk)),
+            Text('تغییر اطلاعات ورود', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.onSurface)),
             const SizedBox(height: 15),
             TextFormField(
               controller: _currentPassword,
@@ -149,7 +148,7 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(_error!, style: const TextStyle(color: Color(0xFFDC2626)), textAlign: TextAlign.center),
+              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error), textAlign: TextAlign.center),
             ],
             const SizedBox(height: 16),
             FilledButton.icon(
@@ -161,8 +160,8 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
         ),
       )),
       const SizedBox(height: 12),
-      const Card(child: ListTile(
-        leading: Icon(Icons.phonelink_lock_outlined, color: panizMuted),
+      Card(child: ListTile(
+        leading: Icon(Icons.phonelink_lock_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant),
         title: Text('تأیید دومرحله‌ای'),
         subtitle: Text('فعالسازی TOTP هنوز به API و اپ متصل نشده است.'),
       )),

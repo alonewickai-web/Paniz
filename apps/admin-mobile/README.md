@@ -84,3 +84,8 @@ flutter build apk --release --split-per-abi `
 پس از Deploy شدن API، اپ را با نام کاربری **erfan** و گذرواژهٔ **2018** باز کنید. اگر دیتابیس قبلاً مدیر دیگری داشته، API حساب آزمایشی را هم در اولین راه‌اندازی نسخهٔ جدید ایجاد می‌کند. برای جزئیات مسیرها، migration، نشست‌ها و محدودیت‌های سفارش به [راهنمای API مدیریت](../../docs/admin-api.md) مراجعه کنید.
 
 در توسعه، سرویس پیامک واقعی متصل نیست و کد آزمایشی ورود مشتری از API برمی‌گردد؛ در production باید سرویس پیامک و **CUSTOMER_AUTH_SECRET** تنظیم شوند. درگاه پرداخت و روش ارسال نیز هنوز به پروژه متصل نشده‌اند.
+## UI refresh
+
+Version `0.2.5+7` introduces the PANIZ Admin mobile design system: a data-driven dashboard, five-tab RTL navigation, secondary tools in the drawer and More screen, consistent status and empty states, and a saved light/dark preference. The refreshed screens keep the existing API contracts and operational flows. Sales charts remain absent because the current API does not provide daily trend data.
+
+See [the admin mobile design notes](../../design-system/panizstyle/pages/admin-mobile.md) for palette, interaction, and navigation details.

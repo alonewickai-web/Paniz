@@ -1,4 +1,6 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'admin_api.dart';
 
@@ -30,6 +32,33 @@ class AuthController extends AsyncNotifier<AdminIdentity?> {
   Future<void> clearLocalSession() async {
     await ref.read(adminApiProvider).clearSession();
     state = const AsyncData(null);
+  }
+}
+
+final themeModeProvider = AsyncNotifierProvider<AdminThemeController, ThemeMode>(AdminThemeController.new);
+
+class AdminThemeController extends AsyncNotifier<ThemeMode> {
+  static const _storage = FlutterSecureStorage();
+  static const _key = 'paniz.admin.theme-mode';
+
+  @override
+  Future<ThemeMode> build() async {
+    final stored = await _storage.read(key: _key);
+    return switch (stored) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
+  }
+
+  Future<void> setDark(bool enabled) async {
+    final selected = enabled ? ThemeMode.dark : ThemeMode.light;
+    state = AsyncData(selected);
+    try {
+      await _storage.write(key: _key, value: enabled ? 'dark' : 'light');
+    } catch (_) {
+      // Keep the selected theme for this session when secure storage is unavailable.
+    }
   }
 }
 

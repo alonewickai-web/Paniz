@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app.dart';
 import '../../core/admin_api.dart';
 import '../../core/providers.dart';
 
@@ -59,14 +58,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         child: Container(
                           width: 68,
                           height: 68,
-                          decoration: BoxDecoration(color: panizMint.withValues(alpha: .42), borderRadius: BorderRadius.circular(22)),
-                          child: const Icon(Icons.storefront_rounded, color: panizPrimary, size: 31),
+                          decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: .42), borderRadius: BorderRadius.circular(22)),
+                          child: Icon(Icons.storefront_rounded, color: Theme.of(context).colorScheme.primary, size: 31),
                         ),
                       ),
                       const SizedBox(height: 18),
-                      const Center(child: Text('PANIZ', style: TextStyle(fontSize: 27, fontWeight: FontWeight.w900, letterSpacing: 1.6, color: panizInk))),
+                      Center(child: Text('PANIZ', style: TextStyle(fontSize: 27, fontWeight: FontWeight.w900, letterSpacing: 1.6, color: Theme.of(context).colorScheme.onSurface))),
                       const SizedBox(height: 7),
-                      const Center(child: Text('ورود به پنل مدیریت فروشگاه', style: TextStyle(color: panizMuted))),
+                      Center(child: Text('ورود به پنل مدیریت فروشگاه', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
                       const SizedBox(height: 28),
                       TextFormField(
                         controller: _username,
@@ -106,7 +105,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                       if (_error != null) ...[
                         const SizedBox(height: 14),
-                        Text(_error!, style: const TextStyle(color: Color(0xFFDC2626)), textAlign: TextAlign.center),
+                        Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error), textAlign: TextAlign.center),
                       ],
                       const SizedBox(height: 20),
                       FilledButton.icon(
@@ -120,7 +119,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       const SizedBox(height: 13),
                       Text(
                         'ورود با نام کاربری و گذرواژهٔ مدیر فروشگاه',
-                        style: const TextStyle(fontSize: 12, color: panizMuted),
+                        style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                         textAlign: TextAlign.center,
                       ),
                     ],
