@@ -28,10 +28,9 @@ NEXT_PUBLIC_API_BASE_URL=https://api.panizstyle.ir/api/v1
 ```text
 WEB_ORIGINS=https://panizstyle.ir,https://www.panizstyle.ir
 CUSTOMER_AUTH_SECRET=<راز تصادفی و محرمانه، حداقل ۳۲ نویسه>
-ADMIN_BOOTSTRAP_KEY=<کلید تصادفی یک‌بارمصرف و محرمانه، حداقل ۳۲ نویسه>
 ```
 
-این مقادیر را در **Variables** سرویس‌های Railway وارد کنید، نه در GitHub. پس از Deploy، APK مدیر را با API سفارشی دوباره بسازید. مدیر با `ADMIN_BOOTSTRAP_KEY` حساب مالک را یک‌بار از صفحهٔ راه‌اندازی اولیه ایجاد کند؛ سپس همان متغیر را از Railway حذف کنید.
+این مقادیر را در **Variables** سرویس‌های Railway وارد کنید، نه در GitHub. برای ساخت مدیر، کد یک‌بارمصرفی که در لاگ خصوصی API پس از Deploy ثبت می‌شود را در صفحهٔ راه‌اندازی اولیهٔ اپ وارد کنید. پس از ساخت اولین مدیر، کد باطل می‌شود. نیازی به افزودن متغیر جداگانه برای راه‌اندازی مدیر نیست.
 
 ## تکمیل فروشگاه
 

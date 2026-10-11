@@ -89,8 +89,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         TextFormField(
                           controller: _setupKey,
                           obscureText: true,
-                          decoration: const InputDecoration(labelText: 'کلید راه‌اندازی سرور', prefixIcon: Icon(Icons.key_rounded)),
-                          validator: (value) => (value?.trim().length ?? 0) >= 32 ? null : 'کلید ADMIN_BOOTSTRAP_KEY را وارد کن',
+                          decoration: const InputDecoration(labelText: 'کد یک‌بارمصرف راه‌اندازی', prefixIcon: Icon(Icons.key_rounded)),
+                          validator: (value) => (value?.trim().length ?? 0) >= 32 ? null : 'کد را از لاگ خصوصی سرویس API وارد کن',
                         ),
                         const SizedBox(height: 14),
                         TextFormField(
@@ -173,7 +173,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                       Text(
                         _setupMode
-                            ? 'این مرحله فقط یک‌بار و با کلید محرمانهٔ تنظیم‌شده روی API انجام می‌شود.'
+                            ? 'کد یک‌بارمصرف در لاگ خصوصی API ثبت شده است؛ پس از ساخت مدیر، کد دیگر قابل استفاده نیست.'
                             : 'ورود فقط برای حساب مدیر فروشگاه فعال است.',
                         style: const TextStyle(fontSize: 12, color: panizMuted),
                         textAlign: TextAlign.center,

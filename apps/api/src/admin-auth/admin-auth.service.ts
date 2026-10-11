@@ -2,9 +2,10 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
+  OnModuleInit,
   UnauthorizedException,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 import * as argon2 from "argon2";
 import {
@@ -21,18 +22,42 @@ import { AdminRequest } from "./admin-session.guard";
 import { PrismaService } from "../database/prisma.service";
 
 const SESSION_DAYS = 7;
+const ADMIN_BOOTSTRAP_SETTING = "security.admin_bootstrap_code";
 
 @Injectable()
-export class AdminAuthService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
-  ) {}
+export class AdminAuthService implements OnModuleInit {
+  private readonly logger = new Logger(AdminAuthService.name);
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async onModuleInit(): Promise<void> {
+    if (await this.prisma.adminUser.count() > 0) {
+      await this.prisma.storeSetting.deleteMany({ where: { settingKey: ADMIN_BOOTSTRAP_SETTING } });
+      return;
+    }
+
+    if (await this.prisma.storeSetting.findUnique({ where: { settingKey: ADMIN_BOOTSTRAP_SETTING } })) return;
+
+    const setupKey = randomBytes(32).toString("base64url");
+    try {
+      await this.prisma.storeSetting.create({
+        data: {
+          settingKey: ADMIN_BOOTSTRAP_SETTING,
+          settingValue: { sha256: hashBootstrapCode(setupKey) },
+          isPublic: false,
+        },
+      });
+      this.logger.warn(`One-time PanizStyle admin setup code (copy from private API logs): ${setupKey}`);
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+    }
+  }
 
   async bootstrap(input: BootstrapAdminDto) {
-    const configuredKey = this.config.get<string>("ADMIN_BOOTSTRAP_KEY");
-    if (!configuredKey || configuredKey.length < 32 || !constantTimeEqual(configuredKey, input.setupKey)) {
-      throw new ForbiddenException({ code: "ADMIN_BOOTSTRAP_DISABLED", message: "راه‌اندازی مدیر مجاز نیست" });
+    const bootstrapSetting = await this.prisma.storeSetting.findUnique({ where: { settingKey: ADMIN_BOOTSTRAP_SETTING } });
+    const expectedHash = readBootstrapCodeHash(bootstrapSetting?.settingValue);
+    if (!expectedHash || !constantTimeEqual(expectedHash, hashBootstrapCode(input.setupKey))) {
+      throw new ForbiddenException({ code: "ADMIN_BOOTSTRAP_DISABLED", message: "کد راه‌اندازی نامعتبر است یا راه‌اندازی قبلاً انجام شده است" });
     }
 
     const passwordHash = await hashPassword(input.password);
@@ -70,6 +95,7 @@ export class AdminAuthService {
             details: { role: "owner" },
           },
         });
+        await tx.storeSetting.deleteMany({ where: { settingKey: ADMIN_BOOTSTRAP_SETTING } });
         return created;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
@@ -225,6 +251,16 @@ function sessionResponse(
 function constantTimeEqual(left: string, right: string): boolean {
   const digest = (value: string) => createHmac("sha256", "panizstyle-admin-bootstrap-check").update(value).digest();
   return timingSafeEqual(digest(left), digest(right));
+}
+
+function hashBootstrapCode(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function readBootstrapCodeHash(value: Prisma.JsonValue | undefined): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const hash = (value as Prisma.JsonObject).sha256;
+  return typeof hash === "string" && /^[a-f0-9]{64}$/i.test(hash) ? hash : null;
 }
 
 function hashToken(token: string): string {

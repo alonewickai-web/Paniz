@@ -28,7 +28,6 @@ Railway بر اساس اشتراک و مصرف منابع هزینه می‌گی
 | `DATABASE_URL` | `${{MySQL.MYSQL_URL}}` |
 | `DATABASE_CONNECTION_LIMIT` | `5` |
 | `WEB_ORIGINS` | پس از اتصال دامنه: `https://panizstyle.ir,https://www.panizstyle.ir` |
-| `ADMIN_BOOTSTRAP_KEY` | یک مقدار تصادفی محرمانه و حداقل ۳۲ نویسه‌ای |
 | `CUSTOMER_AUTH_SECRET` | یک مقدار تصادفی محرمانه و حداقل ۳۲ نویسه‌ای |
 
 Railway متغیر `PORT` را تزریق می‌کند؛ آن را دستی ثابت نکنید. API روی `0.0.0.0` و همان پورت اجرا می‌شود. Dockerfile پیش از شروع API، migrationهای Prisma را اعمال می‌کند.
@@ -76,8 +75,8 @@ https://panizstyle.ir,https://www.panizstyle.ir
 ## ۴. راه‌اندازی مدیر و APK
 
 1. در APK، گزینهٔ «راه‌اندازی اولیهٔ مدیر» را باز کنید.
-2. مقدار `ADMIN_BOOTSTRAP_KEY` را از Variables سرویس API وارد کنید و حساب مدیر را بسازید.
-3. پس از ساخت مدیر، مقدار `ADMIN_BOOTSTRAP_KEY` را از Railway حذف کنید.
+2. در **Deployments → View Logs** سرویس API، کد یک‌بارمصرف راه‌اندازی مدیر را پیدا کنید و در اپ وارد کنید.
+3. کد فقط تا ساخت اولین حساب مدیر معتبر است و نیازی به افزودن متغیر جدید به Railway نیست.
 4. APK نسخهٔ فعلی به API موقت Railway وصل است. پس از فعال‌شدن `api.panizstyle.ir` آن را با دامنهٔ جدید بسازید:
 
 ```powershell

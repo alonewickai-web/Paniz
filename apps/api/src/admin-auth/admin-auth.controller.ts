@@ -14,7 +14,7 @@ export class AdminAuthController {
 
   @Post("bootstrap")
   @Throttle({ default: { limit: 2, ttl: 60_000 } })
-  @ApiOperation({ summary: "راه‌اندازی یک‌بارهٔ مدیر مالک با کلید اولیهٔ محرمانه" })
+  @ApiOperation({ summary: "راه‌اندازی یک‌بارهٔ مدیر مالک با کد یک‌بارمصرف ثبت‌شده در لاگ خصوصی API" })
   @ApiBody({ type: BootstrapAdminDto })
   bootstrap(@Body() body: BootstrapAdminDto) {
     return this.auth.bootstrap(body);
