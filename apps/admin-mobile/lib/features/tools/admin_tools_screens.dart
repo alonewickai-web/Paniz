@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/admin_image_picker_field.dart';
 import '../../core/admin_api.dart';
 import '../../core/providers.dart';
 import '../../core/ui_helpers.dart';
@@ -351,7 +352,7 @@ class SocialPublishingScreen extends ConsumerStatefulWidget {
 
 class _SocialPublishingScreenState extends ConsumerState<SocialPublishingScreen> {
   final _caption = TextEditingController();
-  final _image = TextEditingController();
+  String? _imagePath;
   bool _rubika = true;
   bool _instagram = false;
   bool _schedule = false;
@@ -364,7 +365,7 @@ class _SocialPublishingScreenState extends ConsumerState<SocialPublishingScreen>
   @override
   void initState() { super.initState(); _load(); }
   @override
-  void dispose() { _caption.dispose(); _image.dispose(); super.dispose(); }
+  void dispose() { _caption.dispose(); super.dispose(); }
   Future<void> _load() async {
     try {
       final status = await ref.read(adminApiProvider).socialStatus();
@@ -384,15 +385,18 @@ class _SocialPublishingScreenState extends ConsumerState<SocialPublishingScreen>
 
   Future<void> _publish() async {
     if (_caption.text.trim().isEmpty || (!_rubika && !_instagram)) { showAppMessage(context, 'متن و دست‌کم یک کانال را انتخاب کن.', error: true); return; }
+    if (_instagram && (_imagePath == null || _imagePath!.isEmpty)) { showAppMessage(context, 'برای انتشار در اینستاگرام تصویر انتخاب کن.', error: true); return; }
     if (_schedule && _publishAt == null) { showAppMessage(context, 'برای انتشار زمان‌بندی‌شده تاریخ و ساعت را انتخاب کن.', error: true); return; }
     setState(() { _loading = true; _error = null; });
     try {
       final channels = [if (_rubika) 'rubika', if (_instagram) 'instagram'];
       await ref.read(adminApiProvider).createSocialPost({
-        'caption': _caption.text.trim(), 'imageUrl': _image.text.trim(), 'channels': channels,
+        'caption': _caption.text.trim(),
+        'imageUrl': _imagePath == null ? null : AdminApi.imageUrl(_imagePath!), 'channels': channels,
         if (_schedule && _publishAt != null) 'publishAt': _publishAt!.toUtc().toIso8601String(),
       });
-      _caption.clear(); _image.clear();
+      _caption.clear();
+      setState(() => _imagePath = null);
       await _load();
       if (mounted) showAppMessage(context, _schedule ? 'انتشار زمان‌بندی شد.' : 'درخواست انتشار ثبت شد؛ نتیجه در فهرست نمایش داده می‌شود.');
     } catch (error) { if (mounted) setState(() => _error = AdminApi.friendlyError(error)); }
@@ -411,7 +415,14 @@ class _SocialPublishingScreenState extends ConsumerState<SocialPublishingScreen>
       const SizedBox(height: 8),
       TextField(controller: _caption, maxLength: 2200, minLines: 4, maxLines: 7, textAlignVertical: TextAlignVertical.top, decoration: const InputDecoration(labelText: 'متن تبلیغ', alignLabelWithHint: true)),
       const SizedBox(height: 8),
-      TextField(controller: _image, keyboardType: TextInputType.url, textDirection: TextDirection.ltr, decoration: const InputDecoration(labelText: 'لینک عمومی HTTPS تصویر', hintText: 'https://…')),
+      AdminImagePickerField(
+        label: 'تصویر تبلیغ',
+        imagePath: _imagePath,
+        aspectRatio: 4 / 5,
+        onChanged: (value) => setState(() => _imagePath = value),
+      ),
+      const SizedBox(height: 4),
+      Text('برای اینستاگرام تصویر الزامی است؛ برای روبیکا اختیاری است.', style: Theme.of(context).textTheme.bodySmall),
       CheckboxListTile(value: _rubika, onChanged: (value) => setState(() => _rubika = value ?? false), contentPadding: EdgeInsets.zero, title: const Text('ارسال به کانال روبیکا')),
       CheckboxListTile(value: _instagram, onChanged: (value) => setState(() => _instagram = value ?? false), contentPadding: EdgeInsets.zero, title: const Text('انتشار در Instagram')),
       SwitchListTile.adaptive(value: _schedule, onChanged: (value) => setState(() => _schedule = value), contentPadding: EdgeInsets.zero, title: const Text('زمان‌بندی انتشار')),

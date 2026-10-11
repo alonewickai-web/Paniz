@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/admin_image_picker_field.dart';
 import '../../core/admin_api.dart';
 import '../../core/providers.dart';
 import '../../core/ui_helpers.dart';
@@ -138,7 +139,7 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
       sectionTitle('بنرهای صفحهٔ اصلی', trailing: IconButton.filledTonal(
         tooltip: 'بنر جدید', icon: const Icon(Icons.add_photo_alternate_outlined), onPressed: () => _editBanner(null),
       )),
-      const Padding(padding: EdgeInsets.only(top: 3, bottom: 10), child: Text('برای تصویر از مسیر سایت یا نشانی امن HTTPS استفاده کن.', style: TextStyle(color: Color(0xFF74686C), fontSize: 12))),
+      const Padding(padding: EdgeInsets.only(top: 3, bottom: 10), child: Text('تصویر هر بنر را از گالری انتخاب و همان‌جا بارگذاری کن.', style: TextStyle(color: Color(0xFF74686C), fontSize: 12))),
       if (banners.isEmpty) const _EmptyState(label: 'هنوز بنری ثبت نشده است.'),
       ...banners.map((banner) => Card(
         clipBehavior: Clip.antiAlias,
@@ -280,7 +281,7 @@ class _CategoryDialogState extends State<_CategoryDialog> {
   late final _name = TextEditingController(text: '${widget.existing?['name'] ?? ''}');
   late final _slug = TextEditingController(text: '${widget.existing?['slug'] ?? ''}');
   late final _description = TextEditingController(text: '${widget.existing?['description'] ?? ''}');
-  late final _image = TextEditingController(text: '${widget.existing?['imagePath'] ?? ''}');
+  String? _imagePath;
   String? _parentId;
   bool _active = true;
 
@@ -288,11 +289,12 @@ class _CategoryDialogState extends State<_CategoryDialog> {
   void initState() {
     super.initState();
     _parentId = widget.existing?['parentId']?.toString();
+    _imagePath = _optionalPath(widget.existing?['imagePath']);
     _active = widget.existing?['isActive'] != false;
   }
 
   @override
-  void dispose() { _name.dispose(); _slug.dispose(); _description.dispose(); _image.dispose(); super.dispose(); }
+  void dispose() { _name.dispose(); _slug.dispose(); _description.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
@@ -307,7 +309,12 @@ class _CategoryDialogState extends State<_CategoryDialog> {
         onChanged: (value) => setState(() => _parentId = value),
       ),
       _textField(_description, 'توضیح کوتاه'),
-      _textField(_image, 'مسیر تصویر یا نشانی HTTPS', ltr: true),
+      AdminImagePickerField(
+        label: 'تصویر دسته‌بندی',
+        imagePath: _imagePath,
+        aspectRatio: 1,
+        onChanged: (value) => setState(() => _imagePath = value),
+      ),
       if (widget.existing != null) SwitchListTile(value: _active, onChanged: (value) => setState(() => _active = value), title: const Text('دسته فعال باشد')),
     ])))),
     actions: [
@@ -317,7 +324,7 @@ class _CategoryDialogState extends State<_CategoryDialog> {
         Navigator.pop(context, <String, dynamic>{
           'name': _name.text.trim(), 'slug': _slug.text.trim().toLowerCase(),
           'parentId': _parentId, 'description': _description.text.trim().isEmpty ? null : _description.text.trim(),
-          'imagePath': _image.text.trim().isEmpty ? null : _image.text.trim(), 'isActive': _active,
+          'imagePath': _imagePath, 'isActive': _active,
         });
       }, child: const Text('ذخیره')),
     ],
@@ -335,16 +342,17 @@ class _BannerDialogState extends State<_BannerDialog> {
   final _form = GlobalKey<FormState>();
   late final _title = TextEditingController(text: '${widget.existing?['title'] ?? ''}');
   late final _description = TextEditingController(text: '${widget.existing?['description'] ?? ''}');
-  late final _image = TextEditingController(text: '${widget.existing?['imagePath'] ?? ''}');
   late final _target = TextEditingController(text: '${widget.existing?['targetUrl'] ?? ''}');
   late final _starts = TextEditingController(text: '${widget.existing?['startsAt'] ?? ''}');
   late final _ends = TextEditingController(text: '${widget.existing?['endsAt'] ?? ''}');
+  String? _imagePath;
+  bool _imageError = false;
   bool _active = true;
 
   @override
-  void initState() { super.initState(); _active = widget.existing?['isActive'] != false; }
+  void initState() { super.initState(); _imagePath = _optionalPath(widget.existing?['imagePath']); _active = widget.existing?['isActive'] != false; }
   @override
-  void dispose() { for (final item in [_title, _description, _image, _target, _starts, _ends]) { item.dispose(); } super.dispose(); }
+  void dispose() { for (final item in [_title, _description, _target, _starts, _ends]) { item.dispose(); } super.dispose(); }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
@@ -352,7 +360,15 @@ class _BannerDialogState extends State<_BannerDialog> {
     content: SizedBox(width: 450, child: Form(key: _form, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
       _textField(_title, 'عنوان بنر', required: true),
       _textField(_description, 'توضیح'),
-      _textField(_image, 'مسیر تصویر یا نشانی HTTPS', required: true, ltr: true),
+      AdminImagePickerField(
+        label: 'تصویر بنر',
+        imagePath: _imagePath,
+        errorText: _imageError ? 'برای ثبت بنر یک تصویر انتخاب کن.' : null,
+        onChanged: (value) => setState(() {
+          _imagePath = value;
+          _imageError = false;
+        }),
+      ),
       _textField(_target, 'پیوند مقصد (مثلاً /products)', ltr: true),
       _textField(_starts, 'شروع زمان‌بندی (اختیاری، ISO-8601)', ltr: true),
       _textField(_ends, 'پایان زمان‌بندی (اختیاری، ISO-8601)', ltr: true),
@@ -361,10 +377,14 @@ class _BannerDialogState extends State<_BannerDialog> {
     actions: [
       TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
       FilledButton(onPressed: () {
+        if (_imagePath == null) {
+          setState(() => _imageError = true);
+          return;
+        }
         if (!_form.currentState!.validate()) return;
         Navigator.pop(context, <String, dynamic>{
           'title': _title.text.trim(), 'description': _description.text.trim().isEmpty ? null : _description.text.trim(),
-          'imagePath': _image.text.trim(), 'targetUrl': _target.text.trim().isEmpty ? null : _target.text.trim(),
+          'imagePath': _imagePath, 'targetUrl': _target.text.trim().isEmpty ? null : _target.text.trim(),
           'startsAt': _starts.text.trim().isEmpty ? null : _starts.text.trim(), 'endsAt': _ends.text.trim().isEmpty ? null : _ends.text.trim(),
           'isActive': _active,
         });
@@ -401,3 +421,4 @@ Widget _textField(TextEditingController controller, String label, {bool required
 
 List<JsonMap> _maps(Object? value) => value is List ? value.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList() : const [];
 int _integer(Object? value) => value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+String? _optionalPath(Object? value) { final path = '$value'.trim(); return path.isEmpty || path == 'null' ? null : path; }

@@ -295,6 +295,10 @@ class AdminApi {
       _data(await dio.post('admin/products', data: input));
 
   Future<JsonMap> uploadProductImage(Uint8List bytes, String filename) async {
+    return uploadImage(bytes, filename);
+  }
+
+  Future<JsonMap> uploadImage(Uint8List bytes, String filename) async {
     final form = FormData.fromMap({
       'file': MultipartFile.fromBytes(bytes, filename: filename),
     });

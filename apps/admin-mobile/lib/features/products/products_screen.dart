@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/admin_image_picker_field.dart';
 import '../../core/admin_api.dart';
 import '../../core/providers.dart';
 import '../../core/ui_helpers.dart';
@@ -1278,12 +1279,12 @@ class _AddProductImageDialog extends StatefulWidget {
 
 class _AddProductImageDialogState extends State<_AddProductImageDialog> {
   final _form = GlobalKey<FormState>();
-  final _path = TextEditingController();
   final _alt = TextEditingController();
+  String? _imagePath;
+  bool _imageError = false;
   bool _primary = false;
   @override
   void dispose() {
-    _path.dispose();
     _alt.dispose();
     super.dispose();
   }
@@ -1293,49 +1294,43 @@ class _AddProductImageDialogState extends State<_AddProductImageDialog> {
     title: const Text('افزودن تصویر به گالری'),
     content: Form(
       key: _form,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            widget.productName,
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _path,
-            textDirection: TextDirection.ltr,
-            decoration: const InputDecoration(
-              labelText: 'مسیر سایت یا نشانی HTTPS',
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              widget.productName,
+              style: const TextStyle(fontWeight: FontWeight.w700),
             ),
-            validator: (value) {
-              final path = value?.trim() ?? '';
-              return path.startsWith('/') || path.startsWith('https://')
-                  ? null
-                  : 'مسیر سایت با / یا نشانی HTTPS وارد کن';
-            },
-          ),
-          const SizedBox(height: 10),
-          TextFormField(
-            controller: _alt,
-            decoration: const InputDecoration(
-              labelText: 'توضیح تصویر برای دسترس‌پذیری',
+            const SizedBox(height: 12),
+            AdminImagePickerField(
+              label: 'تصویر گالری محصول',
+              imagePath: _imagePath,
+              errorText: _imageError ? 'برای افزودن تصویر، یک فایل انتخاب کن.' : null,
+              onChanged: (value) => setState(() {
+                _imagePath = value;
+                _imageError = false;
+              }),
             ),
-          ),
-          const SizedBox(height: 6),
-          SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            value: _primary,
-            onChanged: (value) => setState(() => _primary = value),
-            title: const Text(
-              'تصویر اصلی محصول',
-              style: TextStyle(fontSize: 13),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _alt,
+              decoration: const InputDecoration(
+                labelText: 'توضیح تصویر برای دسترس‌پذیری',
+              ),
             ),
-          ),
-          const Text(
-            'فایل تصویر باید از قبل در سایت یا نشانی HTTPS میزبانی شده باشد.',
-            style: TextStyle(fontSize: 11, color: Color(0xFF81777A)),
-          ),
-        ],
+            const SizedBox(height: 6),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              value: _primary,
+              onChanged: (value) => setState(() => _primary = value),
+              title: const Text(
+                'تصویر اصلی محصول',
+                style: TextStyle(fontSize: 13),
+              ),
+            ),
+          ],
+        ),
       ),
     ),
     actions: [
@@ -1345,9 +1340,13 @@ class _AddProductImageDialogState extends State<_AddProductImageDialog> {
       ),
       FilledButton(
         onPressed: () {
+          if (_imagePath == null) {
+            setState(() => _imageError = true);
+            return;
+          }
           if (!_form.currentState!.validate()) return;
           Navigator.pop(context, {
-            'imagePath': _path.text.trim(),
+            'imagePath': _imagePath,
             'altText': _alt.text.trim(),
             'isPrimary': _primary,
           });
