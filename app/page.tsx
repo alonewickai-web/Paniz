@@ -23,6 +23,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useStorefront } from "./lib/storefront-state";
 import { StoreImage } from "./components/store-image";
+import { ProductSearchAutocomplete } from "./components/product-search-autocomplete";
 
 type Product = {
   id: number;
@@ -532,19 +533,14 @@ export default function Home() {
             <span className="brand-word">پانیذ</span>
           </a>
 
-          <form className="search-box" action="/products" method="get">
-            <Search size={19} aria-hidden="true" />
-            <span className="sr-only">جست‌وجوی محصولات</span>
-            <input
-              ref={searchRef}
-              type="search"
-              name="q"
-              placeholder="دنبال چی می‌گردی؟"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <kbd>Ctrl K</kbd>
-          </form>
+          <ProductSearchAutocomplete
+            id="store-search"
+            inputRef={searchRef}
+            wrapperClassName="header-search-autocomplete"
+            value={query}
+            onChange={setQuery}
+            shortcut="Ctrl K"
+          />
 
           <div className="header-actions">
             <button

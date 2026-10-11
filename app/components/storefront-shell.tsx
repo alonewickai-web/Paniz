@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Heart, House, Menu, Search, ShoppingBag, UserRound } from "lucide-react";
+import { Heart, House, Menu, ShoppingBag, UserRound } from "lucide-react";
 import { useStorefront } from "../lib/storefront-state";
 import { apiBaseUrl, type StoreCategory } from "../lib/catalog";
+import { ProductSearchAutocomplete } from "./product-search-autocomplete";
 
 export function StorefrontHeader() {
   const { cart, favorites } = useStorefront();
@@ -33,11 +34,7 @@ export function StorefrontHeader() {
           <Link className="brand" href="/" aria-label="صفحهٔ اصلی پانیذ">
             <span className="brand-mark">پ</span><span className="brand-word">پانیذ</span>
           </Link>
-          <form className="search-box" action="/products" method="get">
-            <Search size={19} aria-hidden="true" />
-            <label className="sr-only" htmlFor="store-search">جست‌وجوی محصولات</label>
-            <input id="store-search" name="q" type="search" placeholder="دنبال چی می‌گردی؟" />
-          </form>
+          <ProductSearchAutocomplete id="store-search" wrapperClassName="header-search-autocomplete" />
           <div className="header-actions">
             <Link className="header-icon" href="/favorites" aria-label={`علاقه‌مندی‌ها، ${favorites.length} محصول`}><Heart size={21} /></Link>
             <Link className="header-icon bag-icon" href="/cart" aria-label={`سبد خرید، ${count} کالا`}>

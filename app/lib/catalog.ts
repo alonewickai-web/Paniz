@@ -44,6 +44,10 @@ export type ProductListPayload = {
   meta: { page: number; pageSize: number; total: number; totalPages: number };
 };
 
+export type ProductSuggestionsPayload = {
+  data: StoreProduct[];
+};
+
 export function apiBaseUrl() {
   return (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:4000/api/v1").replace(/\/$/, "");
 }

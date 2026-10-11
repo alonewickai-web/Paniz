@@ -53,6 +53,60 @@ export class CatalogService {
     };
   }
 
+  async suggestProducts(input: string | undefined) {
+    const query = normalizeSuggestionText(input ?? "");
+    if (Array.from(query).length < 2) return { data: [] };
+
+    const candidates = await this.prisma.product.findMany({
+      where: {
+        status: "published",
+        publishedAt: { lte: new Date() },
+        deletedAt: null,
+        variants: { some: { isActive: true } },
+        category: { is: { isActive: true } },
+      },
+      select: {
+        id: true,
+        name: true,
+        shortDescription: true,
+        category: { select: { name: true } },
+        variants: {
+          where: { isActive: true },
+          select: { sku: true, colorName: true },
+        },
+      },
+      orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
+    });
+
+    const ranked = candidates
+      .map((product) => ({ id: product.id, score: productSuggestionScore(query, product) }))
+      .filter((product) => product.score >= 0.48)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 5);
+
+    if (!ranked.length) return { data: [] };
+
+    const products = await this.prisma.product.findMany({
+      where: {
+        id: { in: ranked.map((product) => product.id) },
+        status: "published",
+        publishedAt: { lte: new Date() },
+        deletedAt: null,
+        variants: { some: { isActive: true } },
+        category: { is: { isActive: true } },
+      },
+      include: publicProductRelations,
+    });
+    const byId = new Map(products.map((product) => [product.id.toString(), product]));
+
+    return {
+      data: ranked.flatMap(({ id }) => {
+        const product = byId.get(id.toString());
+        return product ? [this.toProductSummary(product)] : [];
+      }),
+    };
+  }
+
   async listProducts(query: ListProductsQuery) {
     const page = query.page;
     const pageSize = query.pageSize;
@@ -226,6 +280,85 @@ function normalizePersian(input: string): string {
     .replace(/[۰-۹]/g, (digit) => String(persianDigits.indexOf(digit)))
     .trim()
     .replace(/\s+/g, " ");
+}
+
+type SuggestionCandidate = {
+  name: string;
+  shortDescription: string | null;
+  category: { name: string } | null;
+  variants: { sku: string | null; colorName: string }[];
+};
+
+function normalizeSuggestionText(input: string): string {
+  return normalizePersian(input)
+    .toLocaleLowerCase("fa-IR")
+    .replace(/[آأإ]/g, "ا")
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function productSuggestionScore(query: string, product: SuggestionCandidate): number {
+  const colorText = product.variants.map((variant) => variant.colorName).join(" ");
+  const skuText = product.variants.map((variant) => variant.sku ?? "").join(" ");
+  return Math.max(
+    matchSuggestionText(query, product.name),
+    matchSuggestionText(query, product.category?.name ?? "") * 0.84,
+    matchSuggestionText(query, colorText) * 0.94,
+    matchSuggestionText(query, skuText) * 0.92,
+    matchSuggestionText(query, product.shortDescription ?? "") * 0.58,
+  );
+}
+
+function matchSuggestionText(query: string, input: string): number {
+  const candidate = normalizeSuggestionText(input);
+  if (!candidate) return 0;
+  if (candidate.includes(query)) return 1;
+
+  const compactQuery = query.replace(/\s/g, "");
+  const compactCandidate = candidate.replace(/\s/g, "");
+  if (compactQuery.length >= 2 && compactCandidate.includes(compactQuery)) return 0.96;
+
+  const queryWords = query.split(" ").filter(Boolean);
+  const candidateWords = candidate.split(" ").filter(Boolean);
+  if (!queryWords.length || !candidateWords.length) return 0;
+  const wordScores = queryWords.map((queryWord) => {
+    let best = 0;
+    for (const candidateWord of candidateWords) best = Math.max(best, matchSuggestionWord(queryWord, candidateWord));
+    return best;
+  });
+  const matches = wordScores.filter((score) => score > 0).length;
+  const average = wordScores.reduce((sum, score) => sum + score, 0) / wordScores.length;
+  const coverage = matches / wordScores.length;
+  return average * 0.72 + coverage * 0.28;
+}
+
+function matchSuggestionWord(query: string, candidate: string): number {
+  if (query === candidate) return 1;
+  if (query.length >= 3 && (candidate.startsWith(query) || query.startsWith(candidate))) return 0.9;
+  if (Math.min(query.length, candidate.length) < 3) return 0;
+
+  const left = Array.from(query);
+  const right = Array.from(candidate);
+  const longest = Math.max(left.length, right.length);
+  const allowedDistance = longest <= 6 ? 1 : 2;
+  if (Math.abs(left.length - right.length) > allowedDistance) return 0;
+
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      current[rightIndex] = Math.min(
+        current[rightIndex - 1] + 1,
+        previous[rightIndex] + 1,
+        previous[rightIndex - 1] + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1),
+      );
+    }
+    previous = current;
+  }
+  const distance = previous[right.length];
+  return distance <= allowedDistance ? 1 - distance / longest : 0;
 }
 
 function toSafeNumber(value: bigint): number {

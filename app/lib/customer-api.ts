@@ -1,5 +1,3 @@
-import { apiBaseUrl } from "./catalog";
-
 export type CustomerAddress = {
   id: string;
   title: string | null;
@@ -50,14 +48,14 @@ export async function customerApi<T>(path: string, init: RequestInit = {}): Prom
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   let response: Response;
   try {
-    response = await fetch(`${apiBaseUrl()}${path}`, {
+    response = await fetch(`/api/v1${path}`, {
       ...init,
       headers,
       credentials: "include",
       cache: "no-store",
     });
   } catch {
-    throw new CustomerApiError("ارتباط با API برقرار نشد. Start.bat را اجرا کن و مطمئن شو سرویس روی پورت ۴۰۰۰ فعال است.", 0, "API_UNREACHABLE");
+    throw new CustomerApiError("ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کن و دوباره تلاش کن.", 0, "API_UNREACHABLE");
   }
   const payload = await response.json().catch(() => null) as {
     data?: T;

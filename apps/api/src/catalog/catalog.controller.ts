@@ -8,6 +8,7 @@ import {
 } from "@nestjs/swagger";
 import { CatalogService } from "./catalog.service";
 import { ListProductsQuery } from "./dto/list-products.query";
+import { ProductSuggestionsQuery } from "./dto/product-suggestions.query";
 
 @ApiTags("کاتالوگ")
 @Controller()
@@ -43,6 +44,14 @@ export class CatalogController {
   @ApiOkResponse({ description: "محصولات صفحه‌بندی‌شده همراه با قیمت از تنوع فعال" })
   products(@Query() query: ListProductsQuery) {
     return this.catalogService.listProducts(query);
+  }
+
+  @Get("products/suggestions")
+  @ApiOperation({ summary: "پیشنهاد نزدیک‌ترین محصولات برای جست‌وجوی زنده" })
+  @ApiQuery({ name: "q", required: true, type: String })
+  @ApiOkResponse({ description: "حداکثر پنج پیشنهاد محصول بر اساس شباهت عبارت جست‌وجو" })
+  productSuggestions(@Query() query: ProductSuggestionsQuery) {
+    return this.catalogService.suggestProducts(query.q);
   }
 
   @Get("products/:slug")

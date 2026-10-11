@@ -6,8 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { StorefrontShell } from "./storefront-shell";
 import { StoreProductCard } from "./store-product-card";
-import { apiBaseUrl, productImage, type ProductListPayload, type StoreCategory, type StoreProduct } from "../lib/catalog";
-import { StoreImage } from "./store-image";
+import { apiBaseUrl, type ProductListPayload, type StoreCategory, type StoreProduct } from "../lib/catalog";
+import { ProductSearchAutocomplete } from "./product-search-autocomplete";
 
 type Filters = {
   q: string;
@@ -61,8 +61,6 @@ export function ProductsExplorer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
-  const [suggestions, setSuggestions] = useState<StoreProduct[]>([]);
-  const [searchFocused, setSearchFocused] = useState(false);
   const queryString = useMemo(() => serializeFilters(filters), [filters]);
 
   useEffect(() => {
@@ -105,23 +103,6 @@ export function ProductsExplorer() {
     return () => controller.abort();
   }, []);
 
-  useEffect(() => {
-    const term = filters.q.trim();
-    if (!searchFocused || term.length < 2) {
-      setSuggestions([]);
-      return;
-    }
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      const query = new URLSearchParams({ q: term, page: "1", pageSize: "5" });
-      fetch(`${apiBaseUrl()}/products?${query}`, { signal: controller.signal, cache: "no-store" })
-        .then((response) => response.ok ? response.json() : Promise.reject())
-        .then((payload: ProductListPayload) => setSuggestions(payload.data ?? []))
-        .catch(() => setSuggestions([]));
-    }, 220);
-    return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [filters.q, searchFocused]);
-
   function change<K extends keyof Filters>(key: K, value: Filters[K]) {
     setFilters((current) => ({ ...current, [key]: value, ...(key === "page" ? {} : { page: 1 }) }));
   }
@@ -159,10 +140,15 @@ export function ProductsExplorer() {
                 <span>{loading ? "در حال به‌روزرسانی…" : `${new Intl.NumberFormat("fa-IR").format(total)} انتخاب برای تو`}</span>
                 <label className="sort-control"><SlidersHorizontal size={16} /><span className="sr-only">مرتب‌سازی</span><select value={filters.sort} onChange={(event) => change("sort", event.target.value)}><option value="newest">جدیدترین</option><option value="price-asc">ارزان‌ترین</option><option value="price-desc">گران‌ترین</option></select></label>
               </div>
-              <div className="store-search-wrap">
-                <label className="store-search-field"><Search size={18} /><span className="sr-only">جست‌وجو در محصولات</span><input value={filters.q} onFocus={() => setSearchFocused(true)} onBlur={() => window.setTimeout(() => setSearchFocused(false), 140)} onChange={(event) => change("q", event.target.value)} placeholder="نام، دسته یا کد محصول" /><button type="button" onClick={() => change("q", "")} aria-label="پاک‌کردن جست‌وجو"><X size={16} /></button></label>
-                {searchFocused && suggestions.length > 0 && <div className="store-suggestions" role="listbox" aria-label="پیشنهادهای جست‌وجو">{suggestions.map((product) => <Link role="option" key={product.id} href={`/products/${product.slug}`} onMouseDown={(event) => event.preventDefault()}><span className="store-suggestion-image"><StoreImage src={productImage(product)} alt="" fill sizes="48px" /></span><span><strong>{product.name}</strong><small>{product.priceToman === null ? "قیمت نامشخص" : `${new Intl.NumberFormat("fa-IR").format(product.priceToman)} تومان`}</small></span></Link>)}</div>}
-              </div>
+              <ProductSearchAutocomplete
+                id="catalog-search"
+                variant="catalog"
+                wrapperClassName="store-search-wrap"
+                value={filters.q}
+                onChange={(value) => change("q", value)}
+                placeholder="نام، دسته یا کد محصول"
+                clearable
+              />
 
               {hasFilters && <div className="store-active-filters"><span>فیلترهای فعال:</span>{filters.category && <button onClick={() => change("category", "")}>{categoryOptions.find((item) => item.slug === filters.category)?.name ?? filters.category}<X size={13} /></button>}{filters.size && <button onClick={() => change("size", "")}>سایز {filters.size}<X size={13} /></button>}{filters.color && <button onClick={() => change("color", "")}>{filters.color}<X size={13} /></button>}{filters.inStock && <button onClick={() => change("inStock", false)}>موجود <X size={13} /></button>}{filters.onSale && <button onClick={() => change("onSale", false)}>تخفیف‌دار <X size={13} /></button>}</div>}
 
