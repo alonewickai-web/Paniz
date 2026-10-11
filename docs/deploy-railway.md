@@ -30,10 +30,15 @@ Railway بر اساس اشتراک و مصرف منابع هزینه می‌گی
 | `WEB_ORIGINS` | پس از اتصال دامنه: `https://panizstyle.ir,https://www.panizstyle.ir` |
 | `CUSTOMER_AUTH_SECRET` | یک مقدار تصادفی محرمانه و حداقل ۳۲ نویسه‌ای |
 | `UPLOADS_DIR` | `/data/uploads` |
+| `BACKUP_DIR` | `/data/backups` |
+| `BACKUP_RETENTION_COUNT` | `7` |
+| `BACKUP_SCHEDULE_ENABLED` | `true` |
 
 برای ماندگاری تصاویر محصول، در سرویس API از **Settings → Volumes** یک Volume با Mount Path برابر `/data` بسازید. فایل‌های عکس در `UPLOADS_DIR` ذخیره می‌شوند؛ بدون Volume، فایل‌های آپلودی روی دیسک موقت کانتینرند و با جایگزینی آن از بین می‌روند.
 
 Railway متغیر `PORT` را تزریق می‌کند؛ آن را دستی ثابت نکنید. API روی `0.0.0.0` و همان پورت اجرا می‌شود. Dockerfile پیش از شروع API، migrationهای Prisma را اعمال می‌کند.
+
+برای فایل‌های نسخهٔ پشتیبان، همان Volume سرویس API را روی `/data` نگه دارید و `BACKUP_DIR=/data/backups` را تنظیم کنید. API از `mysqldump` نصب‌شده در image برای تهیهٔ فایل SQL استفاده می‌کند؛ صفحهٔ «سرور و پشتیبان‌گیری» در اپ مدیر وضعیت دسترسی Volume و فهرست backupها را نشان می‌دهد. تنظیمات پیامک و انتشار شبکه‌های اجتماعی در [راهنمای ابزارهای مدیریتی](admin-customer-marketing-ops.md) آمده است.
 
 بعد از Deploy، برای API دامنهٔ Railway بسازید و بررسی کنید این مسیر پاسخ موفق بدهد:
 

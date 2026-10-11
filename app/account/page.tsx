@@ -44,7 +44,7 @@ export default function AccountPage() {
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [developmentCode, setDevelopmentCode] = useState(false);
-  const [profileForm, setProfileForm] = useState({ fullName: "", email: "" });
+  const [profileForm, setProfileForm] = useState({ fullName: "", email: "", marketingOptIn: false });
   const [addressForm, setAddressForm] = useState<AddressForm>(emptyAddress());
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [addressFormOpen, setAddressFormOpen] = useState(false);
@@ -63,7 +63,7 @@ export default function AccountPage() {
     const customerOrders = await customerApi<CustomerOrder[]>("/customer/orders");
     setProfile(customer);
     setOrders(customerOrders);
-    setProfileForm({ fullName: customer.fullName ?? "", email: customer.email ?? "" });
+    setProfileForm({ fullName: customer.fullName ?? "", email: customer.email ?? "", marketingOptIn: customer.marketingOptIn });
     setAddressForm((current) => ({ ...current, recipientPhone: current.recipientPhone || customer.phone, recipientName: current.recipientName || customer.fullName || "" }));
     return customer;
   }
@@ -200,6 +200,7 @@ export default function AccountPage() {
             <form className="store-form-grid customer-profile-form" onSubmit={(event) => void saveProfile(event)}>
               <label className="store-field"><span>نام و نام خانوادگی</span><input autoComplete="name" required minLength={2} maxLength={160} value={profileForm.fullName} onChange={(event) => setProfileForm((form) => ({ ...form, fullName: event.target.value }))} /></label>
               <label className="store-field"><span>ایمیل <small>(اختیاری)</small></span><input type="email" autoComplete="email" maxLength={254} value={profileForm.email} onChange={(event) => setProfileForm((form) => ({ ...form, email: event.target.value }))} /></label>
+              <label className="customer-default-check store-form-wide"><input type="checkbox" checked={profileForm.marketingOptIn} onChange={(event) => setProfileForm((form) => ({ ...form, marketingOptIn: event.target.checked }))} /><span>مایلم پیامک‌های اطلاع‌رسانی و پیشنهادهای فروشگاه را دریافت کنم. هر زمان بخواهم می‌توانم این گزینه را غیرفعال کنم.</span></label>
               <button className="outline-button customer-save-profile" type="submit" disabled={busy}>ذخیرهٔ اطلاعات</button>
             </form>
           </section>

@@ -15,6 +15,7 @@ import '../inventory/inventory_screen.dart';
 import '../orders/orders_screen.dart';
 import '../products/products_screen.dart';
 import '../store/store_management_screen.dart';
+import '../tools/admin_tools_screens.dart';
 
 class AdminHome extends ConsumerStatefulWidget {
   const AdminHome({super.key, required this.admin});
@@ -58,11 +59,6 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
   void _selectTab(int index) {
     Navigator.of(context).maybePop();
     setState(() => _index = index);
-  }
-
-  void _showPlanned(String section) {
-    Navigator.of(context).pop();
-    showAppMessage(context, 'بخش «$section» هنوز به API فروشگاه متصل نشده است.');
   }
 
   int _newOrderCount(JsonMap data) {
@@ -148,8 +144,12 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
           onInventory: () => _pushTool('مدیریت انبار', const InventoryScreen()),
           onStore: () => _pushTool('تنظیمات فروشگاه', const StoreManagementScreen()),
           onSecurity: () => _pushTool('امنیت و ورود', SecuritySettingsScreen(admin: widget.admin)),
+          onCustomers: () => _pushTool('مدیریت مشتریان', const CustomerManagementScreen()),
+          onCoupons: () => _pushTool('کدهای تخفیف', const CouponManagementScreen()),
+          onSocial: () => _pushTool('انتشار تبلیغات', const SocialPublishingScreen()),
+          onSms: () => _pushTool('پیامک به مشتریان', const SmsCampaignScreen()),
+          onOperations: () => _pushTool('سرور و پشتیبان‌گیری', const OperationsScreen()),
           onLogout: _logout,
-          onPlanned: (section) => showAppMessage(context, 'بخش «$section» هنوز به API فروشگاه متصل نشده است.'),
         ),
       ]),
       bottomNavigationBar: NavigationBar(
@@ -209,12 +209,13 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
         _drawerHeading('مدیریت فروشگاه'),
         _drawerTile('انبار و موجودی', Icons.inventory_2_outlined, detail: 'اصلاح و بررسی تنوع‌ها', onTap: () => _pushToolFromDrawer('مدیریت انبار', const InventoryScreen())),
         _drawerTile('ظاهر و چیدمان سایت', Icons.palette_outlined, detail: 'رنگ، دسته‌بندی و بنرها', onTap: () => _pushToolFromDrawer('تنظیمات فروشگاه', const StoreManagementScreen())),
-        _drawerTile('مشتریان', Icons.people_outline_rounded, onTap: () => _showPlanned('مشتریان')),
-        _drawerTile('تخفیف‌ها', Icons.sell_outlined, onTap: () => _showPlanned('تخفیف‌ها')),
-        _drawerTile('تبلیغات و روبیکا', Icons.campaign_outlined, onTap: () => _showPlanned('تبلیغات و روبیکا')),
+        _drawerTile('مشتریان', Icons.people_outline_rounded, onTap: () => _pushToolFromDrawer('مدیریت مشتریان', const CustomerManagementScreen())),
+        _drawerTile('تخفیف‌ها', Icons.sell_outlined, onTap: () => _pushToolFromDrawer('کدهای تخفیف', const CouponManagementScreen())),
+        _drawerTile('تبلیغات و روبیکا', Icons.campaign_outlined, onTap: () => _pushToolFromDrawer('انتشار تبلیغات', const SocialPublishingScreen())),
+        _drawerTile('پیامک مشتریان', Icons.sms_outlined, onTap: () => _pushToolFromDrawer('پیامک به مشتریان', const SmsCampaignScreen())),
         _drawerHeading('حساب و ظاهر برنامه'),
         _drawerTile('امنیت و ورود', Icons.shield_outlined, detail: 'اطلاعات ورود مدیر', onTap: () => _pushToolFromDrawer('امنیت و ورود', SecuritySettingsScreen(admin: widget.admin))),
-        _drawerTile('سرور و پایگاه داده', Icons.dns_outlined, onTap: () => _showPlanned('سرور و پایگاه داده')),
+        _drawerTile('سرور و پایگاه داده', Icons.dns_outlined, onTap: () => _pushToolFromDrawer('سرور و پشتیبان‌گیری', const OperationsScreen())),
       ])),
       const Divider(height: 1),
       ListTile(
@@ -242,13 +243,17 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
 }
 
 class MoreToolsScreen extends StatelessWidget {
-  const MoreToolsScreen({super.key, required this.admin, required this.onInventory, required this.onStore, required this.onSecurity, required this.onLogout, required this.onPlanned});
+  const MoreToolsScreen({super.key, required this.admin, required this.onInventory, required this.onStore, required this.onSecurity, required this.onCustomers, required this.onCoupons, required this.onSocial, required this.onSms, required this.onOperations, required this.onLogout});
   final AdminIdentity admin;
   final VoidCallback onInventory;
   final VoidCallback onStore;
   final VoidCallback onSecurity;
+  final VoidCallback onCustomers;
+  final VoidCallback onCoupons;
+  final VoidCallback onSocial;
+  final VoidCallback onSms;
+  final VoidCallback onOperations;
   final VoidCallback onLogout;
-  final ValueChanged<String> onPlanned;
 
   @override
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.fromLTRB(16, 14, 16, 26), children: [
@@ -273,10 +278,11 @@ class MoreToolsScreen extends StatelessWidget {
         const SizedBox(height: 20),
         sectionTitle('امکانات در حال آماده‌سازی'),
         const SizedBox(height: 10),
-        _UpcomingTile(icon: Icons.people_outline_rounded, title: 'مدیریت مشتریان', onTap: () => onPlanned('مشتریان')),
-        _UpcomingTile(icon: Icons.sell_outlined, title: 'کدهای تخفیف', onTap: () => onPlanned('کد تخفیف')),
-        _UpcomingTile(icon: Icons.campaign_outlined, title: 'تبلیغات و روبیکا', onTap: () => onPlanned('تبلیغات و روبیکا')),
-        _UpcomingTile(icon: Icons.dns_outlined, title: 'وضعیت سرور و پشتیبان‌گیری', onTap: () => onPlanned('سرور و پایگاه داده')),
+        _ToolTile(icon: Icons.people_outline_rounded, tint: context.paniz.mint, title: 'مدیریت مشتریان', detail: 'جست‌وجو، فیلتر خرید و رضایت پیامک', onTap: onCustomers),
+        _ToolTile(icon: Icons.sell_outlined, tint: context.paniz.peach, title: 'کدهای تخفیف', detail: 'ساخت و کنترل کدهای خرید', onTap: onCoupons),
+        _ToolTile(icon: Icons.campaign_outlined, tint: context.paniz.lilac, title: 'انتشار تبلیغات', detail: 'روبیکا و Instagram', onTap: onSocial),
+        _ToolTile(icon: Icons.sms_outlined, tint: context.paniz.coral, title: 'پیامک مشتریان', detail: 'فیلتر مخاطب و سابقهٔ کمپین', onTap: onSms),
+        _ToolTile(icon: Icons.dns_outlined, tint: context.paniz.mint, title: 'سرور و پشتیبان‌گیری', detail: 'وضعیت سرویس و فایل‌های SQL', onTap: onOperations),
         const SizedBox(height: 14),
         OutlinedButton.icon(onPressed: onLogout, icon: const Icon(Icons.logout_rounded), label: const Text('خروج از حساب'), style: OutlinedButton.styleFrom(foregroundColor: context.paniz.error, side: BorderSide(color: context.paniz.error.withValues(alpha: .45)))),
       ]),
@@ -299,22 +305,6 @@ class _ToolTile extends StatelessWidget {
     title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
     subtitle: Text(detail, style: TextStyle(color: context.paniz.muted, fontSize: 12)),
     trailing: const Icon(Icons.chevron_left_rounded),
-    onTap: onTap,
-  )));
-}
-
-class _UpcomingTile extends StatelessWidget {
-  const _UpcomingTile({required this.icon, required this.title, required this.onTap});
-  final IconData icon;
-  final String title;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(bottom: 7), child: Card(child: ListTile(
-    dense: true,
-    leading: Icon(icon, color: context.paniz.muted),
-    title: Text(title, style: TextStyle(color: context.paniz.muted, fontSize: 12)),
-    trailing: Text('به‌زودی', style: TextStyle(color: context.paniz.muted, fontSize: 10, fontWeight: FontWeight.w700)),
     onTap: onTap,
   )));
 }

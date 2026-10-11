@@ -21,6 +21,7 @@ export class CustomerService {
         fullName: customer.fullName,
         email: customer.email,
         phoneVerifiedAt: customer.phoneVerifiedAt?.toISOString() ?? null,
+        marketingOptIn: customer.marketingOptIn,
         addresses: customer.addresses.map(toPublicAddress),
       },
     };
@@ -32,9 +33,13 @@ export class CustomerService {
       data: {
         fullName: input.fullName.trim(),
         email: input.email?.trim() || null,
+        ...(input.marketingOptIn === undefined ? {} : {
+          marketingOptIn: input.marketingOptIn,
+          marketingOptInAt: input.marketingOptIn ? new Date() : null,
+        }),
       },
     });
-    return { data: { id: customer.id.toString(), phone: customer.phone, fullName: customer.fullName, email: customer.email } };
+    return { data: { id: customer.id.toString(), phone: customer.phone, fullName: customer.fullName, email: customer.email, marketingOptIn: customer.marketingOptIn } };
   }
 
   async listAddresses(request: CustomerRequest) {

@@ -93,3 +93,7 @@ flutter build apk --release --split-per-abi `
 Version `0.2.6+8` introduces the PANIZ Admin mobile design system: a data-driven dashboard, five-tab RTL navigation, secondary tools in the drawer and More screen, consistent status and empty states, and a saved light/dark preference. A moon/sun toggle is visible at the top of the login page, main tabs, and secondary tool pages. The refreshed screens keep the existing API contracts and operational flows. Sales charts remain absent because the current API does not provide daily trend data.
 
 See [the admin mobile design notes](../../design-system/panizstyle/pages/admin-mobile.md) for palette, interaction, and navigation details.
+
+## New management tools
+
+Version `0.2.8+10` adds customer filters, consent-aware SMS campaigns, coupon management, scheduled Rubika/Instagram publishing, and server/SQL-backup status. Setup requirements and Railway variables are listed in [the admin tools guide](../../docs/admin-customer-marketing-ops.md). External providers remain inactive until their API secrets and account permissions are configured on the backend.

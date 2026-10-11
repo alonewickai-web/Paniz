@@ -696,6 +696,10 @@ export class AdminService {
         }
       }
 
+      if (input.status === "cancelled" && order.paymentStatus !== "paid") {
+        await tx.couponRedemption.deleteMany({ where: { orderId: order.id } });
+      }
+
       if (input.status === "shipped") {
         await tx.shipment.create({
           data: {

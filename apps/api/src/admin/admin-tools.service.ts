@@ -1,0 +1,636 @@
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
+  ServiceUnavailableException,
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { Prisma } from "@prisma/client";
+import { execFile as execFileCallback } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { AuthenticatedAdmin } from "../admin-auth/admin-session.guard";
+import { PrismaService } from "../database/prisma.service";
+
+const execFile = promisify(execFileCallback);
+const MAX_AUDIENCE = 20_000;
+const ALLOWED_CHANNELS = new Set(["rubika", "instagram"]);
+
+type AudienceFilters = {
+  q?: string;
+  city?: string;
+  registration?: "any" | "under_year" | "over_year";
+  purchaseSort?: "none" | "recent" | "oldest";
+  productId?: string;
+};
+
+@Injectable()
+export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(AdminToolsService.name);
+  private socialTimer?: NodeJS.Timeout;
+  private smsTimer?: NodeJS.Timeout;
+  private backupTimer?: NodeJS.Timeout;
+  private socialBusy = false;
+  private smsBusy = false;
+  private backupBusy = false;
+
+  constructor(private readonly prisma: PrismaService, private readonly config: ConfigService) {}
+
+  async onModuleInit(): Promise<void> {
+    try { await this.recoverInterruptedJobs(); }
+    catch (error) { this.logger.warn(`Could not recover interrupted work: ${error instanceof Error ? error.message : "unknown error"}`); }
+    this.socialTimer = setInterval(() => void this.publishDuePosts(), 20_000);
+    this.socialTimer.unref();
+    this.smsTimer = setInterval(() => void this.processQueuedSms(), 15_000);
+    this.smsTimer.unref();
+    this.backupTimer = setInterval(() => void this.ensureDailyBackup(), 60 * 60_000);
+    this.backupTimer.unref();
+    setTimeout(() => void this.publishDuePosts(), 5_000).unref();
+    setTimeout(() => void this.processQueuedSms(), 8_000).unref();
+    setTimeout(() => void this.ensureDailyBackup(), 15_000).unref();
+  }
+
+  onModuleDestroy(): void {
+    if (this.socialTimer) clearInterval(this.socialTimer);
+    if (this.smsTimer) clearInterval(this.smsTimer);
+    if (this.backupTimer) clearInterval(this.backupTimer);
+  }
+
+  async listCustomers(admin: AuthenticatedAdmin, query: Record<string, string>) {
+    requireManager(admin);
+    const filters = normalizeFilters(query);
+    const page = boundedInt(query.page, 1, 1, 100_000);
+    const pageSize = boundedInt(query.pageSize, 30, 1, 100);
+    const { customers, total, capped } = await this.loadCustomers(filters, false);
+    const start = (page - 1) * pageSize;
+    return { data: {
+      items: customers.slice(start, start + pageSize).map(toCustomerSummary),
+      meta: { page, pageSize, total, capped },
+    } };
+  }
+
+  async productOptions(admin: AuthenticatedAdmin) {
+    requireManager(admin);
+    const products = await this.prisma.product.findMany({
+      where: { deletedAt: null }, orderBy: { name: "asc" }, take: 500,
+      select: { id: true, name: true, status: true },
+    });
+    return { data: products.map((item) => ({ id: item.id.toString(), name: item.name, status: item.status })) };
+  }
+
+  async listCoupons(admin: AuthenticatedAdmin) {
+    requireManager(admin);
+    const coupons = await this.prisma.coupon.findMany({ orderBy: { createdAt: "desc" }, take: 200 });
+    return { data: coupons.map(toCoupon) };
+  }
+
+  async saveCoupon(admin: AuthenticatedAdmin, idText: string | null, input: Record<string, unknown>) {
+    requireManager(admin);
+    const code = requiredText(input.code, "code", 64).toUpperCase().replace(/\s+/g, "");
+    if (!/^[A-Z0-9_-]{3,64}$/.test(code)) throw badInput("Coupon code must contain 3-64 letters, numbers, _ or -.");
+    const discountType = input.discountType === "percent" ? "percent" : input.discountType === "fixed" ? "fixed" : "";
+    if (!discountType) throw badInput("discountType must be percent or fixed.");
+    const discountValue = Number(input.discountValue);
+    if (!Number.isFinite(discountValue) || discountValue <= 0 || (discountType === "percent" && discountValue > 100)) {
+      throw badInput("Discount value is outside its allowed range.");
+    }
+    const minOrderToman = integerBigInt(input.minOrderToman ?? 0, "minOrderToman");
+    const maxDiscountToman = input.maxDiscountToman === null || input.maxDiscountToman === undefined || input.maxDiscountToman === ""
+      ? null : integerBigInt(input.maxDiscountToman, "maxDiscountToman");
+    const usageLimit = optionalPositiveInt(input.usageLimit, "usageLimit");
+    const perCustomerLimit = optionalPositiveInt(input.perCustomerLimit, "perCustomerLimit");
+    const startsAt = optionalDate(input.startsAt, "startsAt");
+    const endsAt = optionalDate(input.endsAt, "endsAt");
+    if (startsAt && endsAt && startsAt >= endsAt) throw badInput("endsAt must be after startsAt.");
+    const data = {
+      code, discountType, discountValue: new Prisma.Decimal(discountValue), minOrderToman, maxDiscountToman,
+      usageLimit, perCustomerLimit, firstOrderOnly: input.firstOrderOnly === true,
+      startsAt, endsAt, isActive: input.isActive !== false,
+    };
+    try {
+      const coupon = idText === null
+        ? await this.prisma.coupon.create({ data })
+        : await this.prisma.coupon.update({ where: { id: parseId(idText, "coupon id") }, data });
+      await this.audit(admin, idText ? "coupon.updated" : "coupon.created", "coupon", coupon.id, { code });
+      return { data: toCoupon(coupon) };
+    } catch (error) {
+      if (isUniqueError(error)) throw new ConflictException({ code: "COUPON_CODE_EXISTS", message: "That coupon code already exists." });
+      throw error;
+    }
+  }
+
+  async previewSmsAudience(admin: AuthenticatedAdmin, rawFilters: unknown) {
+    requireManager(admin);
+    const filters = normalizeFilters(asObject(rawFilters));
+    const audience = await this.loadCustomers(filters, true);
+    return { data: { count: audience.total, capped: audience.capped, filters } };
+  }
+
+  async listSmsCampaigns(admin: AuthenticatedAdmin) {
+    requireManager(admin);
+    const campaigns = await this.prisma.smsCampaign.findMany({ orderBy: { createdAt: "desc" }, take: 50 });
+    return { data: campaigns.map((item) => ({
+      id: item.id.toString(), title: item.title, message: item.message, recipientCount: item.recipientCount,
+      sentCount: item.sentCount, failedCount: item.failedCount, status: item.status,
+      createdAt: item.createdAt.toISOString(), completedAt: item.completedAt?.toISOString() ?? null,
+    })) };
+  }
+
+  async createSmsCampaign(admin: AuthenticatedAdmin, input: Record<string, unknown>) {
+    requireManager(admin);
+    const title = requiredText(input.title, "title", 160);
+    const message = requiredText(input.message, "message", 1000);
+    const filters = normalizeFilters(asObject(input.filters));
+    const audience = await this.loadCustomers(filters, true);
+    const campaign = await this.prisma.smsCampaign.create({ data: {
+      title, message, targetFilters: filters as Prisma.InputJsonValue,
+      recipientCount: audience.total, status: "draft", createdByAdminId: admin.id,
+    } });
+    await this.audit(admin, "sms_campaign.created", "sms_campaign", campaign.id, { recipientCount: audience.total });
+    return { data: { id: campaign.id.toString(), recipientCount: campaign.recipientCount, status: campaign.status } };
+  }
+
+  async sendSmsCampaign(admin: AuthenticatedAdmin, idText: string) {
+    requireManager(admin);
+    const campaignId = parseId(idText, "campaign id");
+    const campaign = await this.prisma.smsCampaign.findUnique({ where: { id: campaignId } });
+    if (!campaign) throw new NotFoundException({ code: "SMS_CAMPAIGN_NOT_FOUND", message: "Campaign was not found." });
+    if (campaign.status !== "draft") throw new ConflictException({ code: "SMS_CAMPAIGN_ALREADY_PROCESSED", message: "Only a draft can be sent. Check SMS.ir delivery records before creating a replacement campaign." });
+    const apiKey = this.config.get<string>("SMSIR_API_KEY", "");
+    const lineNumber = this.config.get<string>("SMSIR_LINE_NUMBER", "");
+    if (!apiKey || !lineNumber) throw new ServiceUnavailableException({ code: "SMSIR_NOT_CONFIGURED", message: "Set SMSIR_API_KEY and SMSIR_LINE_NUMBER in the API environment before sending." });
+
+    const filters = normalizeFilters(asObject(campaign.targetFilters));
+    const audience = await this.loadCustomers(filters, true);
+    if (!audience.customers.length) throw new ConflictException({ code: "SMS_AUDIENCE_EMPTY", message: "No customers with SMS marketing consent match these filters." });
+    if (audience.capped) throw new ConflictException({ code: "SMS_AUDIENCE_TOO_LARGE", message: `This campaign exceeds the ${MAX_AUDIENCE.toLocaleString()} recipient limit. Narrow its filters.` });
+    await this.prisma.smsCampaign.update({ where: { id: campaignId }, data: { status: "queued", recipientCount: audience.customers.length, sentCount: 0, failedCount: 0, providerResponse: Prisma.JsonNull } });
+    setTimeout(() => void this.processQueuedSms(), 250).unref();
+    return { data: { id: campaign.id.toString(), status: "queued", recipientCount: audience.customers.length } };
+  }
+
+  private async processQueuedSms(): Promise<void> {
+    if (this.smsBusy) return;
+    this.smsBusy = true;
+    try {
+      for (let count = 0; count < 2; count++) {
+        const campaign = await this.prisma.smsCampaign.findFirst({ where: { status: "queued" }, orderBy: { createdAt: "asc" } });
+        if (!campaign) break;
+        const claim = await this.prisma.smsCampaign.updateMany({ where: { id: campaign.id, status: "queued" }, data: { status: "sending", startedAt: new Date() } });
+        if (claim.count !== 1) continue;
+        await this.dispatchSmsCampaign(campaign);
+      }
+    } catch (error) {
+      this.logger.error(`SMS campaign worker failed: ${error instanceof Error ? error.message : "unknown error"}`);
+    } finally { this.smsBusy = false; }
+  }
+
+  private async dispatchSmsCampaign(campaign: Prisma.SmsCampaignGetPayload<object>): Promise<void> {
+    let sentCount = 0;
+    let failedCount = 0;
+    let recipientCount = campaign.recipientCount;
+    const responses: Prisma.InputJsonObject[] = [];
+    const endpoint = this.config.get<string>("SMSIR_BULK_URL", "https://api.sms.ir/v1/send/bulk");
+    try {
+        const filters = normalizeFilters(asObject(campaign.targetFilters));
+        const audience = await this.loadCustomers(filters, true);
+        recipientCount = audience.total;
+        await this.prisma.smsCampaign.update({ where: { id: campaign.id }, data: { recipientCount } });
+        if (audience.capped) throw new Error(`Campaign exceeds the ${MAX_AUDIENCE} recipient limit.`);
+        if (!audience.customers.length) throw new Error("No customers with marketing consent match this audience.");
+      for (let index = 0; index < audience.customers.length; index += 100) {
+        const batch = audience.customers.slice(index, index + 100);
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-API-KEY": this.config.get<string>("SMSIR_API_KEY", "") },
+          body: JSON.stringify({ lineNumber: this.config.get<string>("SMSIR_LINE_NUMBER", ""), MessageText: campaign.message, Mobiles: batch.map((customer) => smsIrPhone(customer.phone)) }),
+          signal: AbortSignal.timeout(25_000),
+        });
+        const responseBody = await response.json().catch(() => ({})) as Record<string, unknown>;
+        if (!response.ok || smsIrRejected(responseBody)) {
+          failedCount += batch.length;
+          responses.push({ batchStart: index, httpStatus: response.status, result: safeProviderResult(responseBody) });
+          throw new Error(`SMS.ir rejected batch ${index / 100 + 1} with HTTP ${response.status}.`);
+        }
+        sentCount += batch.length;
+        responses.push({ batchStart: index, count: batch.length, result: safeProviderResult(responseBody) });
+        await this.prisma.smsCampaign.update({ where: { id: campaign.id }, data: { sentCount, failedCount } });
+      }
+      await this.prisma.smsCampaign.update({ where: { id: campaign.id }, data: {
+        status: "sent", recipientCount: audience.customers.length, sentCount, failedCount,
+        completedAt: new Date(), providerResponse: responses as Prisma.InputJsonArray,
+      } });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "SMS provider request failed.";
+      await this.prisma.smsCampaign.update({ where: { id: campaign.id }, data: {
+        status: sentCount ? "partial" : "failed", recipientCount, sentCount,
+        failedCount: Math.max(failedCount, recipientCount - sentCount), completedAt: new Date(),
+        providerResponse: { batches: responses, error: message } as Prisma.InputJsonObject,
+      } });
+      this.logger.error(`SMS campaign ${campaign.id} failed after ${sentCount} accepted recipients: ${message}`);
+    }
+  }
+
+  socialStatus(admin: AuthenticatedAdmin) {
+    requireManager(admin);
+    return { data: {
+      rubika: { configured: Boolean(this.config.get("RUBIKA_BOT_TOKEN") && this.config.get("RUBIKA_CHANNEL_ID")) },
+      instagram: { configured: Boolean(this.config.get("INSTAGRAM_USER_ID") && this.config.get("INSTAGRAM_ACCESS_TOKEN") && this.config.get("INSTAGRAM_GRAPH_API_VERSION")) },
+    } };
+  }
+
+  async listSocialPosts(admin: AuthenticatedAdmin) {
+    requireManager(admin);
+    const posts = await this.prisma.socialPost.findMany({ orderBy: { createdAt: "desc" }, take: 50 });
+    return { data: posts.map((post) => ({
+      id: post.id.toString(), caption: post.caption, imageUrl: post.imageUrl,
+      channels: post.channels, status: post.status, publishAt: post.publishAt.toISOString(),
+      channelResults: post.channelResults, lastError: post.lastError, publishedAt: post.publishedAt?.toISOString() ?? null,
+    })) };
+  }
+
+  async createSocialPost(admin: AuthenticatedAdmin, input: Record<string, unknown>) {
+    requireManager(admin);
+    const caption = requiredText(input.caption, "caption", 2200);
+    if (!Array.isArray(input.channels) || input.channels.length === 0 || input.channels.some((channel) => typeof channel !== "string" || !ALLOWED_CHANNELS.has(channel))) {
+      throw badInput("Choose Rubika, Instagram, or both.");
+    }
+    const channels = [...new Set(input.channels as string[])];
+    const imageUrl = typeof input.imageUrl === "string" && input.imageUrl.trim() ? input.imageUrl.trim() : null;
+    if (imageUrl && !/^https:\/\//i.test(imageUrl)) throw badInput("Social media needs a public HTTPS image URL.");
+    if (channels.includes("instagram") && !imageUrl) throw badInput("Instagram posts require a public HTTPS image URL.");
+    const publishAt = input.publishAt ? optionalDate(input.publishAt, "publishAt") : new Date();
+    if (!publishAt) throw badInput("publishAt is invalid.");
+    const post = await this.prisma.socialPost.create({ data: {
+      caption, imageUrl, channels: channels as Prisma.InputJsonArray, publishAt,
+      status: "queued", createdByAdminId: admin.id,
+    } });
+    await this.audit(admin, "social_post.queued", "social_post", post.id, { channels, publishAt: publishAt.toISOString() });
+    if (publishAt <= new Date()) void this.publishDuePosts();
+    return { data: { id: post.id.toString(), status: post.status, publishAt: post.publishAt.toISOString() } };
+  }
+
+  async operationsStatus(admin: AuthenticatedAdmin) {
+    requireManager(admin);
+    let database = "offline";
+    try { await this.prisma.$queryRaw`SELECT 1`; database = "online"; } catch { /* report without leaking connection details */ }
+    const directory = this.backupDirectory();
+    let backupVolume: { available: boolean; persistentConfigured: boolean; backupCount: number; latestAt: string | null; path: string } = {
+      available: false, persistentConfigured: Boolean(this.config.get<string>("BACKUP_DIR")), backupCount: 0, latestAt: null, path: directory,
+    };
+    try {
+      await mkdir(directory, { recursive: true });
+      const probe = join(directory, `.paniz-write-check-${randomUUID()}`);
+      await writeFile(probe, "ok", { flag: "wx" });
+      await rm(probe, { force: true });
+      const files = await this.listBackupFiles();
+      backupVolume = { available: true, persistentConfigured: Boolean(this.config.get<string>("BACKUP_DIR")), backupCount: files.length, latestAt: files[0]?.createdAt ?? null, path: directory };
+    } catch { /* a missing Railway volume is reported as unavailable */ }
+    return { data: {
+      api: "online", database, backupVolume,
+      backupTool: process.platform === "win32" ? "external mysqldump required" : "mysqldump",
+      integrations: {
+        smsIr: Boolean(this.config.get("SMSIR_API_KEY") && this.config.get("SMSIR_LINE_NUMBER")),
+        rubika: Boolean(this.config.get("RUBIKA_BOT_TOKEN") && this.config.get("RUBIKA_CHANNEL_ID")),
+        instagram: Boolean(this.config.get("INSTAGRAM_USER_ID") && this.config.get("INSTAGRAM_ACCESS_TOKEN") && this.config.get("INSTAGRAM_GRAPH_API_VERSION")),
+      },
+    } };
+  }
+
+  async listBackups(admin: AuthenticatedAdmin) {
+    requireManager(admin);
+    return { data: await this.listBackupFiles() };
+  }
+
+  async createBackup(admin: AuthenticatedAdmin) {
+    requireManager(admin);
+    const file = await this.writeBackup();
+    await this.removeOldBackups();
+    await this.audit(admin, "database.backup_created", "database_backup", null, { filename: file.filename, sizeBytes: file.sizeBytes });
+    return { data: file };
+  }
+
+  private async loadCustomers(filters: AudienceFilters, consentOnly: boolean) {
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    const where: Prisma.CustomerWhereInput = {
+      status: "active",
+      ...(consentOnly ? { marketingOptIn: true } : {}),
+      ...(filters.q ? { OR: [
+        { fullName: { contains: filters.q } }, { phone: { contains: filters.q } }, { email: { contains: filters.q } },
+      ] } : {}),
+      ...(filters.city ? { addresses: { some: { city: { contains: filters.city } } } } : {}),
+      ...(filters.registration === "under_year" ? { createdAt: { gte: cutoff } } : {}),
+      ...(filters.registration === "over_year" ? { createdAt: { lt: cutoff } } : {}),
+      ...(filters.productId ? { orders: { some: {
+        paymentStatus: "paid", items: { some: { productId: parseId(filters.productId, "productId") } },
+      } } } : {}),
+    };
+    const [total, customers] = await Promise.all([
+      this.prisma.customer.count({ where }),
+      this.prisma.customer.findMany({
+        where, orderBy: { createdAt: filters.registration === "over_year" ? "asc" : "desc" }, take: MAX_AUDIENCE,
+        select: {
+          id: true, phone: true, fullName: true, email: true, marketingOptIn: true,
+          createdAt: true, addresses: { orderBy: { updatedAt: "desc" }, take: 1, select: { city: true, province: true } },
+          orders: { where: { paymentStatus: "paid" }, orderBy: { placedAt: "desc" }, take: 1, select: { placedAt: true, orderNumber: true } },
+        },
+      }),
+    ]);
+    if (filters.purchaseSort !== "none") {
+      customers.sort((left, right) => {
+        const leftAt = left.orders[0]?.placedAt.getTime() ?? 0;
+        const rightAt = right.orders[0]?.placedAt.getTime() ?? 0;
+        return filters.purchaseSort === "recent" ? rightAt - leftAt : leftAt - rightAt;
+      });
+    }
+    return { customers, total, capped: total > customers.length };
+  }
+
+  private async publishDuePosts(): Promise<void> {
+    if (this.socialBusy) return;
+    this.socialBusy = true;
+    try {
+      for (let index = 0; index < 5; index++) {
+        const post = await this.prisma.socialPost.findFirst({
+          where: { status: "queued", publishAt: { lte: new Date() } }, orderBy: { publishAt: "asc" },
+        });
+        if (!post) break;
+        const claim = await this.prisma.socialPost.updateMany({ where: { id: post.id, status: "queued" }, data: { status: "publishing" } });
+        if (claim.count !== 1) continue;
+        const channels = Array.isArray(post.channels) ? post.channels.filter((item): item is string => typeof item === "string") : [];
+        const results: Record<string, unknown> = {};
+        for (const channel of channels) {
+          try {
+            results[channel] = channel === "instagram" ? await this.publishInstagram(post.caption, post.imageUrl) : await this.publishRubika(post.caption, post.imageUrl);
+          } catch (error) {
+            results[channel] = { ok: false, error: error instanceof Error ? error.message : "Publish failed." };
+          }
+        }
+        const failures = Object.entries(results).filter(([, value]) => (value as { ok?: boolean }).ok !== true);
+        const state = failures.length === 0 ? "published" : failures.length === channels.length ? "failed" : "partial";
+        await this.prisma.socialPost.update({ where: { id: post.id }, data: {
+          status: state, channelResults: results as Prisma.InputJsonObject,
+          lastError: failures.length ? failures.map(([channel, result]) => `${channel}: ${(result as { error?: string }).error ?? "failed"}`).join("; ").slice(0, 1000) : null,
+          publishedAt: state === "published" ? new Date() : null,
+        } });
+      }
+    } catch (error) {
+      this.logger.error(`Social publishing worker failed: ${error instanceof Error ? error.message : "unknown error"}`);
+    } finally { this.socialBusy = false; }
+  }
+
+  private async publishRubika(caption: string, imageUrl: string | null) {
+    const token = this.config.get<string>("RUBIKA_BOT_TOKEN", "");
+    const chatId = this.config.get<string>("RUBIKA_CHANNEL_ID", "");
+    if (!token || !chatId) throw new Error("Rubika bot token/channel ID is not configured.");
+    const endpoint = this.config.get<string>("RUBIKA_BOT_API_URL", `https://botapi.rubika.ir/v3/${encodeURIComponent(token)}/sendMessage`);
+    const response = await fetch(endpoint, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text: imageUrl ? `${caption}\n${imageUrl}` : caption }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    const result = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.ok || result.ok === false || result.status === "ERROR" || result.status === "error") throw new Error(`Rubika returned HTTP ${response.status}.`);
+    return { ok: true, provider: safeProviderResult(result) };
+  }
+
+  private async publishInstagram(caption: string, imageUrl: string | null) {
+    const userId = this.config.get<string>("INSTAGRAM_USER_ID", "");
+    const token = this.config.get<string>("INSTAGRAM_ACCESS_TOKEN", "");
+    if (!userId || !token || !imageUrl) throw new Error("Instagram professional account, access token, and public image URL are required.");
+    const version = this.config.get<string>("INSTAGRAM_GRAPH_API_VERSION", "");
+    if (!/^v\d+\.\d+$/.test(version)) throw new Error("Set INSTAGRAM_GRAPH_API_VERSION to the Graph API version enabled for your Meta app.");
+    const base = `https://graph.facebook.com/${version}/${encodeURIComponent(userId)}`;
+    const createBody = new URLSearchParams({ image_url: imageUrl, caption, access_token: token });
+    const creationResponse = await fetch(`${base}/media`, { method: "POST", body: createBody, signal: AbortSignal.timeout(25_000) });
+    const creation = await creationResponse.json().catch(() => ({})) as Record<string, unknown>;
+    if (!creationResponse.ok || typeof creation.id !== "string") throw new Error(`Instagram media container creation failed (HTTP ${creationResponse.status}).`);
+    const publishBody = new URLSearchParams({ creation_id: creation.id, access_token: token });
+    const publishResponse = await fetch(`${base}/media_publish`, { method: "POST", body: publishBody, signal: AbortSignal.timeout(25_000) });
+    const published = await publishResponse.json().catch(() => ({})) as Record<string, unknown>;
+    if (!publishResponse.ok || typeof published.id !== "string") throw new Error(`Instagram publish failed (HTTP ${publishResponse.status}).`);
+    return { ok: true, mediaId: published.id };
+  }
+
+  private async ensureDailyBackup(): Promise<void> {
+    if (this.backupBusy || this.config.get<string>("BACKUP_SCHEDULE_ENABLED", "true") === "false") return;
+    this.backupBusy = true;
+    try {
+      const files = await this.listBackupFiles();
+      const latest = files[0] ? new Date(files[0].createdAt).getTime() : 0;
+      if (Date.now() - latest > 24 * 60 * 60_000) {
+        await this.writeBackup();
+        await this.removeOldBackups();
+      }
+    } catch (error) {
+      this.logger.warn(`Scheduled database backup skipped: ${error instanceof Error ? error.message : "unknown error"}`);
+    } finally { this.backupBusy = false; }
+  }
+
+  private async recoverInterruptedJobs(): Promise<void> {
+    const smsCutoff = new Date(Date.now() - 3 * 60_000);
+    const postCutoff = new Date(Date.now() - 5 * 60_000);
+    const [sms, posts] = await Promise.all([
+      this.prisma.smsCampaign.findMany({ where: { status: "sending", updatedAt: { lt: smsCutoff } }, select: { id: true, recipientCount: true, sentCount: true } }),
+      this.prisma.socialPost.findMany({ where: { status: "publishing", updatedAt: { lt: postCutoff } }, select: { id: true } }),
+    ]);
+    let recoveredSms = 0;
+    let recoveredPosts = 0;
+    for (const campaign of sms) {
+      const result = await this.prisma.smsCampaign.updateMany({
+        where: { id: campaign.id, status: "sending", updatedAt: { lt: smsCutoff } },
+        data: {
+          status: campaign.sentCount ? "partial" : "failed", failedCount: campaign.recipientCount - campaign.sentCount,
+          completedAt: new Date(),
+          providerResponse: { error: "The API restarted during delivery. Check SMS.ir before creating another campaign.", manualReviewRequired: true },
+        },
+      });
+      recoveredSms += result.count;
+    }
+    for (const post of posts) {
+      const result = await this.prisma.socialPost.updateMany({
+        where: { id: post.id, status: "publishing", updatedAt: { lt: postCutoff } },
+        data: {
+          status: "failed", lastError: "The API restarted during publishing. Check the channel before creating another post.",
+          channelResults: { manualReviewRequired: true, error: "Publishing was interrupted; provider delivery may have occurred." },
+        },
+      });
+      recoveredPosts += result.count;
+    }
+    if (recoveredSms || recoveredPosts) {
+      this.logger.warn(`Marked interrupted work for review: ${recoveredSms} SMS campaigns, ${recoveredPosts} social posts.`);
+    }
+  }
+
+  private async writeBackup() {
+    const databaseUrl = this.config.get<string>("DATABASE_URL", "");
+    if (!databaseUrl) throw new ServiceUnavailableException({ code: "DATABASE_URL_MISSING", message: "DATABASE_URL is not configured." });
+    const parsed = new URL(databaseUrl);
+    const directory = this.backupDirectory();
+    await mkdir(directory, { recursive: true });
+    const filename = `paniz-mysql-${new Date().toISOString().replace(/[:.]/g, "-")}.sql`;
+    const outputPath = join(directory, filename);
+    const args = [
+      "--single-transaction", "--quick", "--skip-lock-tables", "--host", parsed.hostname,
+      "--port", parsed.port || "3306", "--user", decodeURIComponent(parsed.username),
+      "--default-character-set=utf8mb4", "--result-file", outputPath,
+      decodeURIComponent(parsed.pathname.replace(/^\//, "")),
+    ];
+    try {
+      await execFile(this.config.get<string>("MYSQLDUMP_PATH", "mysqldump"), args, {
+        timeout: 10 * 60_000, maxBuffer: 4 * 1024 * 1024,
+        env: { ...process.env, MYSQL_PWD: decodeURIComponent(parsed.password) },
+      });
+    } catch (error) {
+      await rm(outputPath, { force: true }).catch(() => undefined);
+      throw new ServiceUnavailableException({ code: "BACKUP_FAILED", message: "mysqldump failed. In Railway, mount a persistent volume and install/configure the MySQL client." });
+    }
+    const metadata = await stat(outputPath);
+    return { filename, createdAt: metadata.mtime.toISOString(), sizeBytes: metadata.size, path: outputPath };
+  }
+
+  private async listBackupFiles() {
+    const directory = this.backupDirectory();
+    const names = await readdir(directory).catch(() => [] as string[]);
+    const files = await Promise.all(names.filter((name) => /^paniz-mysql-[\w-]+\.sql$/.test(name)).map(async (filename) => {
+      const metadata = await stat(join(directory, filename));
+      return { filename, createdAt: metadata.mtime.toISOString(), sizeBytes: metadata.size };
+    }));
+    return files.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+
+  private async removeOldBackups(): Promise<void> {
+    const keep = boundedInt(this.config.get<string>("BACKUP_RETENTION_COUNT", "7"), 7, 1, 100);
+    const files = await this.listBackupFiles();
+    await Promise.all(files.slice(keep).map((file) => rm(join(this.backupDirectory(), file.filename), { force: true })));
+  }
+
+  private backupDirectory(): string {
+    return this.config.get<string>("BACKUP_DIR", join(process.cwd(), "backups"));
+  }
+
+  private async audit(admin: AuthenticatedAdmin, action: string, entityType: string, entityId: bigint | null, details: Prisma.InputJsonObject) {
+    await this.prisma.adminAuditLog.create({ data: { adminId: admin.id, action, entityType, entityId, details } });
+  }
+}
+
+function requireManager(admin: AuthenticatedAdmin): void {
+  if (admin.role !== "owner" && admin.role !== "admin") throw new ForbiddenException({ code: "ADMIN_PERMISSION_REQUIRED", message: "Manager access is required." });
+}
+
+function normalizeFilters(raw: Record<string, unknown>): AudienceFilters {
+  const registration = raw.registration === "under_year" || raw.registration === "over_year" ? raw.registration : "any";
+  const purchaseSort = raw.purchaseSort === "recent" || raw.purchaseSort === "oldest" ? raw.purchaseSort : "none";
+  const filters: AudienceFilters = {
+    q: typeof raw.q === "string" ? raw.q.trim().slice(0, 120) || undefined : undefined,
+    city: typeof raw.city === "string" ? raw.city.trim().slice(0, 100) || undefined : undefined,
+    registration, purchaseSort,
+    productId: typeof raw.productId === "string" && raw.productId.trim() ? raw.productId.trim() : undefined,
+  };
+  if (filters.productId) parseId(filters.productId, "productId");
+  return filters;
+}
+
+function toCustomerSummary(customer: {
+  id: bigint; phone: string; fullName: string | null; email: string | null; marketingOptIn: boolean; createdAt: Date;
+  addresses: { city: string; province: string }[]; orders: { placedAt: Date; orderNumber: string }[];
+}) {
+  return {
+    id: customer.id.toString(), phone: customer.phone, fullName: customer.fullName, email: customer.email,
+    marketingOptIn: customer.marketingOptIn, createdAt: customer.createdAt.toISOString(),
+    city: customer.addresses[0]?.city ?? null, province: customer.addresses[0]?.province ?? null,
+    lastPurchaseAt: customer.orders[0]?.placedAt.toISOString() ?? null,
+    lastOrderNumber: customer.orders[0]?.orderNumber ?? null,
+  };
+}
+
+function toCoupon(coupon: {
+  id: bigint; code: string; discountType: string; discountValue: Prisma.Decimal; maxDiscountToman: bigint | null;
+  minOrderToman: bigint; usageLimit: number | null; perCustomerLimit: number | null; firstOrderOnly: boolean;
+  startsAt: Date | null; endsAt: Date | null; isActive: boolean; createdAt: Date;
+}) {
+  return {
+    id: coupon.id.toString(), code: coupon.code, discountType: coupon.discountType,
+    discountValue: Number(coupon.discountValue), maxDiscountToman: coupon.maxDiscountToman?.toString() ?? null,
+    minOrderToman: coupon.minOrderToman.toString(), usageLimit: coupon.usageLimit,
+    perCustomerLimit: coupon.perCustomerLimit, firstOrderOnly: coupon.firstOrderOnly,
+    startsAt: coupon.startsAt?.toISOString() ?? null, endsAt: coupon.endsAt?.toISOString() ?? null,
+    isActive: coupon.isActive, createdAt: coupon.createdAt.toISOString(),
+  };
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function requiredText(value: unknown, name: string, maxLength: number): string {
+  if (typeof value !== "string" || !value.trim() || value.trim().length > maxLength) throw badInput(`${name} is required and must be at most ${maxLength} characters.`);
+  return value.trim();
+}
+
+function integerBigInt(value: unknown, name: string): bigint {
+  const text = String(value);
+  if (!/^\d{1,15}$/.test(text)) throw badInput(`${name} must be a non-negative whole number.`);
+  return BigInt(text);
+}
+
+function optionalPositiveInt(value: unknown, name: string): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1 || number > 1_000_000) throw badInput(`${name} must be between 1 and 1000000.`);
+  return number;
+}
+
+function optionalDate(value: unknown, name: string): Date | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string") throw badInput(`${name} must be an ISO date string.`);
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) throw badInput(`${name} is invalid.`);
+  return parsed;
+}
+
+function boundedInt(value: unknown, fallback: number, minimum: number, maximum: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? Math.min(maximum, Math.max(minimum, parsed)) : fallback;
+}
+
+function parseId(value: string, name: string): bigint {
+  if (!/^\d{1,20}$/.test(value) || BigInt(value) < 1n) throw badInput(`${name} is invalid.`);
+  return BigInt(value);
+}
+
+function badInput(message: string): BadRequestException {
+  return new BadRequestException({ code: "INVALID_ADMIN_INPUT", message });
+}
+
+function isUniqueError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
+function safeProviderResult(result: Record<string, unknown>): Prisma.InputJsonObject {
+  const safe = { ...result };
+  delete safe.access_token;
+  delete safe.token;
+  delete safe.apiKey;
+  const text = JSON.stringify(safe);
+  return text.length > 1800 ? { responseOmitted: true, reason: "provider response was too large" } : JSON.parse(text) as Prisma.InputJsonObject;
+}
+
+function smsIrPhone(phone: string): string {
+  if (phone.startsWith("+98")) return `0${phone.slice(3)}`;
+  if (phone.startsWith("98")) return `0${phone.slice(2)}`;
+  return phone;
+}
+
+function smsIrRejected(result: Record<string, unknown>): boolean {
+  const status = result.status ?? result.Status;
+  return result.IsSuccessful === false || result.isSuccessful === false || status === 0 || status === "0" || status === "ERROR" || status === "error";
+}

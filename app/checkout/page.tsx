@@ -8,7 +8,7 @@ import { apiBaseUrl, formatToman } from "../lib/catalog";
 import { CustomerApiError, customerApi, type CustomerAddress, type CustomerProfile } from "../lib/customer-api";
 import { useStorefront } from "../lib/storefront-state";
 
-type Quote = { items: { variantId: string; productName: string; color: string; size: string; quantity: number; unitPriceToman: number; lineTotalToman: number }[]; subtotalToman: number; shippingToman: number | null; totalToman: number | null; shippingConfigured: boolean; paymentConfigured: boolean };
+type Quote = { items: { variantId: string; productName: string; color: string; size: string; quantity: number; unitPriceToman: number; lineTotalToman: number }[]; subtotalToman: number; discountToman: number; couponCode: string | null; shippingToman: number | null; totalToman: number | null; shippingConfigured: boolean; paymentConfigured: boolean };
 type CreatedOrder = { orderNumber: string; status: string; paymentStatus: string; totalToman: number; reservationExpiresAt: string | null; shippingConfigured: boolean; paymentConfigured: boolean };
 type AddressForm = {
   title: string; recipientName: string; recipientPhone: string; province: string; city: string;
@@ -35,6 +35,8 @@ export default function CheckoutPage() {
   const [addressError, setAddressError] = useState("");
   const [addressForm, setAddressForm] = useState<AddressForm>(emptyAddress());
   const [customerNote, setCustomerNote] = useState("");
+  const [couponDraft, setCouponDraft] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState("");
   const cartPayload = useMemo(() => JSON.stringify(cart.map((line) => ({ variantId: line.variantId, quantity: line.quantity }))), [cart]);
 
   useEffect(() => {
@@ -69,7 +71,7 @@ export default function CheckoutPage() {
     setLoadingQuote(true); setQuoteError("");
     fetch(`${apiBaseUrl()}/checkout/quote`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: cart.map((line) => ({ variantId: line.variantId, quantity: line.quantity })) }),
+      body: JSON.stringify({ items: cart.map((line) => ({ variantId: line.variantId, quantity: line.quantity })), ...(appliedCoupon ? { couponCode: appliedCoupon } : {}) }),
       signal: controller.signal, cache: "no-store",
     }).then(async (response) => {
       const payload = await response.json();
@@ -82,7 +84,7 @@ export default function CheckoutPage() {
       }
     }).finally(() => { if (!controller.signal.aborted) setLoadingQuote(false); });
     return () => controller.abort();
-  }, [cartPayload, ready]);
+  }, [cartPayload, ready, appliedCoupon]);
 
   async function saveAddress(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSavingAddress(true); setAddressError("");
@@ -113,7 +115,7 @@ export default function CheckoutPage() {
       const created = await customerApi<CreatedOrder>("/orders", {
         method: "POST",
         headers: { "Idempotency-Key": idempotencyKey },
-        body: JSON.stringify({ addressId: selectedAddressId, customerNote, items: cart.map((line) => ({ variantId: line.variantId, quantity: line.quantity })) }),
+        body: JSON.stringify({ addressId: selectedAddressId, customerNote, ...(appliedCoupon ? { couponCode: appliedCoupon } : {}), items: cart.map((line) => ({ variantId: line.variantId, quantity: line.quantity })) }),
       });
       setOrder(created);
       window.sessionStorage.removeItem("panizstyle-order-attempt");
@@ -179,7 +181,13 @@ export default function CheckoutPage() {
               </div>
               <aside className="store-order-summary store-checkout-summary"><h2>خلاصهٔ انتخاب‌ها</h2>
                 {(quote?.items ?? []).map((item) => <div className="store-checkout-item" key={item.variantId}><span>{item.productName}<small>{item.color} · {item.size} · {new Intl.NumberFormat("fa-IR").format(item.quantity)} عدد</small></span><strong>{formatToman(item.lineTotalToman)}</strong></div>)}
+                <form className="store-coupon-form" onSubmit={(event) => { event.preventDefault(); setQuoteError(""); setAppliedCoupon(couponDraft.trim().toUpperCase()); }}>
+                  <label className="store-field"><span>کد تخفیف</span><input dir="ltr" maxLength={64} value={couponDraft} onChange={(event) => setCouponDraft(event.target.value)} placeholder="مثلاً PANIZ20" /></label>
+                  <button className="outline-button" type="submit" disabled={!couponDraft.trim() || loadingQuote}>اعمال کد</button>
+                  {appliedCoupon && <button className="customer-text-button" type="button" onClick={() => { setAppliedCoupon(""); setCouponDraft(""); setQuoteError(""); }}>حذف کد</button>}
+                </form>
                 <div><span>جمع کالاها</span><strong>{formatToman(quote?.subtotalToman ?? 0)}</strong></div><div><span>هزینهٔ ارسال</span><strong className="store-pending-value">بعد از تأیید</strong></div>
+                {Boolean(quote?.discountToman) && <div><span>تخفیف {quote?.couponCode}</span><strong>- {formatToman(quote?.discountToman ?? 0)}</strong></div>}
                 <div className="store-summary-total"><span>مبلغ نهایی</span><strong>پس از تعیین ارسال</strong></div>
                 {loadingQuote && <small className="store-loading-note">در حال بررسی قیمت و موجودی…</small>}
                 <Link className="store-back-link" href="/cart">بازگشت و ویرایش سبد</Link>

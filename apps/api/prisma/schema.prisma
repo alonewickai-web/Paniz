@@ -23,6 +23,8 @@ model AdminUser {
   updatedStoreSettings  StoreSetting[]
   auditLogs             AdminAuditLog[]
   sessions              AdminSession[]
+  smsCampaigns          SmsCampaign[]
+  socialPosts           SocialPost[]
 
   @@index([role, isActive], map: "ix_admin_users_role_active")
   @@map("admin_users")
@@ -48,6 +50,8 @@ model Customer {
   phone             String             @unique(map: "uq_customers_phone") @db.VarChar(24)
   fullName          String?            @map("full_name") @db.VarChar(160)
   email             String?            @db.VarChar(254)
+  marketingOptIn     Boolean            @default(false) @map("marketing_opt_in")
+  marketingOptInAt  DateTime?          @map("marketing_opt_in_at") @db.DateTime(3)
   phoneVerifiedAt   DateTime?          @map("phone_verified_at") @db.DateTime(3)
   status            String             @default("active") @db.VarChar(24)
   createdAt         DateTime           @default(now()) @map("created_at") @db.DateTime(3)
@@ -61,6 +65,7 @@ model Customer {
   reviews           Review[]
 
   @@index([status, createdAt], map: "ix_customers_status_created")
+  @@index([marketingOptIn, createdAt], map: "ix_customers_marketing_consent_created")
   @@map("customers")
 }
 
@@ -551,4 +556,46 @@ model AdminAuditLog {
   @@index([adminId, createdAt], map: "ix_admin_audit_logs_admin_created")
   @@index([entityType, entityId, createdAt], map: "ix_admin_audit_logs_entity")
   @@map("admin_audit_logs")
+}
+
+model SmsCampaign {
+  id                BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  title             String     @db.VarChar(160)
+  message           String     @db.VarChar(1000)
+  targetFilters     Json       @map("target_filters")
+  recipientCount    Int        @default(0) @map("recipient_count") @db.UnsignedInt
+  sentCount         Int        @default(0) @map("sent_count") @db.UnsignedInt
+  failedCount       Int        @default(0) @map("failed_count") @db.UnsignedInt
+  status            String     @default("draft") @db.VarChar(24)
+  providerResponse  Json?      @map("provider_response")
+  createdByAdminId  BigInt     @map("created_by_admin_id") @db.UnsignedBigInt
+  startedAt         DateTime?  @map("started_at") @db.DateTime(3)
+  completedAt       DateTime?  @map("completed_at") @db.DateTime(3)
+  createdAt         DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
+  createdByAdmin    AdminUser  @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt], map: "ix_sms_campaigns_status_created")
+  @@index([createdByAdminId], map: "ix_sms_campaigns_created_by_admin")
+  @@map("sms_campaigns")
+}
+
+model SocialPost {
+  id                BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  caption           String     @db.VarChar(2200)
+  imageUrl          String?    @map("image_url") @db.VarChar(1000)
+  channels          Json
+  status            String     @default("queued") @db.VarChar(24)
+  publishAt         DateTime   @default(now()) @map("publish_at") @db.DateTime(3)
+  channelResults    Json?      @map("channel_results")
+  lastError         String?    @map("last_error") @db.VarChar(1000)
+  createdByAdminId  BigInt     @map("created_by_admin_id") @db.UnsignedBigInt
+  publishedAt       DateTime?  @map("published_at") @db.DateTime(3)
+  createdAt         DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
+  createdByAdmin    AdminUser  @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
+
+  @@index([status, publishAt], map: "ix_social_posts_status_publish")
+  @@index([createdByAdminId], map: "ix_social_posts_created_by_admin")
+  @@map("social_posts")
 }

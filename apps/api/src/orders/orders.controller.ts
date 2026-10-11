@@ -15,7 +15,7 @@ export class OrdersController {
   @ApiOperation({ summary: "محاسبهٔ قیمت معتبر سبد از دیتابیس" })
   @ApiBody({ type: QuoteCartDto })
   quote(@Body() body: QuoteCartDto) {
-    return this.ordersService.quote(body.items);
+    return this.ordersService.quote(body.items, body.couponCode);
   }
 
   @Post("orders")

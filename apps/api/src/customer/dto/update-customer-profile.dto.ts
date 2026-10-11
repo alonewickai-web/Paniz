@@ -1,5 +1,5 @@
 import { Transform } from "class-transformer";
-import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 
 export class UpdateCustomerProfileDto {
   @IsString()
@@ -12,4 +12,8 @@ export class UpdateCustomerProfileDto {
   @IsEmail()
   @MaxLength(254)
   email?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  marketingOptIn?: boolean;
 }

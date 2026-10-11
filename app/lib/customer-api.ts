@@ -23,6 +23,7 @@ export type CustomerProfile = {
   fullName: string | null;
   email: string | null;
   phoneVerifiedAt: string | null;
+  marketingOptIn: boolean;
   addresses: CustomerAddress[];
 };
 

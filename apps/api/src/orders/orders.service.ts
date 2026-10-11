@@ -23,6 +23,7 @@ type QuotedLine = {
   sizeLabel: string;
   unitPriceToman: bigint;
   productId: bigint;
+  categoryId: bigint | null;
   productName: string;
 };
 
@@ -49,12 +50,14 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     if (this.expirationTimer) clearInterval(this.expirationTimer);
   }
 
-  async quote(items: CartItemDto[]) {
+  async quote(items: CartItemDto[], couponCode?: string) {
     const lines = await this.getQuotedLines(this.prisma, items);
     const subtotalToman = lines.reduce(
       (sum, line) => sum + line.unitPriceToman * BigInt(line.quantity),
       0n,
     );
+    const coupon = couponCode?.trim() ? await this.calculateCoupon(this.prisma, couponCode, lines, subtotalToman) : null;
+    const discountToman = coupon?.discountToman ?? 0n;
 
     return {
       data: {
@@ -70,6 +73,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           lineTotalToman: toSafeNumber(line.unitPriceToman * BigInt(line.quantity)),
         })),
         subtotalToman: toSafeNumber(subtotalToman),
+        discountToman: toSafeNumber(discountToman),
+        couponCode: coupon?.code ?? null,
         shippingToman: null,
         totalToman: null,
         shippingConfigured: false,
@@ -108,6 +113,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           (sum, line) => sum + line.unitPriceToman * BigInt(line.quantity),
           0n,
         );
+        const coupon = input.couponCode?.trim()
+          ? await this.calculateCoupon(tx, input.couponCode, lines, subtotalToman, customerId)
+          : null;
+        const discountToman = coupon?.discountToman ?? 0n;
 
         for (const line of lines) {
           const reserved = await tx.$executeRaw`
@@ -136,9 +145,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
             customerId,
             addressId: address.id,
             subtotalToman,
-            discountToman: 0n,
+            discountToman,
             shippingToman: 0n,
-            totalToman: subtotalToman,
+            totalToman: subtotalToman - discountToman,
+            couponCodeSnapshot: coupon?.code ?? null,
             recipientNameSnapshot: address.recipientName,
             recipientPhoneSnapshot: address.recipientPhone,
             shippingAddressSnapshot: {
@@ -175,6 +185,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
             },
           },
         });
+
+        if (coupon && discountToman > 0n) {
+          await tx.couponRedemption.create({ data: {
+            couponId: coupon.id, customerId, orderId: order.id, discountToman,
+          } });
+        }
 
         await tx.inventoryMovement.createMany({
           data: lines.map((line) => ({
@@ -283,15 +299,15 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       where: {
         id: { in: [...requested.keys()] },
         isActive: true,
-        product: {
-          is: {
-            status: "published",
+          product: {
+            is: {
+              status: "published",
             deletedAt: null,
             publishedAt: { lte: new Date() },
+            },
           },
         },
-      },
-      include: { product: { select: { id: true, name: true } } },
+      include: { product: { select: { id: true, name: true, categoryId: true } } },
     });
 
     if (variants.length !== requested.size) {
@@ -318,9 +334,56 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         sizeLabel: variant.sizeLabel,
         unitPriceToman: variant.priceToman,
         productId: variant.product.id,
+        categoryId: variant.product.categoryId,
         productName: variant.product.name,
       };
     });
+  }
+
+  private async calculateCoupon(
+    db: PrismaService | Prisma.TransactionClient,
+    rawCode: string,
+    lines: QuotedLine[],
+    subtotalToman: bigint,
+    customerId?: bigint,
+  ) {
+    const code = rawCode.trim().toUpperCase();
+    if (!/^[A-Z0-9_-]{3,64}$/.test(code)) throw new BadRequestException({ code: "COUPON_INVALID", message: "کد تخفیف معتبر نیست." });
+    const coupon = await db.coupon.findUnique({ where: { code }, include: { products: true, categories: true } });
+    const now = new Date();
+    if (!coupon || !coupon.isActive || (coupon.startsAt && coupon.startsAt > now) || (coupon.endsAt && coupon.endsAt < now)) {
+      throw new BadRequestException({ code: "COUPON_UNAVAILABLE", message: "کد تخفیف معتبر یا فعال نیست." });
+    }
+    if (subtotalToman < coupon.minOrderToman) throw new BadRequestException({ code: "COUPON_MINIMUM_NOT_MET", message: "مبلغ سبد خرید به حداقل لازم برای این کد نمی‌رسد." });
+    const productIds = new Set(coupon.products.map((item) => item.productId.toString()));
+    const categoryIds = new Set(coupon.categories.map((item) => item.categoryId.toString()));
+    const hasScope = productIds.size > 0 || categoryIds.size > 0;
+    const eligibleLines = hasScope
+      ? lines.filter((line) => productIds.has(line.productId.toString()) || (line.categoryId !== null && categoryIds.has(line.categoryId.toString())))
+      : lines;
+    if (!eligibleLines.length) throw new BadRequestException({ code: "COUPON_PRODUCTS_NOT_ELIGIBLE", message: "این کد برای محصولات سبد خرید فعال نیست." });
+    const eligibleSubtotal = eligibleLines.reduce((sum, line) => sum + line.unitPriceToman * BigInt(line.quantity), 0n);
+    const redemptionCount = await db.couponRedemption.count({ where: { couponId: coupon.id } });
+    if (coupon.usageLimit !== null && redemptionCount >= coupon.usageLimit) throw new BadRequestException({ code: "COUPON_USAGE_LIMIT_REACHED", message: "ظرفیت استفاده از این کد تکمیل شده است." });
+    if (customerId) {
+      if (coupon.perCustomerLimit !== null) {
+        const customerUses = await db.couponRedemption.count({ where: { couponId: coupon.id, customerId } });
+        if (customerUses >= coupon.perCustomerLimit) throw new BadRequestException({ code: "COUPON_CUSTOMER_LIMIT_REACHED", message: "سقف استفادهٔ شما از این کد تکمیل شده است." });
+      }
+      if (coupon.firstOrderOnly) {
+        const previousPaidOrders = await db.order.count({ where: { customerId, paymentStatus: "paid" } });
+        const pendingFirstOrderUses = await db.couponRedemption.count({ where: {
+          couponId: coupon.id, customerId, order: { status: "pending_payment" },
+        } });
+        if (previousPaidOrders > 0 || pendingFirstOrderUses > 0) throw new BadRequestException({ code: "COUPON_FIRST_ORDER_ONLY", message: "این کد فقط برای اولین سفارش قابل استفاده است." });
+      }
+    }
+    let discountToman = coupon.discountType === "percent"
+      ? eligibleSubtotal * BigInt(Math.round(Number(coupon.discountValue) * 100)) / 10_000n
+      : BigInt(Math.round(Number(coupon.discountValue)));
+    if (coupon.maxDiscountToman !== null && discountToman > coupon.maxDiscountToman) discountToman = coupon.maxDiscountToman;
+    if (discountToman > eligibleSubtotal) discountToman = eligibleSubtotal;
+    return { id: coupon.id, code: coupon.code, discountToman };
   }
 
   private async releaseExpiredReservations(): Promise<void> {
@@ -351,6 +414,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           data: { status: "expired" },
         });
         if (claimed.count !== 1) return;
+
+        await tx.couponRedemption.deleteMany({ where: { orderId: order.id } });
 
         for (const item of order.items) {
           if (item.variantId === null) continue;
