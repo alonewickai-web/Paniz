@@ -4,6 +4,7 @@ import { AuthenticatedAdmin } from "../admin-auth/admin-session.guard";
 import { PrismaService } from "../database/prisma.service";
 import { SaveAdminBannerDto } from "./dto/save-admin-banner.dto";
 import { SaveAdminCategoryDto } from "./dto/save-admin-category.dto";
+import { ReorderHomepageSectionsDto } from "./dto/reorder-homepage-sections.dto";
 import { UpdateHomepageSectionDto } from "./dto/update-homepage-section.dto";
 import { STORE_THEMES, UpdateStoreThemeDto } from "./dto/update-store-theme.dto";
 
@@ -129,6 +130,35 @@ export class StoreManagementService {
       return row;
     });
     return { data: { ...changed, id: changed.id.toString() } };
+  }
+
+  async reorderHomepageSections(admin: AuthenticatedAdmin, input: ReorderHomepageSectionsDto) {
+    requireManager(admin);
+    const allowedKeys = defaultSections.map((section) => section.sectionKey);
+    if (input.sectionKeys.length !== allowedKeys.length || input.sectionKeys.some((key) => !allowedKeys.includes(key as typeof allowedKeys[number]))) {
+      throw new BadRequestException({ code: "INVALID_HOMEPAGE_SECTION_ORDER", message: "ترتیب ارسالی بخش‌های صفحهٔ اصلی معتبر نیست" });
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const [sortOrder, sectionKey] of input.sectionKeys.entries()) {
+        const fallback = defaultSections.find((section) => section.sectionKey === sectionKey)!;
+        await tx.homepageSection.upsert({
+          where: { sectionKey },
+          create: { ...fallback, updatedByAdminId: admin.id },
+          update: { sortOrder, updatedByAdminId: admin.id },
+        });
+      }
+      await tx.adminAuditLog.create({
+        data: {
+          adminId: admin.id,
+          action: "homepage_sections.reordered",
+          entityType: "homepage_section",
+          details: { sectionKeys: input.sectionKeys },
+        },
+      });
+    });
+
+    return { data: { sectionKeys: input.sectionKeys } };
   }
 
   async createCategory(admin: AuthenticatedAdmin, input: SaveAdminCategoryDto) {

@@ -4,6 +4,7 @@ import { AdminRequest, AdminSessionGuard } from "../admin-auth/admin-session.gua
 import { StoreManagementService } from "./store-management.service";
 import { SaveAdminBannerDto } from "./dto/save-admin-banner.dto";
 import { SaveAdminCategoryDto } from "./dto/save-admin-category.dto";
+import { ReorderHomepageSectionsDto } from "./dto/reorder-homepage-sections.dto";
 import { UpdateHomepageSectionDto } from "./dto/update-homepage-section.dto";
 import { UpdateStoreThemeDto } from "./dto/update-store-theme.dto";
 
@@ -25,6 +26,13 @@ export class StoreManagementController {
   @ApiBody({ type: UpdateStoreThemeDto })
   updateTheme(@Req() request: AdminRequest, @Body() body: UpdateStoreThemeDto) {
     return this.store.saveTheme(request.admin!, body);
+  }
+
+  @Patch("homepage-sections/reorder")
+  @ApiOperation({ summary: "ذخیرهٔ ترتیب همهٔ بخش‌های صفحهٔ اصلی" })
+  @ApiBody({ type: ReorderHomepageSectionsDto })
+  reorderSections(@Req() request: AdminRequest, @Body() body: ReorderHomepageSectionsDto) {
+    return this.store.reorderHomepageSections(request.admin!, body);
   }
 
   @Patch("homepage-sections/:sectionKey")

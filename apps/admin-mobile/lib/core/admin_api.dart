@@ -195,6 +195,9 @@ class AdminApi {
   Future<JsonMap> updateHomepageSection(String key, JsonMap changes) async =>
       _data(await dio.patch('admin/homepage-sections/$key', data: changes));
 
+  Future<JsonMap> reorderHomepageSections(List<String> sectionKeys) async =>
+      _data(await dio.patch('admin/homepage-sections/reorder', data: {'sectionKeys': sectionKeys}));
+
   Future<JsonMap> createCategory(JsonMap input) async =>
       _data(await dio.post('admin/categories', data: input));
 

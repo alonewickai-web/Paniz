@@ -15,10 +15,14 @@ class StoreManagementScreen extends ConsumerStatefulWidget {
 class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
   int _tab = 0;
   bool _saving = false;
+  List<String>? _sectionOrderOverride;
 
   static const _tabs = ['تم', 'دسته‌ها', 'بنرها', 'چیدمان'];
 
-  Future<void> _refresh() async => ref.invalidate(storeConfigurationProvider);
+  Future<void> _refresh() async {
+    _sectionOrderOverride = null;
+    ref.invalidate(storeConfigurationProvider);
+  }
 
   Future<void> _run(Future<void> Function() action, String success) async {
     if (_saving) return;
@@ -188,34 +192,74 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
 
   Widget _sectionsPanel(JsonMap data) {
     final sections = _maps(data['sections'])..sort((a, b) => _integer(a['sortOrder']).compareTo(_integer(b['sortOrder'])));
+    final order = _sectionOrderOverride;
+    if (order != null) {
+      final byKey = {for (final section in sections) '${section['sectionKey']}': section};
+      if (order.length == sections.length && order.every(byKey.containsKey)) {
+        sections
+          ..clear()
+          ..addAll(order.map((key) => byKey[key]!));
+      }
+    }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       sectionTitle('چیدمان صفحهٔ اصلی'),
-      const Padding(padding: EdgeInsets.only(top: 3, bottom: 10), child: Text('بخش‌های خاموش‌شده در ویترین نمایش داده نمی‌شوند.', style: TextStyle(color: Color(0xFF74686C), fontSize: 12))),
-      ...List.generate(sections.length, (index) {
-        final section = sections[index];
-        final key = '${section['sectionKey']}';
-        return Card(child: ListTile(
-          leading: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            IconButton(visualDensity: VisualDensity.compact, icon: const Icon(Icons.keyboard_arrow_up), onPressed: index == 0 ? null : () => _moveSection(sections, index, index - 1)),
-            IconButton(visualDensity: VisualDensity.compact, icon: const Icon(Icons.keyboard_arrow_down), onPressed: index == sections.length - 1 ? null : () => _moveSection(sections, index, index + 1)),
-          ]),
-          title: Text('${section['title'] ?? key}'),
-          subtitle: Text(section['isActive'] == true ? 'نمایش داده می‌شود' : 'پنهان است'),
-          trailing: Switch.adaptive(value: section['isActive'] == true, onChanged: (value) => _run(() async {
-            await ref.read(adminApiProvider).updateHomepageSection(key, {'isActive': value});
-          }, value ? 'بخش فعال شد' : 'بخش پنهان شد')),
-        ));
-      }),
+      const Padding(padding: EdgeInsets.only(top: 3, bottom: 10), child: Text('برای تغییر ترتیب، دستگیرهٔ کنار هر بخش را نگه دار و آن را بکش. بخش‌های خاموش‌شده در ویترین نمایش داده نمی‌شوند.', style: TextStyle(color: Color(0xFF74686C), fontSize: 12))),
+      ReorderableListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        buildDefaultDragHandles: false,
+        itemCount: sections.length,
+        onReorder: (oldIndex, newIndex) {
+          if (_saving || oldIndex == newIndex) return;
+          final reordered = List<JsonMap>.of(sections);
+          if (newIndex > oldIndex) newIndex -= 1;
+          final moved = reordered.removeAt(oldIndex);
+          reordered.insert(newIndex, moved);
+          _saveSectionOrder(reordered.map((section) => '${section['sectionKey']}').toList(growable: false));
+        },
+        itemBuilder: (context, index) {
+          final section = sections[index];
+          final key = '${section['sectionKey']}';
+          return Card(
+            key: ValueKey('homepage-section-$key'),
+            child: ListTile(
+              leading: ReorderableDragStartListener(
+                index: index,
+                child: const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Icon(Icons.drag_handle_rounded, color: Color(0xFF806C9C)),
+                ),
+              ),
+              title: Text('${section['title'] ?? key}'),
+              subtitle: Text(section['isActive'] == true ? 'نمایش داده می‌شود' : 'پنهان است'),
+              trailing: Switch.adaptive(value: section['isActive'] == true, onChanged: (value) => _run(() async {
+                await ref.read(adminApiProvider).updateHomepageSection(key, {'isActive': value});
+              }, value ? 'بخش فعال شد' : 'بخش پنهان شد')),
+            ),
+          );
+        },
+      ),
     ]);
   }
 
-  Future<void> _moveSection(List<JsonMap> sections, int from, int to) => _run(() async {
-    final first = sections[from];
-    final second = sections[to];
-    final api = ref.read(adminApiProvider);
-    await api.updateHomepageSection('${first['sectionKey']}', {'sortOrder': _integer(second['sortOrder'])});
-    await api.updateHomepageSection('${second['sectionKey']}', {'sortOrder': _integer(first['sortOrder'])});
-  }, 'ترتیب بخش‌ها به‌روز شد');
+  Future<void> _saveSectionOrder(List<String> sectionKeys) async {
+    setState(() {
+      _sectionOrderOverride = sectionKeys;
+      _saving = true;
+    });
+    try {
+      await ref.read(adminApiProvider).reorderHomepageSections(sectionKeys);
+      ref.invalidate(storeConfigurationProvider);
+      if (mounted) showAppMessage(context, 'ترتیب بخش‌ها به‌روز شد');
+    } catch (error) {
+      if (mounted) {
+        setState(() => _sectionOrderOverride = null);
+        showAppMessage(context, AdminApi.friendlyError(error), error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   Future<bool> _confirm(String message) async => await showDialog<bool>(context: context, builder: (context) => AlertDialog(
     content: Text(message),
