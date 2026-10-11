@@ -111,7 +111,8 @@ export default function AccountPage() {
     try {
       await customerApi("/customer/auth/verify-code", { method: "POST", body: JSON.stringify({ phone, code: asciiDigits(code) }) });
       const customer = await refreshAccount();
-      if (nextPath && customer.addresses.length > 0) router.replace(nextPath);
+      if (!customer.fullName?.trim()) setNotice("شماره‌ات تأیید شد. برای تکمیل حساب، نام و نام خانوادگی‌ات را ثبت کن.");
+      else if (nextPath && customer.addresses.length > 0) router.replace(nextPath);
       else setNotice("وارد حساب شدی. نشانی‌ات را ذخیره کن تا خرید را ادامه بدهی.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "تأیید کد انجام نشد.");
@@ -239,11 +240,12 @@ export default function AccountPage() {
           <section className="customer-section customer-profile-section">
             <div className="customer-section-heading"><span className="customer-section-icon"><UserRound size={19} /></span><div><h2>اطلاعات حساب</h2><p>شمارهٔ تأییدشده و مشخصات تماس تو</p></div></div>
             <div className="customer-verified-phone"><span>شمارهٔ همراه</span><strong dir="ltr">{profile.phone}</strong><small><Check size={14} /> تأییدشده</small></div>
+            {!profile.fullName?.trim() && <p className="customer-feedback customer-feedback-success" role="status">برای تکمیل حساب، نام و نام خانوادگی‌ات را وارد کن. ایمیل اختیاری است.</p>}
             <form className="store-form-grid customer-profile-form" onSubmit={(event) => void saveProfile(event)}>
-              <label className="store-field"><span>نام و نام خانوادگی</span><input autoComplete="name" required minLength={2} maxLength={160} value={profileForm.fullName} onChange={(event) => setProfileForm((form) => ({ ...form, fullName: event.target.value }))} /></label>
+              <label className="store-field"><span>نام و نام خانوادگی</span><input autoComplete="name" autoFocus={!profile.fullName?.trim()} required minLength={2} maxLength={160} value={profileForm.fullName} onChange={(event) => setProfileForm((form) => ({ ...form, fullName: event.target.value }))} /></label>
               <label className="store-field"><span>ایمیل <small>(اختیاری)</small></span><input type="email" autoComplete="email" maxLength={254} value={profileForm.email} onChange={(event) => setProfileForm((form) => ({ ...form, email: event.target.value }))} /></label>
               <label className="customer-default-check store-form-wide"><input type="checkbox" checked={profileForm.marketingOptIn} onChange={(event) => setProfileForm((form) => ({ ...form, marketingOptIn: event.target.checked }))} /><span>مایلم پیامک‌های اطلاع‌رسانی و پیشنهادهای فروشگاه را دریافت کنم. هر زمان بخواهم می‌توانم این گزینه را غیرفعال کنم.</span></label>
-              <button className="outline-button customer-save-profile" type="submit" disabled={busy}>ذخیرهٔ اطلاعات</button>
+              <button className="outline-button customer-save-profile" type="submit" disabled={busy}>{profile.fullName?.trim() ? "ذخیرهٔ اطلاعات" : "ثبت مشخصات و تکمیل حساب"}</button>
             </form>
             <div className="customer-rubika-card">
               <label className="customer-default-check"><input type="checkbox" checked={profileForm.rubikaMarketingOptIn} onChange={(event) => setProfileForm((form) => ({ ...form, rubikaMarketingOptIn: event.target.checked }))} /><span>مایلم پیشنهادها و پیام‌های فروشگاه را از طریق ربات روبیکا دریافت کنم. این رضایت مستقل از پیامک است و هر زمان می‌توانم لغوش کنم.</span></label>

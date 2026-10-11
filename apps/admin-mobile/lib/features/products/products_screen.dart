@@ -7,6 +7,7 @@ import '../../core/admin_image_picker_field.dart';
 import '../../core/admin_api.dart';
 import '../../core/providers.dart';
 import '../../core/ui_helpers.dart';
+import 'product_colors.dart';
 
 class ProductsScreen extends ConsumerStatefulWidget {
   const ProductsScreen({super.key});
@@ -463,6 +464,20 @@ class _ProductCard extends StatelessWidget {
             (variant) => ListTile(
               contentPadding: EdgeInsets.zero,
               dense: true,
+              leading: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: _productColorFromHex(
+                    variant['colorHex'],
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
+                  ),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                ),
+              ),
               title: Text(
                 '${variant['colorName'] ?? ''} · ${variant['sizeLabel'] ?? ''}  (${variant['sku'] ?? ''})',
                 style: const TextStyle(
@@ -521,9 +536,9 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _price = TextEditingController();
-  final _color = TextEditingController(text: 'مشکی');
   final _stock = TextEditingController(text: '0');
   final _imagePicker = ImagePicker();
+  ProductColorOption? _selectedColor = productColorPalette.first;
   String? _categoryId;
   String _size = 'M';
   Uint8List? _imageBytes;
@@ -544,7 +559,6 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
   void dispose() {
     _name.dispose();
     _price.dispose();
-    _color.dispose();
     _stock.dispose();
     super.dispose();
   }
@@ -686,7 +700,23 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
                 const SizedBox(height: 14),
                 Row(
                   children: [
-                    Expanded(child: _field(_color, 'رنگ', required: true)),
+                    Expanded(
+                      child: ProductColorField(
+                        initialValue: productColorPalette.first.name,
+                        selectedColor: _selectedColor,
+                        onSelected: (color) =>
+                            setState(() => _selectedColor = color),
+                        onQueryChanged: (query) {
+                          if (_selectedColor != null &&
+                              normalizeProductColorText(query) !=
+                                  normalizeProductColorText(
+                                    _selectedColor!.name,
+                                  )) {
+                            setState(() => _selectedColor = null);
+                          }
+                        },
+                      ),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: DropdownButtonFormField<String>(
@@ -792,7 +822,8 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
               'status': 'draft',
               'variants': [
                 {
-                  'colorName': _color.text.trim(),
+                  'colorName': _selectedColor!.name,
+                  'colorHex': _selectedColor!.hex,
                   'sizeLabel': _size,
                   'priceToman': price,
                   'stockQuantity': stock,
@@ -1154,9 +1185,9 @@ class _AddVariantDialog extends StatefulWidget {
 
 class _AddVariantDialogState extends State<_AddVariantDialog> {
   final _form = GlobalKey<FormState>();
-  final _color = TextEditingController();
   final _price = TextEditingController();
   final _stock = TextEditingController(text: '0');
+  ProductColorOption? _selectedColor;
   String _size = 'M';
   static const _sizes = <(String, String)>[
     ('XS', 'XS'),
@@ -1171,7 +1202,6 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
 
   @override
   void dispose() {
-    _color.dispose();
     _price.dispose();
     _stock.dispose();
     super.dispose();
@@ -1193,7 +1223,23 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
             const SizedBox(height: 12),
             Row(
               children: [
-                Expanded(child: _field(_color, 'رنگ', required: true)),
+                Expanded(
+                  child: ProductColorField(
+                    initialValue: '',
+                    selectedColor: _selectedColor,
+                    onSelected: (color) =>
+                        setState(() => _selectedColor = color),
+                    onQueryChanged: (query) {
+                      if (_selectedColor != null &&
+                          normalizeProductColorText(query) !=
+                              normalizeProductColorText(
+                                _selectedColor!.name,
+                              )) {
+                        setState(() => _selectedColor = null);
+                      }
+                    },
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: DropdownButtonFormField<String>(
@@ -1258,7 +1304,8 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
           final stock = int.tryParse(_asciiDigits(_stock.text.trim()));
           if (int.tryParse(price) == null || stock == null) return;
           Navigator.pop(context, {
-            'colorName': _color.text.trim(),
+            'colorName': _selectedColor!.name,
+            'colorHex': _selectedColor!.hex,
             'sizeLabel': _size,
             'priceToman': price,
             'stockQuantity': stock,
@@ -1485,4 +1532,12 @@ String _asciiDigits(String value) {
     final index = persian.indexOf(character);
     return '${index >= 0 ? index : arabic.indexOf(character)}';
   });
+}
+
+Color _productColorFromHex(Object? value, Color fallback) {
+  if (value is! String || !RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(value)) {
+    return fallback;
+  }
+  final rgb = int.tryParse(value.substring(1), radix: 16);
+  return rgb == null ? fallback : Color(0xFF000000 | rgb);
 }

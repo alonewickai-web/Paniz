@@ -315,8 +315,10 @@ img { display: block; }
 .price-stack del small { font-size: 8px; }
 .price-stack strong { color: var(--rose); font-size: 13px; font-weight: 700; white-space: nowrap; }
 .price-stack strong small { font-size: 9px; font-weight: 500; }
-.swatch-list { display: flex; gap: 5px; padding-bottom: 3px; }
-.swatch-list i { width: 12px; height: 12px; border: 1px solid rgba(70,60,60,.12); border-radius: 50%; }
+.swatch-list { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 10px; margin-top: 8px; color: var(--muted); }
+.swatch-item { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
+.swatch-item i { flex: 0 0 auto; width: 12px; height: 12px; border: 1px solid rgba(70,60,60,.18); border-radius: 50%; }
+.swatch-item small, .swatch-more { color: var(--muted); font-size: 10px; line-height: 1.5; }
 .empty-state { min-height: 290px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; border: 1px dashed #e5d8d7; border-radius: 16px; color: #92878c; text-align: center; }
 .empty-state svg { color: #ca7987; }
 .empty-state strong { color: var(--ink); font-size: 16px; }
@@ -591,8 +593,10 @@ html[data-theme="dark"] .store-suggestions { background: var(--surface); border-
   .price-stack del { font-size: 8px; }
   .price-stack strong { font-size: 11px; }
   .price-stack strong small { font-size: 8px; }
-  .swatch-list { gap: 3px; }
-  .swatch-list i { width: 10px; height: 10px; }
+  .swatch-list { gap: 3px 7px; margin-top: 6px; }
+  .swatch-item { gap: 3px; }
+  .swatch-item i { width: 10px; height: 10px; }
+  .swatch-item small, .swatch-more { font-size: 9px; }
   .load-more-wrap { margin-top: 17px; font-size: 9px; }
   .outline-button { min-height: 37px; padding-inline: 11px; font-size: 9px; }
   .story-banner { min-height: 235px; grid-template-columns: .95fr 1.05fr; border-radius: 17px; }
@@ -657,7 +661,7 @@ html[data-theme="dark"] .store-suggestions { background: var(--surface); border-
   .product-details { padding-inline: 7px; }
   .product-price-row { gap: 2px; }
   .price-stack strong { font-size: 10px; }
-  .swatch-list i { width: 9px; height: 9px; }
+  .swatch-item i { width: 9px; height: 9px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

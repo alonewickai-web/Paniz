@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../database/prisma.service";
 import { ListProductsQuery } from "./dto/list-products.query";
 import { StoreManagementService } from "../admin/store-management.service";
+import { productColorKey, resolveProductColorHex, resolveProductColorName } from "./product-color";
 
 const publicProductRelations = {
   category: { select: { id: true, name: true, slug: true } },
@@ -163,7 +164,7 @@ export class CatalogService {
         variants: product.variants.map((variant) => ({
           id: variant.id.toString(),
           sku: variant.sku,
-          color: { name: variant.colorName, hex: variant.colorHex },
+          color: { name: resolveProductColorName(variant.colorName), hex: resolveProductColorHex(variant.colorName, variant.colorHex) },
           size: variant.sizeLabel,
           priceToman: toSafeNumber(variant.priceToman),
           compareAtPriceToman: variant.compareAtPriceToman === null
@@ -195,14 +196,14 @@ export class CatalogService {
         : toSafeNumber(cheapestVariant.compareAtPriceToman),
       colors: Array.from(
         new Map(product.variants.map((variant) => [
-          variant.colorName,
-          { name: variant.colorName, value: variant.colorHex ?? "#d8c7af" },
+          productColorKey(variant.colorName),
+          { name: resolveProductColorName(variant.colorName), value: resolveProductColorHex(variant.colorName, variant.colorHex) },
         ])).values(),
       ),
       sizes: Array.from(new Set(product.variants.map((variant) => variant.sizeLabel))),
       variants: product.variants.map((variant) => ({
         id: variant.id.toString(),
-        color: { name: variant.colorName, value: variant.colorHex ?? "#d8c7af" },
+        color: { name: resolveProductColorName(variant.colorName), value: resolveProductColorHex(variant.colorName, variant.colorHex) },
         size: variant.sizeLabel,
         priceToman: toSafeNumber(variant.priceToman),
         compareAtPriceToman: variant.compareAtPriceToman === null

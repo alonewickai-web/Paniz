@@ -43,8 +43,11 @@ export function StoreProductCard({ product }: { product: StoreProduct }) {
             {product.compareAtPriceToman && <del>{formatToman(product.compareAtPriceToman)}</del>}
             <strong>{product.priceToman === null ? "قیمت نامشخص" : formatToman(product.priceToman)}</strong>
           </div>
-          <div className="swatch-list" aria-label="رنگ‌های محصول">{product.colors.slice(0, 3).map((color) => <i key={color.name} style={{ backgroundColor: color.value }} title={color.name} />)}</div>
         </div>
+        {product.colors.length > 0 && <div className="swatch-list" aria-label={`رنگ‌های محصول: ${product.colors.map((color) => color.name).join("، ")}`}>
+          {product.colors.slice(0, 3).map((color) => <span className="swatch-item" key={color.name} title={color.name}><i style={{ backgroundColor: color.value }} /><small>{color.name}</small></span>)}
+          {product.colors.length > 3 && <small className="swatch-more">+{new Intl.NumberFormat("fa-IR").format(product.colors.length - 3)} رنگ</small>}
+        </div>}
       </div>
     </article>
   );

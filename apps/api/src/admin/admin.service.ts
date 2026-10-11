@@ -19,6 +19,7 @@ import { ListAdminOrdersQuery } from "./dto/list-admin-orders.query";
 import { UpdateAdminProductDto } from "./dto/update-admin-product.dto";
 import { UpdateAdminVariantDto } from "./dto/update-admin-variant.dto";
 import { UpdateAdminOrderDto } from "./dto/update-admin-order.dto";
+import { productColorKey, resolveProductColorHex, resolveProductColorName } from "../catalog/product-color";
 
 const statusTransitions: Record<string, readonly string[]> = {
   pending_payment: ["cancelled"],
@@ -289,8 +290,8 @@ export class AdminService {
             data: {
               productId: product.id,
               sku,
-              colorName: variant.colorName.trim(),
-              colorHex: variant.colorHex?.toUpperCase() ?? null,
+              colorName: resolveProductColorName(variant.colorName),
+              colorHex: resolveProductColorHex(variant.colorName, variant.colorHex),
               sizeLabel: variant.sizeLabel.trim(),
               priceToman: BigInt(variant.priceToman),
               compareAtPriceToman: variant.compareAtPriceToman ? BigInt(variant.compareAtPriceToman) : null,
@@ -395,12 +396,27 @@ export class AdminService {
 
     try {
       const variant = await this.prisma.$transaction(async (tx) => {
+        const colorKey = productColorKey(input.colorName);
+        const colorHex = resolveProductColorHex(input.colorName, input.colorHex);
+        const existingColors = await tx.productVariant.findMany({
+          where: { productId },
+          select: { colorName: true, colorHex: true },
+        });
+        if (existingColors.some((existing) =>
+          productColorKey(existing.colorName) === colorKey &&
+          resolveProductColorHex(existing.colorName, existing.colorHex) !== colorHex
+        )) {
+          throw new BadRequestException({
+            code: "PRODUCT_COLOR_HEX_MISMATCH",
+            message: "برای یک نام رنگ، کد رنگ باید در همهٔ سایزها یکسان باشد",
+          });
+        }
         const created = await tx.productVariant.create({
           data: {
             productId,
             sku: input.sku?.trim().toUpperCase() || await nextProductSku(tx, productId),
-            colorName: input.colorName.trim(),
-            colorHex: input.colorHex?.toUpperCase() ?? null,
+            colorName: resolveProductColorName(input.colorName),
+            colorHex,
             sizeLabel: input.sizeLabel.trim(),
             priceToman: BigInt(input.priceToman),
             compareAtPriceToman: input.compareAtPriceToman ? BigInt(input.compareAtPriceToman) : null,
@@ -762,6 +778,7 @@ function toSafeNumber(value: bigint): number {
 function validateVariants(variants: CreateAdminProductDto["variants"]): void {
   const combinations = new Set<string>();
   const skus = new Set<string>();
+  const colors = new Map<string, string>();
   for (const variant of variants) {
     if (variant.sku?.trim()) {
       const sku = variant.sku.trim().toUpperCase();
@@ -771,7 +788,17 @@ function validateVariants(variants: CreateAdminProductDto["variants"]): void {
     if (variant.compareAtPriceToman && BigInt(variant.compareAtPriceToman) <= BigInt(variant.priceToman)) {
       throw new BadRequestException({ code: "INVALID_COMPARE_AT_PRICE", message: "قیمت قبل از تخفیف باید بیشتر از قیمت فروش باشد" });
     }
-    const combination = `${variant.colorName.trim().toLocaleLowerCase()}\u0000${variant.sizeLabel.trim().toLocaleLowerCase()}`;
+    const colorKey = productColorKey(variant.colorName);
+    const colorHex = resolveProductColorHex(variant.colorName, variant.colorHex);
+    const existingHex = colors.get(colorKey);
+    if (existingHex && existingHex !== colorHex) {
+      throw new BadRequestException({
+        code: "PRODUCT_COLOR_HEX_MISMATCH",
+        message: "برای یک نام رنگ، کد رنگ باید در همهٔ سایزها یکسان باشد",
+      });
+    }
+    colors.set(colorKey, colorHex);
+    const combination = `${colorKey}\u0000${variant.sizeLabel.trim().toLocaleLowerCase()}`;
     if (combinations.has(combination)) {
       throw new BadRequestException({ code: "DUPLICATE_VARIANT", message: "ترکیب رنگ و سایز تکراری است" });
     }
