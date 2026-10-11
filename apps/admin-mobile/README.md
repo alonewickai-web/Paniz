@@ -86,6 +86,6 @@ flutter build apk --release --split-per-abi `
 در توسعه، سرویس پیامک واقعی متصل نیست و کد آزمایشی ورود مشتری از API برمی‌گردد؛ در production باید سرویس پیامک و **CUSTOMER_AUTH_SECRET** تنظیم شوند. درگاه پرداخت و روش ارسال نیز هنوز به پروژه متصل نشده‌اند.
 ## UI refresh
 
-Version `0.2.5+7` introduces the PANIZ Admin mobile design system: a data-driven dashboard, five-tab RTL navigation, secondary tools in the drawer and More screen, consistent status and empty states, and a saved light/dark preference. The refreshed screens keep the existing API contracts and operational flows. Sales charts remain absent because the current API does not provide daily trend data.
+Version `0.2.6+8` introduces the PANIZ Admin mobile design system: a data-driven dashboard, five-tab RTL navigation, secondary tools in the drawer and More screen, consistent status and empty states, and a saved light/dark preference. A moon/sun toggle is visible at the top of the login page, main tabs, and secondary tool pages. The refreshed screens keep the existing API contracts and operational flows. Sales charts remain absent because the current API does not provide daily trend data.
 
 See [the admin mobile design notes](../../design-system/panizstyle/pages/admin-mobile.md) for palette, interaction, and navigation details.

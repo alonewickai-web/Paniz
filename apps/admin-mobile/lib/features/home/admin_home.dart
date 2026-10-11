@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/admin_api.dart';
 import '../../core/paniz_theme.dart';
 import '../../core/providers.dart';
+import '../../core/theme_toggle.dart';
 import '../../core/ui_helpers.dart';
 import '../auth/security_settings_screen.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -39,7 +40,10 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
 
   void _pushTool(String title, Widget screen) {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => Scaffold(
-      appBar: AppBar(title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800))),
+      appBar: AppBar(
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+        actions: const [PanizThemeToggle(), SizedBox(width: 4)],
+      ),
       body: SafeArea(child: screen),
     )));
   }
@@ -72,13 +76,12 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
   @override
   Widget build(BuildContext context) {
     final dashboard = ref.watch(dashboardProvider);
-    final themeMode = ref.watch(themeModeProvider).asData?.value ?? ThemeMode.system;
     final newOrders = dashboard.maybeWhen(data: _newOrderCount, orElse: () => 0);
     final connectionLabel = dashboard.when(data: (_) => 'اتصال برقرار است', loading: () => 'در حال بررسی اتصال', error: (_, __) => 'اتصال برقرار نیست');
     final connectionColor = dashboard.when(data: (_) => context.paniz.success, loading: () => context.paniz.warning, error: (_, __) => context.paniz.error);
 
     return Scaffold(
-      drawer: _buildDrawer(themeMode, connectionLabel, connectionColor),
+      drawer: _buildDrawer(connectionLabel, connectionColor),
       appBar: AppBar(
         leading: Builder(builder: (context) => IconButton(
           tooltip: 'بازکردن منوی مدیریت',
@@ -100,6 +103,7 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
           ])),
         ]),
         actions: [
+          const PanizThemeToggle(),
           IconButton(
             tooltip: 'سفارش‌های نیازمند رسیدگی',
             onPressed: () => setState(() => _index = 2),
@@ -164,7 +168,7 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
     );
   }
 
-  Widget _buildDrawer(ThemeMode themeMode, String connectionLabel, Color connectionColor) => Drawer(
+  Widget _buildDrawer(String connectionLabel, Color connectionColor) => Drawer(
     width: math.min(360.0, MediaQuery.sizeOf(context).width * .9),
     child: SafeArea(child: Column(children: [
       Padding(
@@ -210,14 +214,6 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
         _drawerTile('تبلیغات و روبیکا', Icons.campaign_outlined, onTap: () => _showPlanned('تبلیغات و روبیکا')),
         _drawerHeading('حساب و ظاهر برنامه'),
         _drawerTile('امنیت و ورود', Icons.shield_outlined, detail: 'اطلاعات ورود مدیر', onTap: () => _pushToolFromDrawer('امنیت و ورود', SecuritySettingsScreen(admin: widget.admin))),
-        SwitchListTile.adaptive(
-          value: themeMode == ThemeMode.dark,
-          onChanged: (value) => ref.read(themeModeProvider.notifier).setDark(value),
-          secondary: Icon(themeMode == ThemeMode.dark ? Icons.dark_mode_outlined : Icons.light_mode_outlined, color: context.paniz.primary),
-          title: const Text('حالت تیره'),
-          subtitle: const Text('ذخیره برای دفعات بعد', style: TextStyle(fontSize: 12)),
-          contentPadding: const EdgeInsetsDirectional.only(start: 18, end: 14),
-        ),
         _drawerTile('سرور و پایگاه داده', Icons.dns_outlined, onTap: () => _showPlanned('سرور و پایگاه داده')),
       ])),
       const Divider(height: 1),

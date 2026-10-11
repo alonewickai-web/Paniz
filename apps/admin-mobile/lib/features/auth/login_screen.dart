@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/admin_api.dart';
 import '../../core/providers.dart';
+import '../../core/theme_toggle.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -41,7 +42,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
-      child: Center(
+      child: Column(children: [
+        const Align(alignment: AlignmentDirectional.centerStart, child: Padding(padding: EdgeInsetsDirectional.fromSTEB(12, 8, 12, 0), child: PanizThemeToggle())),
+        Expanded(child: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
@@ -129,7 +132,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           ),
         ),
-      ),
+      )),
+      ]),
     ),
   );
 }

@@ -30,6 +30,7 @@ An operational control panel for the PANIZ women's apparel store. Prioritize qui
 ## Navigation and screen patterns
 
 - Keep five persistent bottom destinations in RTL order: Home, Products, Orders, Reports, More.
+- Show a moon/sun theme toggle in the top bar on login, main tabs, and secondary tool pages.
 - Keep secondary tools in the right-side drawer or More: inventory, store appearance, and account security.
 - Dashboard cards display values returned by the API. Do not invent sales trends or chart data that the API does not provide.
 - Lists use status pills, concise supporting details, visible refresh/error states, and empty states with a clear next action.
@@ -42,6 +43,7 @@ An operational control panel for the PANIZ women's apparel store. Prioritize qui
 - Confirm destructive product and image actions.
 - Use a reasoned inventory adjustment flow and require a tracking code when an order is marked shipped.
 - Persist the administrator's light/dark preference locally.
+- Use the sun icon in dark mode to switch to light, and the moon icon in light mode to switch to dark.
 - Preserve existing API contracts and business rules while changing presentation.
 
 ## Implementation
