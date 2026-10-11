@@ -45,7 +45,7 @@ async function main() {
   assert.deepEqual(await service(productionConfig).sendLoginCode(phone, code), {});
   assert.equal(requests[0].url, 'https://api.sms.ir/v1/send/bulk');
   assert.equal(requests[0].body.lineNumber, productionConfig.SMSIR_LINE_NUMBER);
-  assert.equal(requests[0].body.MessageText, `کد ورود به پانیذ: ${code}`);
+  assert.equal(requests[0].body.MessageText, `کد ورود شما به فروشگاه پانیذ: ${code}`);
   respond({ status: 1 });
   assert.deepEqual(await service({ ...productionConfig, SMSIR_OTP_TEMPLATE_ID: '234567', SMSIR_OTP_PARAMETER: 'OTP' }).sendLoginCode(phone, code), {});
   assert.equal(requests[0].body.templateId, 234567);

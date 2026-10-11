@@ -57,7 +57,7 @@ export class CustomerSmsService {
             parameters: [{ name: parameterName, value: code }],
           } : {
             lineNumber,
-            MessageText: `کد ورود به پانیذ: ${code}`,
+            MessageText: `کد ورود شما به فروشگاه پانیذ: ${code}`,
             Mobiles: [toSmsIranPhone(phone)],
           }),
           signal: AbortSignal.timeout(15_000),
