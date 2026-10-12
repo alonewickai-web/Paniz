@@ -130,61 +130,109 @@ class AdminApi {
 
   Future<JsonMap> dashboard() async => _data(await dio.get('admin/dashboard'));
 
-  Future<JsonMap> customers({int page = 1, String? query, String? city, String registration = 'any', String purchaseSort = 'none', String? productId}) async =>
-      _data(await dio.get('admin/customers', queryParameters: {
-        'page': page, 'pageSize': 50,
+  Future<JsonMap> customers({
+    int page = 1,
+    String? query,
+    String? city,
+    String registration = 'any',
+    String purchaseSort = 'none',
+    String? productId,
+  }) async => _data(
+    await dio.get(
+      'admin/customers',
+      queryParameters: {
+        'page': page,
+        'pageSize': 50,
         if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
         if (city != null && city.trim().isNotEmpty) 'city': city.trim(),
         'registration': registration,
         'purchaseSort': purchaseSort,
         if (productId != null && productId.isNotEmpty) 'productId': productId,
-      }));
+      },
+    ),
+  );
 
+  Future<JsonMap> previewSmsAudience(JsonMap filters) async => _data(
+    await dio.post('admin/sms-campaigns/preview', data: {'filters': filters}),
+  );
 
-  Future<JsonMap> previewSmsAudience(JsonMap filters) async =>
-      _data(await dio.post('admin/sms-campaigns/preview', data: {'filters': filters}));
+  Future<List<JsonMap>> smsCampaigns() async =>
+      _list(_payload(await dio.get('admin/sms-campaigns')));
 
-  Future<List<JsonMap>> smsCampaigns() async => _list(_payload(await dio.get('admin/sms-campaigns')));
-
-  Future<JsonMap> createSmsCampaign(String title, String message, JsonMap filters) async =>
-      _data(await dio.post('admin/sms-campaigns', data: {'title': title, 'message': message, 'filters': filters}));
+  Future<JsonMap> createSmsCampaign(
+    String title,
+    String message,
+    JsonMap filters,
+  ) async => _data(
+    await dio.post(
+      'admin/sms-campaigns',
+      data: {'title': title, 'message': message, 'filters': filters},
+    ),
+  );
 
   Future<JsonMap> sendSmsCampaign(String id) async =>
       _data(await dio.post('admin/sms-campaigns/$id/send'));
 
-  String _campaignPath(String channel) => channel == 'rubika' ? 'admin/rubika-campaigns' : 'admin/sms-campaigns';
+  String _campaignPath(String channel) =>
+      channel == 'rubika' ? 'admin/rubika-campaigns' : 'admin/sms-campaigns';
 
-  Future<JsonMap> previewCampaignAudience(String channel, JsonMap filters) async =>
-      _data(await dio.post('${_campaignPath(channel)}/preview', data: {'filters': filters}));
+  Future<JsonMap> previewCampaignAudience(
+    String channel,
+    JsonMap filters,
+  ) async => _data(
+    await dio.post(
+      '${_campaignPath(channel)}/preview',
+      data: {'filters': filters},
+    ),
+  );
 
   Future<List<JsonMap>> marketingCampaigns(String channel) async =>
       _list(_payload(await dio.get(_campaignPath(channel))));
 
-  Future<JsonMap> createMarketingCampaign(String channel, String title, String message, JsonMap filters) async =>
-      _data(await dio.post(_campaignPath(channel), data: {'title': title, 'message': message, 'filters': filters}));
+  Future<JsonMap> createMarketingCampaign(
+    String channel,
+    String title,
+    String message,
+    JsonMap filters,
+  ) async => _data(
+    await dio.post(
+      _campaignPath(channel),
+      data: {'title': title, 'message': message, 'filters': filters},
+    ),
+  );
 
   Future<JsonMap> sendMarketingCampaign(String channel, String id) async =>
       _data(await dio.post('${_campaignPath(channel)}/$id/send'));
 
-  Future<List<JsonMap>> coupons() async => _list(_payload(await dio.get('admin/coupons')));
+  Future<List<JsonMap>> coupons() async =>
+      _list(_payload(await dio.get('admin/coupons')));
 
-  Future<JsonMap> saveCoupon(JsonMap input, {String? id}) async =>
-      _data(id == null ? await dio.post('admin/coupons', data: input) : await dio.patch('admin/coupons/$id', data: input));
+  Future<JsonMap> saveCoupon(JsonMap input, {String? id}) async => _data(
+    id == null
+        ? await dio.post('admin/coupons', data: input)
+        : await dio.patch('admin/coupons/$id', data: input),
+  );
 
-  Future<List<JsonMap>> productOptions() async => _list(_payload(await dio.get('admin/products/options')));
+  Future<List<JsonMap>> productOptions() async =>
+      _list(_payload(await dio.get('admin/products/options')));
 
-  Future<JsonMap> socialStatus() async => _data(await dio.get('admin/social/status'));
+  Future<JsonMap> socialStatus() async =>
+      _data(await dio.get('admin/social/status'));
 
-  Future<List<JsonMap>> socialPosts() async => _list(_payload(await dio.get('admin/social/posts')));
+  Future<List<JsonMap>> socialPosts() async =>
+      _list(_payload(await dio.get('admin/social/posts')));
 
   Future<JsonMap> createSocialPost(JsonMap input) async =>
       _data(await dio.post('admin/social/posts', data: input));
 
-  Future<JsonMap> operationsStatus() async => _data(await dio.get('admin/operations/status'));
+  Future<JsonMap> operationsStatus() async =>
+      _data(await dio.get('admin/operations/status'));
 
-  Future<List<JsonMap>> backups() async => _list(_payload(await dio.get('admin/operations/backups')));
+  Future<List<JsonMap>> backups() async =>
+      _list(_payload(await dio.get('admin/operations/backups')));
 
-  Future<JsonMap> createBackup() async => _data(await dio.post('admin/operations/backups'));
+  Future<JsonMap> createBackup() async =>
+      _data(await dio.post('admin/operations/backups'));
 
   Future<JsonMap> storeConfiguration() async =>
       _data(await dio.get('admin/store'));
@@ -196,7 +244,12 @@ class AdminApi {
       _data(await dio.patch('admin/homepage-sections/$key', data: changes));
 
   Future<JsonMap> reorderHomepageSections(List<String> sectionKeys) async =>
-      _data(await dio.patch('admin/homepage-sections/reorder', data: {'sectionKeys': sectionKeys}));
+      _data(
+        await dio.patch(
+          'admin/homepage-sections/reorder',
+          data: {'sectionKeys': sectionKeys},
+        ),
+      );
 
   Future<JsonMap> createCategory(JsonMap input) async =>
       _data(await dio.post('admin/categories', data: input));
@@ -324,6 +377,14 @@ class AdminApi {
 
   Future<JsonMap> addProductImage(String productId, JsonMap input) async =>
       _data(await dio.post('admin/products/$productId/images', data: input));
+
+  Future<JsonMap> updateProductImage(
+    String productId,
+    String imageId,
+    JsonMap changes,
+  ) async => _data(
+    await dio.patch('admin/products/$productId/images/$imageId', data: changes),
+  );
 
   Future<void> deleteProductImage(String productId, String imageId) async {
     await dio.delete('admin/products/$productId/images/$imageId');

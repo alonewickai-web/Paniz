@@ -17,6 +17,7 @@ import { CreateAdminProductDto } from "./dto/create-admin-product.dto";
 import { ListAdminProductsQuery } from "./dto/list-admin-products.query";
 import { ListAdminOrdersQuery } from "./dto/list-admin-orders.query";
 import { UpdateAdminProductDto } from "./dto/update-admin-product.dto";
+import { UpdateAdminProductImageDto } from "./dto/update-admin-product-image.dto";
 import { UpdateAdminVariantDto } from "./dto/update-admin-variant.dto";
 import { UpdateAdminOrderDto } from "./dto/update-admin-order.dto";
 import { productColorKey, resolveProductColorHex, resolveProductColorName } from "../catalog/product-color";
@@ -218,9 +219,16 @@ export class AdminService {
       data: products.map((product) => ({
         id: product.id.toString(),
         name: product.name,
+        categoryId: product.categoryId?.toString() ?? null,
         slug: product.slug,
         status: product.deletedAt ? "archived" : product.status,
         shortDescription: product.shortDescription,
+        description: product.description,
+        material: product.material,
+        careInstructions: product.careInstructions,
+        sizeGuide: product.sizeGuide,
+        seoTitle: product.seoTitle,
+        seoDescription: product.seoDescription,
         category: product.category ? { id: product.category.id.toString(), name: product.category.name, slug: product.category.slug } : null,
         images: product.images.map((image) => ({ id: image.id.toString(), imagePath: image.imagePath, altText: image.altText, isPrimary: image.isPrimary, sortOrder: image.sortOrder })),
         variants: product.variants.map((variant) => ({
@@ -341,7 +349,7 @@ export class AdminService {
     const before = await this.prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
     if (!before) throw new NotFoundException({ code: "PRODUCT_NOT_FOUND", message: "محصول پیدا نشد" });
 
-    if (input.categoryId) {
+    if (input.categoryId !== undefined && input.categoryId !== null) {
       const categoryId = parseId(input.categoryId, "شناسهٔ دسته‌بندی");
       const category = await this.prisma.category.findFirst({ where: { id: categoryId, isActive: true } });
       if (!category) throw new NotFoundException({ code: "CATEGORY_NOT_FOUND", message: "دسته‌بندی فعال پیدا نشد" });
@@ -354,11 +362,20 @@ export class AdminService {
     const data: Prisma.ProductUpdateInput = {};
     if (input.name !== undefined) data.name = input.name.trim();
     if (input.slug !== undefined) data.slug = input.slug.trim();
-    if (input.categoryId !== undefined) data.category = { connect: { id: BigInt(input.categoryId) } };
+    if (input.categoryId !== undefined) {
+      data.category = input.categoryId === null
+        ? { disconnect: true }
+        : { connect: { id: BigInt(input.categoryId) } };
+    }
     if (input.shortDescription !== undefined) data.shortDescription = input.shortDescription.trim() || null;
     if (input.description !== undefined) data.description = input.description.trim() || null;
     if (input.material !== undefined) data.material = input.material.trim() || null;
     if (input.careInstructions !== undefined) data.careInstructions = input.careInstructions.trim() || null;
+    if (input.seoTitle !== undefined) data.seoTitle = input.seoTitle.trim() || null;
+    if (input.seoDescription !== undefined) data.seoDescription = input.seoDescription.trim() || null;
+    if (input.sizeGuide !== undefined) {
+      data.sizeGuide = input.sizeGuide === null ? Prisma.JsonNull : input.sizeGuide as Prisma.InputJsonValue;
+    }
     if (input.status !== undefined) {
       data.status = input.status;
       data.publishedAt = input.status === "published" ? before.publishedAt ?? new Date() : null;
@@ -519,6 +536,53 @@ export class AdminService {
     return { data: { id: imageId.toString(), deleted: true } };
   }
 
+  async updateProductImage(admin: AuthenticatedAdmin, rawProductId: string, rawImageId: string, input: UpdateAdminProductImageDto) {
+    requireManager(admin);
+    if (Object.keys(input).length === 0) {
+      throw new BadRequestException({ code: "EMPTY_PRODUCT_IMAGE_UPDATE", message: "تغییری برای ذخیره انتخاب نشده است" });
+    }
+    const productId = parseId(rawProductId, "شناسهٔ محصول");
+    const imageId = parseId(rawImageId, "شناسهٔ تصویر");
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.productImage.findFirst({ where: { id: imageId, productId } });
+      if (!current) throw new NotFoundException({ code: "PRODUCT_IMAGE_NOT_FOUND", message: "تصویر محصول پیدا نشد" });
+
+      if (input.isPrimary === true) {
+        await tx.productImage.updateMany({ where: { productId, id: { not: imageId }, isPrimary: true }, data: { isPrimary: false } });
+      } else if (input.isPrimary === false && current.isPrimary) {
+        const nextPrimary = await tx.productImage.findFirst({
+          where: { productId, id: { not: imageId } },
+          orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        });
+        if (!nextPrimary) {
+          throw new ConflictException({ code: "PRODUCT_IMAGE_REQUIRED", message: "محصول باید دست‌کم یک تصویر اصلی داشته باشد" });
+        }
+        await tx.productImage.update({ where: { id: nextPrimary.id }, data: { isPrimary: true } });
+      }
+
+      const image = await tx.productImage.update({
+        where: { id: imageId },
+        data: {
+          ...(input.imagePath !== undefined ? { imagePath: input.imagePath.trim() } : {}),
+          ...(input.altText !== undefined ? { altText: input.altText.trim() || null } : {}),
+          ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+          ...(input.isPrimary !== undefined ? { isPrimary: input.isPrimary } : {}),
+        },
+      });
+      await tx.adminAuditLog.create({
+        data: {
+          adminId: admin.id,
+          action: "product_image.updated",
+          entityType: "product_image",
+          entityId: image.id,
+          details: { productId: productId.toString(), imagePath: image.imagePath, altText: image.altText, isPrimary: image.isPrimary, sortOrder: image.sortOrder },
+        },
+      });
+      return image;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    return { data: { id: updated.id.toString(), imagePath: updated.imagePath, altText: updated.altText, isPrimary: updated.isPrimary, sortOrder: updated.sortOrder } };
+  }
+
   async archiveProduct(admin: AuthenticatedAdmin, rawProductId: string) {
     requireManager(admin);
     const productId = parseId(rawProductId, "شناسهٔ محصول");
@@ -622,42 +686,84 @@ export class AdminService {
     }
 
     const data: Prisma.ProductVariantUpdateInput = {};
+    const nextColorName = input.colorName === undefined
+      ? current.colorName
+      : resolveProductColorName(input.colorName);
+    const nextColorHex = input.colorHex === undefined
+      ? (input.colorName === undefined ? current.colorHex ?? resolveProductColorHex(nextColorName) : resolveProductColorHex(nextColorName))
+      : resolveProductColorHex(nextColorName, input.colorHex);
+    const nextSizeLabel = input.sizeLabel === undefined ? current.sizeLabel : input.sizeLabel.trim();
+    if (input.colorName !== undefined || input.colorHex !== undefined || input.sizeLabel !== undefined) {
+      const siblings = await this.prisma.productVariant.findMany({
+        where: { productId: current.productId, id: { not: variantId } },
+        select: { colorName: true, colorHex: true, sizeLabel: true },
+      });
+      const nextColorKey = productColorKey(nextColorName);
+      if (siblings.some((sibling) =>
+        productColorKey(sibling.colorName) === nextColorKey &&
+        resolveProductColorHex(sibling.colorName, sibling.colorHex) !== nextColorHex
+      )) {
+        throw new BadRequestException({ code: "PRODUCT_COLOR_HEX_MISMATCH", message: "برای یک نام رنگ، کد رنگ باید در همهٔ سایزها یکسان باشد" });
+      }
+      if (siblings.some((sibling) =>
+        productColorKey(sibling.colorName) === nextColorKey &&
+        sibling.sizeLabel.trim().toLocaleLowerCase() === nextSizeLabel.toLocaleLowerCase()
+      )) {
+        throw new ConflictException({ code: "VARIANT_ALREADY_EXISTS", message: "این ترکیب رنگ و سایز قبلاً برای محصول ثبت شده است" });
+      }
+      data.colorName = nextColorName;
+      data.colorHex = nextColorHex;
+      data.sizeLabel = nextSizeLabel;
+    }
     if (input.priceToman !== undefined) data.priceToman = nextPrice;
     if (input.compareAtPriceToman !== undefined) data.compareAtPriceToman = nextCompareAt;
     if (input.isActive !== undefined) data.isActive = input.isActive;
     if (input.lowStockThreshold !== undefined) data.lowStockThreshold = input.lowStockThreshold;
 
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const variant = await tx.productVariant.update({ where: { id: variantId }, data });
-      await tx.adminAuditLog.create({
-        data: {
-          adminId: admin.id,
-          action: "product_variant.updated",
-          entityType: "product_variant",
-          entityId: variant.id,
-          details: {
-            productName: current.product.name,
-            sku: current.sku,
-            priceBefore: current.priceToman.toString(),
-            priceAfter: variant.priceToman.toString(),
-            compareAtPriceBefore: current.compareAtPriceToman?.toString() ?? null,
-            compareAtPriceAfter: variant.compareAtPriceToman?.toString() ?? null,
-            isActive: variant.isActive,
+    try {
+      const updated = await this.prisma.$transaction(async (tx) => {
+        const variant = await tx.productVariant.update({ where: { id: variantId }, data });
+        await tx.adminAuditLog.create({
+          data: {
+            adminId: admin.id,
+            action: "product_variant.updated",
+            entityType: "product_variant",
+            entityId: variant.id,
+            details: {
+              productName: current.product.name,
+              sku: current.sku,
+              colorBefore: current.colorName,
+              colorAfter: variant.colorName,
+              sizeBefore: current.sizeLabel,
+              sizeAfter: variant.sizeLabel,
+              priceBefore: current.priceToman.toString(),
+              priceAfter: variant.priceToman.toString(),
+              compareAtPriceBefore: current.compareAtPriceToman?.toString() ?? null,
+              compareAtPriceAfter: variant.compareAtPriceToman?.toString() ?? null,
+              isActive: variant.isActive,
+            },
           },
-        },
+        });
+        return variant;
       });
-      return variant;
-    });
-
-    return {
-      data: {
-        variantId: updated.id.toString(),
-        sku: updated.sku,
-        priceToman: toSafeNumber(updated.priceToman),
-        compareAtPriceToman: updated.compareAtPriceToman === null ? null : toSafeNumber(updated.compareAtPriceToman),
-        isActive: updated.isActive,
-      },
-    };
+      return {
+        data: {
+          variantId: updated.id.toString(),
+          sku: updated.sku,
+          colorName: updated.colorName,
+          colorHex: updated.colorHex,
+          sizeLabel: updated.sizeLabel,
+          priceToman: toSafeNumber(updated.priceToman),
+          compareAtPriceToman: updated.compareAtPriceToman === null ? null : toSafeNumber(updated.compareAtPriceToman),
+          isActive: updated.isActive,
+        },
+      };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException({ code: "VARIANT_ALREADY_EXISTS", message: "این کد یا ترکیب رنگ و سایز قبلاً ثبت شده است" });
+      }
+      throw error;
+    }
   }
 
   async updateOrderStatus(admin: AuthenticatedAdmin, rawOrderId: string, input: UpdateAdminOrderDto) {

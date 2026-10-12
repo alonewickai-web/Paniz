@@ -13,6 +13,7 @@ import { CreateAdminProductDto } from "./dto/create-admin-product.dto";
 import { ListAdminOrdersQuery } from "./dto/list-admin-orders.query";
 import { ListAdminProductsQuery } from "./dto/list-admin-products.query";
 import { UpdateAdminProductDto } from "./dto/update-admin-product.dto";
+import { UpdateAdminProductImageDto } from "./dto/update-admin-product-image.dto";
 import { UpdateAdminVariantDto } from "./dto/update-admin-variant.dto";
 import { UpdateAdminOrderDto } from "./dto/update-admin-order.dto";
 
@@ -101,6 +102,13 @@ export class AdminController {
     return this.admin.addProductImage(request.admin!, id, body);
   }
 
+  @Patch("products/:id/images/:imageId")
+  @ApiOperation({ summary: "ویرایش، جایگزینی، مرتب‌سازی یا انتخاب تصویر اصلی محصول" })
+  @ApiBody({ type: UpdateAdminProductImageDto })
+  updateProductImage(@Req() request: AdminRequest, @Param("id") id: string, @Param("imageId") imageId: string, @Body() body: UpdateAdminProductImageDto) {
+    return this.admin.updateProductImage(request.admin!, id, imageId, body);
+  }
+
   @Delete("products/:id/images/:imageId")
   @ApiOperation({ summary: "حذف تصویر از گالری؛ تصویر اصلی در صورت نیاز جایگزین می‌شود" })
   deleteProductImage(@Req() request: AdminRequest, @Param("id") id: string, @Param("imageId") imageId: string) {
@@ -128,7 +136,7 @@ export class AdminController {
   }
 
   @Patch("products/variants/:variantId")
-  @ApiOperation({ summary: "ویرایش قیمت، تخفیف، وضعیت فعال یا آستانهٔ کمبود تنوع" })
+  @ApiOperation({ summary: "ویرایش رنگ، سایز، قیمت، تخفیف، وضعیت فعال یا آستانهٔ کمبود تنوع" })
   @ApiBody({ type: UpdateAdminVariantDto })
   updateVariant(@Req() request: AdminRequest, @Param("variantId") variantId: string, @Body() body: UpdateAdminVariantDto) {
     return this.admin.updateVariant(request.admin!, variantId, body);

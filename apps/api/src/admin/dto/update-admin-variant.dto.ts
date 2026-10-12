@@ -4,6 +4,21 @@ import { Type } from "class-transformer";
 export class UpdateAdminVariantDto {
   @IsOptional()
   @IsString()
+  @MaxLength(80)
+  colorName?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^#[0-9A-Fa-f]{6}$/)
+  colorHex?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  sizeLabel?: string;
+
+  @IsOptional()
+  @IsString()
   @Matches(/^\d{1,15}$/)
   priceToman?: string;
 

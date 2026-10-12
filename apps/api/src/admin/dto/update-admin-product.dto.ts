@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, Matches, MaxLength } from "class-validator";
+import { ArrayMaxSize, IsArray, IsIn, IsObject, IsOptional, IsString, Matches, MaxLength } from "class-validator";
 
 export class UpdateAdminProductDto {
   @IsOptional()
@@ -15,7 +15,7 @@ export class UpdateAdminProductDto {
   @IsOptional()
   @IsString()
   @Matches(/^\d{1,20}$/)
-  categoryId?: string;
+  categoryId?: string | null;
 
   @IsOptional()
   @IsString()
@@ -36,6 +36,22 @@ export class UpdateAdminProductDto {
   @IsString()
   @MaxLength(8_000)
   careInstructions?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  seoTitle?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  seoDescription?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(40)
+  @IsObject({ each: true })
+  sizeGuide?: Array<Record<string, string | number>> | null;
 
   @IsOptional()
   @IsIn(["draft", "published"])

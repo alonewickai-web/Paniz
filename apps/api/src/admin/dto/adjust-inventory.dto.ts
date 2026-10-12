@@ -2,8 +2,8 @@ import { IsInt, IsString, Max, MaxLength, Min } from "class-validator";
 
 export class AdjustInventoryDto {
   @IsInt()
-  @Min(-100_000)
-  @Max(100_000)
+  @Min(-2_147_483_647)
+  @Max(2_147_483_647)
   delta!: number;
 
   @IsString()
