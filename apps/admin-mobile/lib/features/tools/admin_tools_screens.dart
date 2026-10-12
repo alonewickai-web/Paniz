@@ -352,6 +352,9 @@ class SocialPublishingScreen extends ConsumerStatefulWidget {
 
 class _SocialPublishingScreenState extends ConsumerState<SocialPublishingScreen> {
   final _caption = TextEditingController();
+  final _productTitle = TextEditingController();
+  List<JsonMap> _products = const [];
+  String? _productId;
   String? _imagePath;
   bool _rubika = true;
   bool _instagram = false;
@@ -365,13 +368,56 @@ class _SocialPublishingScreenState extends ConsumerState<SocialPublishingScreen>
   @override
   void initState() { super.initState(); _load(); }
   @override
-  void dispose() { _caption.dispose(); super.dispose(); }
+  void dispose() { _caption.dispose(); _productTitle.dispose(); super.dispose(); }
   Future<void> _load() async {
     try {
       final status = await ref.read(adminApiProvider).socialStatus();
       final posts = await ref.read(adminApiProvider).socialPosts();
-      if (mounted) setState(() { _status = status; _posts = posts; });
+      final products = await ref.read(adminApiProvider).socialProducts();
+      if (mounted) setState(() { _status = status; _posts = posts; _products = products; });
     } catch (error) { if (mounted) setState(() => _error = AdminApi.friendlyError(error)); }
+  }
+
+  JsonMap? get _selectedProduct {
+    if (_productId == null) return null;
+    for (final product in _products) {
+      if ('${product['id']}' == _productId) return product;
+    }
+    return null;
+  }
+
+  void _selectProduct(String? id) {
+    JsonMap? selected;
+    for (final product in _products) {
+      if ('${product['id']}' == id) { selected = product; break; }
+    }
+    setState(() {
+      _productId = id;
+      _productTitle.text = selected == null ? '' : '${selected['title'] ?? selected['name'] ?? ''}';
+    });
+  }
+
+  String _buildCaption(JsonMap? product, {required bool includeProduct}) {
+    final message = _caption.text.trim();
+    if (!includeProduct || product == null) return message;
+    String joinValues(Object? value) {
+      if (value is! List) return '—';
+      final values = value.map((item) => '$item'.trim()).where((item) => item.isNotEmpty).toList();
+      return values.isEmpty ? '—' : values.join('، ');
+    }
+    final title = _productTitle.text.trim().isEmpty
+        ? '${product['title'] ?? product['name'] ?? '—'}'
+        : _productTitle.text.trim();
+    return [
+      if (message.isNotEmpty) message,
+      if (message.isNotEmpty) '',
+      'نام محصول: ${product['name'] ?? '—'}',
+      'عنوان محصول: $title',
+      'کد محصول: ${product['productCode'] ?? '—'}',
+      'تنوع رنگی محصول: ${joinValues(product['colors'])}',
+      'تنوع سایزی محصول: ${joinValues(product['sizes'])}',
+      'لینک خرید محصول: ${product['purchaseUrl'] ?? '—'}',
+    ].join('\n');
   }
 
   Future<void> _chooseTime() async {
@@ -384,7 +430,11 @@ class _SocialPublishingScreenState extends ConsumerState<SocialPublishingScreen>
   }
 
   Future<void> _publish() async {
-    if (_caption.text.trim().isEmpty || (!_rubika && !_instagram)) { showAppMessage(context, 'متن و دست‌کم یک کانال را انتخاب کن.', error: true); return; }
+    final product = _selectedProduct;
+    final includeProduct = _rubika && product != null;
+    final finalCaption = _buildCaption(product, includeProduct: includeProduct);
+    if (finalCaption.isEmpty || (!_rubika && !_instagram)) { showAppMessage(context, 'متن بنویس یا برای روبیکا یک محصول انتخاب کن و دست‌کم یک کانال را بزن.', error: true); return; }
+    if (finalCaption.length > 2200) { showAppMessage(context, 'کپشن نهایی بیشتر از ۲۲۰۰ نویسه است؛ متن را کوتاه‌تر کن.', error: true); return; }
     if (_instagram && (_imagePath == null || _imagePath!.isEmpty)) { showAppMessage(context, 'برای انتشار در اینستاگرام تصویر انتخاب کن.', error: true); return; }
     if (_schedule && _publishAt == null) { showAppMessage(context, 'برای انتشار زمان‌بندی‌شده تاریخ و ساعت را انتخاب کن.', error: true); return; }
     setState(() { _loading = true; _error = null; });
@@ -392,11 +442,13 @@ class _SocialPublishingScreenState extends ConsumerState<SocialPublishingScreen>
       final channels = [if (_rubika) 'rubika', if (_instagram) 'instagram'];
       await ref.read(adminApiProvider).createSocialPost({
         'caption': _caption.text.trim(),
+        if (includeProduct) 'productId': _productId,
+        if (includeProduct) 'productTitle': _productTitle.text.trim(),
         'imageUrl': _imagePath == null ? null : AdminApi.imageUrl(_imagePath!), 'channels': channels,
         if (_schedule && _publishAt != null) 'publishAt': _publishAt!.toUtc().toIso8601String(),
       });
       _caption.clear();
-      setState(() => _imagePath = null);
+      setState(() { _imagePath = null; _productId = null; _productTitle.clear(); });
       await _load();
       if (mounted) showAppMessage(context, _schedule ? 'انتشار زمان‌بندی شد.' : 'درخواست انتشار ثبت شد؛ نتیجه در فهرست نمایش داده می‌شود.');
     } catch (error) { if (mounted) setState(() => _error = AdminApi.friendlyError(error)); }
@@ -413,7 +465,56 @@ class _SocialPublishingScreenState extends ConsumerState<SocialPublishingScreen>
       _IntegrationTile(title: 'ربات روبیکا', configured: rubika['configured'] == true, hint: 'توکن محرمانه و وب‌هوک HTTPS'),
       _IntegrationTile(title: 'Instagram Graph API', configured: instagram['configured'] == true, hint: 'INSTAGRAM_USER_ID، token و Graph API version مجاز'),
       const SizedBox(height: 8),
-      TextField(controller: _caption, maxLength: 2200, minLines: 4, maxLines: 7, textAlignVertical: TextAlignVertical.top, decoration: const InputDecoration(labelText: 'متن تبلیغ', alignLabelWithHint: true)),
+      DropdownButtonFormField<String?>(
+        initialValue: _productId,
+        decoration: const InputDecoration(
+          labelText: 'افزودن اطلاعات محصول به کپشن روبیکا (اختیاری)',
+          helperText: 'فقط محصولات منتشرشده؛ اطلاعات به ترتیب در پیش‌نمایش اضافه می‌شود.',
+        ),
+        items: <DropdownMenuItem<String?>>[
+          const DropdownMenuItem<String?>(value: null, child: Text('بدون انتخاب محصول')),
+          ..._products.map((product) => DropdownMenuItem<String?>(
+            value: '${product['id']}',
+            child: Text('${product['name'] ?? 'محصول'}', maxLines: 1, overflow: TextOverflow.ellipsis),
+          )),
+        ],
+        onChanged: _selectProduct,
+      ),
+      if (_productId != null) ...[
+        const SizedBox(height: 8),
+        TextField(
+          controller: _productTitle,
+          maxLength: 220,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            labelText: 'عنوان محصول در کپشن',
+            helperText: 'پیش‌فرض از عنوان سئو، توضیح کوتاه یا نام محصول پر شده است.',
+          ),
+        ),
+      ],
+      TextField(
+        controller: _caption,
+        maxLength: 2200,
+        minLines: 4,
+        maxLines: 7,
+        onChanged: (_) => setState(() {}),
+        textAlignVertical: TextAlignVertical.top,
+        decoration: const InputDecoration(
+          labelText: 'متن اصلی کپشن (قبل از اطلاعات محصول)',
+          alignLabelWithHint: true,
+        ),
+      ),
+      if (_rubika && _selectedProduct != null) ...[
+        const SizedBox(height: 8),
+        Card(child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('پیش‌نمایش کپشن روبیکا', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Text(_buildCaption(_selectedProduct, includeProduct: true), textDirection: TextDirection.rtl),
+          ]),
+        )),
+      ],
       const SizedBox(height: 8),
       AdminImagePickerField(
         label: 'تصویر تبلیغ',

@@ -24,6 +24,19 @@ import { uploadRoot } from "../uploads/upload-storage";
 const execFile = promisify(execFileCallback);
 const MAX_AUDIENCE = 20_000;
 const ALLOWED_CHANNELS = new Set(["rubika", "instagram"]);
+const socialProductSelect = {
+  id: true,
+  name: true,
+  slug: true,
+  seoTitle: true,
+  shortDescription: true,
+  variants: {
+    where: { isActive: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { sku: true, colorName: true, sizeLabel: true },
+  },
+} satisfies Prisma.ProductSelect;
+type SocialProduct = Prisma.ProductGetPayload<{ select: typeof socialProductSelect }>;
 
 type AudienceFilters = {
   q?: string;
@@ -99,6 +112,24 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
       select: { id: true, name: true, status: true },
     });
     return { data: products.map((item) => ({ id: item.id.toString(), name: item.name, status: item.status })) };
+  }
+
+  async socialProducts(admin: AuthenticatedAdmin) {
+    requireManager(admin);
+    const products = await this.prisma.product.findMany({
+      where: {
+        status: "published",
+        publishedAt: { lte: new Date() },
+        deletedAt: null,
+        category: { is: { isActive: true } },
+        variants: { some: { isActive: true } },
+      },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+      take: 500,
+      select: socialProductSelect,
+    });
+    const siteBaseUrl = this.publicWebBaseUrl();
+    return { data: products.map((product) => this.toSocialProduct(product, siteBaseUrl)) };
   }
 
   async listCoupons(admin: AuthenticatedAdmin) {
@@ -418,11 +449,22 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
 
   async createSocialPost(admin: AuthenticatedAdmin, input: Record<string, unknown>) {
     requireManager(admin);
-    const caption = requiredText(input.caption, "caption", 2200);
+    const rawCaption = typeof input.caption === "string" ? input.caption.trim() : "";
+    if (rawCaption.length > 2200) throw badInput("caption must be at most 2200 characters.");
     if (!Array.isArray(input.channels) || input.channels.length === 0 || input.channels.some((channel) => typeof channel !== "string" || !ALLOWED_CHANNELS.has(channel))) {
       throw badInput("Choose Rubika, Instagram, or both.");
     }
     const channels = [...new Set(input.channels as string[])];
+    const productId = input.productId === null || input.productId === undefined || input.productId === ""
+      ? null
+      : parseId(String(input.productId), "productId");
+    const productTitle = typeof input.productTitle === "string" ? input.productTitle.trim() : "";
+    if (productTitle.length > 220) throw badInput("عنوان محصول باید حداکثر ۲۲۰ نویسه باشد.");
+    const caption = productId
+      ? await this.appendSocialProductDetails(rawCaption, productId, productTitle)
+      : rawCaption;
+    if (!caption) throw badInput("متن تبلیغ بنویس یا برای انتشار روبیکا یک محصول انتخاب کن.");
+    if (caption.length > 2200) throw badInput("کپشن نهایی با اطلاعات محصول نباید بیشتر از ۲۲۰۰ نویسه باشد.");
     const imageUrl = typeof input.imageUrl === "string" && input.imageUrl.trim() ? input.imageUrl.trim() : null;
     if (imageUrl && !/^https:\/\//i.test(imageUrl)) throw badInput("Social media needs a public HTTPS image URL.");
     if (channels.includes("instagram") && !imageUrl) throw badInput("Instagram posts require a public HTTPS image URL.");
@@ -563,6 +605,58 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     }
     const result = await this.rubika.sendMessage(chatId, caption);
     return { ok: true, media: "text", provider: safeProviderResult(result) };
+  }
+
+  private async appendSocialProductDetails(caption: string, productId: bigint, titleOverride: string) {
+    const product = await this.prisma.product.findFirst({
+      where: {
+        id: productId,
+        status: "published",
+        publishedAt: { lte: new Date() },
+        deletedAt: null,
+        category: { is: { isActive: true } },
+        variants: { some: { isActive: true } },
+      },
+      select: socialProductSelect,
+    });
+    if (!product) throw new NotFoundException({ code: "SOCIAL_PRODUCT_NOT_AVAILABLE", message: "محصول انتخاب‌شده منتشرشده یا قابل خرید نیست." });
+
+    const details = this.toSocialProduct(product, this.publicWebBaseUrl());
+    const title = titleOverride || details.title;
+    const productLines = [
+      `نام محصول: ${details.name}`,
+      `عنوان محصول: ${title}`,
+      `کد محصول: ${details.productCode ?? "—"}`,
+      `تنوع رنگی محصول: ${details.colors.length ? details.colors.join("، ") : "—"}`,
+      `تنوع سایزی محصول: ${details.sizes.length ? details.sizes.join("، ") : "—"}`,
+      `لینک خرید محصول: ${details.purchaseUrl}`,
+    ];
+    return [caption, ...(caption ? [""] : []), ...productLines].join("\n");
+  }
+
+  private toSocialProduct(product: SocialProduct, siteBaseUrl: URL) {
+    const colors = [...new Set(product.variants.map((variant) => variant.colorName.trim()).filter(Boolean))];
+    const sizes = [...new Set(product.variants.map((variant) => variant.sizeLabel.trim()).filter(Boolean))];
+    return {
+      id: product.id.toString(),
+      name: product.name,
+      title: product.seoTitle?.trim() || product.shortDescription?.trim() || product.name,
+      productCode: product.variants[0]?.sku ?? null,
+      colors,
+      sizes,
+      purchaseUrl: new URL(`/products/${encodeURIComponent(product.slug)}`, siteBaseUrl).toString(),
+    };
+  }
+
+  private publicWebBaseUrl(): URL {
+    const configured = this.config.get<string>("PUBLIC_WEB_URL", "https://panizstyle.ir").trim();
+    try {
+      const url = new URL(configured);
+      if (url.protocol !== "https:") throw new Error("HTTPS is required");
+      return url;
+    } catch {
+      throw new ServiceUnavailableException({ code: "PUBLIC_WEB_URL_INVALID", message: "نشانی HTTPS سایت برای لینک خرید محصول تنظیم نشده است." });
+    }
   }
 
   private async readRubikaImage(imageUrl: string): Promise<{ bytes: Buffer; fileName: string }> {

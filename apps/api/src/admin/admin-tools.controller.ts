@@ -80,6 +80,11 @@ export class AdminToolsController {
     return this.tools.socialStatus(request.admin!);
   }
 
+  @Get("social/products")
+  socialProducts(@Req() request: AdminRequest) {
+    return this.tools.socialProducts(request.admin!);
+  }
+
   @Get("social/posts")
   socialPosts(@Req() request: AdminRequest) {
     return this.tools.listSocialPosts(request.admin!);

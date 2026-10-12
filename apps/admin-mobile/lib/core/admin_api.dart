@@ -235,6 +235,9 @@ class AdminApi {
   Future<JsonMap> socialStatus() async =>
       _data(await dio.get('admin/social/status'));
 
+  Future<List<JsonMap>> socialProducts() async =>
+      _list(_payload(await dio.get('admin/social/products')));
+
   Future<List<JsonMap>> socialPosts() async =>
       _list(_payload(await dio.get('admin/social/posts')));
 
