@@ -146,6 +146,9 @@ class AdminApi {
 
   Future<JsonMap> dashboard() async => _data(await dio.get('admin/dashboard'));
 
+  Future<JsonMap> siteVisitAnalytics() async =>
+      _data(await dio.get('admin/analytics/site-visits'));
+
   Future<JsonMap> customers({
     int page = 1,
     String? query,

@@ -626,3 +626,15 @@ model SocialPost {
   @@index([createdByAdminId], map: "ix_social_posts_created_by_admin")
   @@map("social_posts")
 }
+
+model SitePageView {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  visitorHash String   @map("visitor_hash") @db.Char(64)
+  path        String   @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([createdAt], map: "ix_site_page_views_created_at")
+  @@index([path, createdAt], map: "ix_site_page_views_path_created_at")
+  @@index([visitorHash, createdAt], map: "ix_site_page_views_visitor_created_at")
+  @@map("site_page_views")
+}

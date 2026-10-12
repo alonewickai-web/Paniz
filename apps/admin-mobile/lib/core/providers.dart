@@ -10,7 +10,9 @@ final adminApiProvider = Provider<AdminApi>((ref) {
   return api;
 });
 
-final authProvider = AsyncNotifierProvider<AuthController, AdminIdentity?>(AuthController.new);
+final authProvider = AsyncNotifierProvider<AuthController, AdminIdentity?>(
+  AuthController.new,
+);
 
 class AuthController extends AsyncNotifier<AdminIdentity?> {
   @override
@@ -35,7 +37,10 @@ class AuthController extends AsyncNotifier<AdminIdentity?> {
   }
 }
 
-final themeModeProvider = AsyncNotifierProvider<AdminThemeController, ThemeMode>(AdminThemeController.new);
+final themeModeProvider =
+    AsyncNotifierProvider<AdminThemeController, ThemeMode>(
+      AdminThemeController.new,
+    );
 
 class AdminThemeController extends AsyncNotifier<ThemeMode> {
   static const _storage = FlutterSecureStorage();
@@ -62,10 +67,21 @@ class AdminThemeController extends AsyncNotifier<ThemeMode> {
   }
 }
 
-final dashboardProvider = FutureProvider.autoDispose<JsonMap>((ref) => ref.watch(adminApiProvider).dashboard());
-final storeConfigurationProvider = FutureProvider.autoDispose<JsonMap>((ref) => ref.watch(adminApiProvider).storeConfiguration());
-final productsProvider = FutureProvider.autoDispose<List<JsonMap>>((ref) => ref.watch(adminApiProvider).products());
-final categoriesProvider = FutureProvider.autoDispose<List<JsonMap>>((ref) async {
+final dashboardProvider = FutureProvider.autoDispose<JsonMap>(
+  (ref) => ref.watch(adminApiProvider).dashboard(),
+);
+final siteVisitAnalyticsProvider = FutureProvider.autoDispose<JsonMap>(
+  (ref) => ref.watch(adminApiProvider).siteVisitAnalytics(),
+);
+final storeConfigurationProvider = FutureProvider.autoDispose<JsonMap>(
+  (ref) => ref.watch(adminApiProvider).storeConfiguration(),
+);
+final productsProvider = FutureProvider.autoDispose<List<JsonMap>>(
+  (ref) => ref.watch(adminApiProvider).products(),
+);
+final categoriesProvider = FutureProvider.autoDispose<List<JsonMap>>((
+  ref,
+) async {
   final configuration = await ref.watch(storeConfigurationProvider.future);
   final categories = configuration['categories'];
   if (categories is! List) return const <JsonMap>[];
@@ -75,4 +91,6 @@ final categoriesProvider = FutureProvider.autoDispose<List<JsonMap>>((ref) async
       .where((category) => category['isActive'] == true)
       .toList();
 });
-final ordersProvider = FutureProvider.autoDispose<List<JsonMap>>((ref) => ref.watch(adminApiProvider).orders());
+final ordersProvider = FutureProvider.autoDispose<List<JsonMap>>(
+  (ref) => ref.watch(adminApiProvider).orders(),
+);

@@ -7,6 +7,7 @@ import { PrismaModule } from "./database/prisma.module";
 import { HealthModule } from "./health/health.module";
 import { OrdersModule } from "./orders/orders.module";
 import { AdminModule } from "./admin/admin.module";
+import { AnalyticsModule } from "./analytics/analytics.module";
 import { CustomerModule } from "./customer/customer.module";
 import { ApiExceptionFilter } from "./common/filters/api-exception.filter";
 
@@ -45,6 +46,7 @@ function validateEnvironment(config: Record<string, unknown>): Record<string, un
     OrdersModule,
     CustomerModule,
     AdminModule,
+    AnalyticsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
