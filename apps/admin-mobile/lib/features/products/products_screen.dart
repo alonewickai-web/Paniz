@@ -20,6 +20,7 @@ class ProductsScreen extends ConsumerStatefulWidget {
 
 class _ProductsScreenState extends ConsumerState<ProductsScreen> {
   bool _saving = false;
+  final Set<String> _publishingProductIds = {};
 
   Future<void> _createProduct() async {
     final values = await showDialog<JsonMap>(
@@ -59,6 +60,64 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     } catch (error) {
       if (mounted)
         showAppMessage(context, AdminApi.friendlyError(error), error: true);
+    }
+  }
+
+  Future<void> _publishProduct(JsonMap product) async {
+    final productId = '${product['id'] ?? ''}';
+    final productName = '${product['name'] ?? 'محصول'}';
+    if (productId.isEmpty || _publishingProductIds.contains(productId)) return;
+
+    if (product['status'] != 'published') {
+      showAppMessage(
+        context,
+        'برای انتشار در روبیکا، اول محصول را در سایت فعال کن.',
+        error: true,
+      );
+      return;
+    }
+
+    final images =
+        product['images'] is List
+            ? (product['images'] as List)
+                .whereType<Map>()
+                .map((image) => Map<String, dynamic>.from(image))
+                .toList()
+            : <JsonMap>[];
+    final image = images.cast<JsonMap?>().firstWhere(
+      (item) => item?['isPrimary'] == true,
+      orElse: () => images.isEmpty ? null : images.first,
+    );
+    final imagePath = '${image?['imagePath'] ?? ''}'.trim();
+    if (imagePath.isEmpty) {
+      showAppMessage(
+        context,
+        'برای انتشار «$productName» اول یک تصویر به محصول اضافه کن.',
+        error: true,
+      );
+      return;
+    }
+
+    setState(() => _publishingProductIds.add(productId));
+    try {
+      await ref.read(adminApiProvider).createSocialPost({
+        'caption': '',
+        'productId': productId,
+        'imageUrl': AdminApi.imageUrl(imagePath),
+        'channels': ['rubika'],
+      });
+      if (mounted) {
+        showAppMessage(
+          context,
+          'درخواست انتشار «$productName» همراه تصویر در روبیکا ثبت شد.',
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        showAppMessage(context, AdminApi.friendlyError(error), error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _publishingProductIds.remove(productId));
     }
   }
 
@@ -359,6 +418,10 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                           padding: const EdgeInsets.only(bottom: 10),
                           child: _ProductCard(
                             product: product,
+                            onPublish: () => _publishProduct(product),
+                            publishing: _publishingProductIds.contains(
+                              '${product['id']}',
+                            ),
                             onStatus:
                                 (active) => _toggleStatus(product, active),
                             onEditProduct: () => _editProduct(product),
@@ -407,6 +470,8 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
 class _ProductCard extends StatelessWidget {
   const _ProductCard({
     required this.product,
+    required this.onPublish,
+    required this.publishing,
     required this.onStatus,
     required this.onEditProduct,
     required this.onArchive,
@@ -420,6 +485,8 @@ class _ProductCard extends StatelessWidget {
     required this.onToggleVariant,
   });
   final JsonMap product;
+  final VoidCallback onPublish;
+  final bool publishing;
   final ValueChanged<bool> onStatus;
   final VoidCallback onEditProduct;
   final VoidCallback onArchive;
@@ -484,11 +551,33 @@ class _ProductCard extends StatelessWidget {
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
         ),
         subtitle: Text(
-          '${product['category']?['name'] ?? 'بدون دسته'} · ${persianNumber(variants.length)} تنوع',
+          '${product['category']?['name'] ?? 'بدون دسته'} · ${persianNumber(variants.length)} تنوع · ${status == 'published' ? 'فعال' : 'پیش‌نویس'}',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        trailing: _StatusPill(status: status),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton.icon(
+              onPressed: publishing ? null : onPublish,
+              style: TextButton.styleFrom(
+                minimumSize: const Size(0, 36),
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                visualDensity: VisualDensity.compact,
+              ),
+              icon:
+                  publishing
+                      ? const SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                      : const Icon(Icons.send_outlined, size: 16),
+              label: const Text('انتشار', style: TextStyle(fontSize: 12)),
+            ),
+            const Icon(Icons.expand_more_rounded, size: 20),
+          ],
+        ),
         childrenPadding: const EdgeInsetsDirectional.fromSTEB(14, 0, 14, 14),
         children: [
           const Divider(height: 12),
@@ -815,27 +904,6 @@ class _ActiveStateSwitch extends StatelessWidget {
       ),
     );
   }
-}
-
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.status});
-  final String status;
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-    decoration: BoxDecoration(
-      color: statusColor(context, status).withValues(alpha: .1),
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Text(
-      statusLabel(status),
-      style: TextStyle(
-        color: statusColor(context, status),
-        fontSize: 10,
-        fontWeight: FontWeight.w700,
-      ),
-    ),
-  );
 }
 
 class _CreateProductDialog extends ConsumerStatefulWidget {
