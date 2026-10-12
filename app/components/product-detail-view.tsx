@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Heart, Minus, Plus, Share2, ShieldCheck, ShoppingBag, Truck } from "lucide-react";
+import { Check, Heart, Minus, Plus, Share2, ShieldCheck, ShoppingBag, Truck } from "lucide-react";
 import { StoreProductCard } from "./store-product-card";
 import { apiBaseUrl, formatToman, type StoreProduct, type StoreProductDetail } from "../lib/catalog";
 import { useStorefront } from "../lib/storefront-state";
@@ -17,6 +17,7 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
   const [size, setSize] = useState(initial?.size ?? "");
   const [quantity, setQuantity] = useState(1);
   const [imageIndex, setImageIndex] = useState(0);
+  const [galleryDirection, setGalleryDirection] = useState<"next" | "previous">("next");
   const [notice, setNotice] = useState("");
   const [isSharing, setIsSharing] = useState(false);
   const [related, setRelated] = useState<StoreProduct[]>([]);
@@ -25,6 +26,7 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
 
   useEffect(() => {
     setImageIndex(0);
+    setGalleryDirection("next");
     touchStart.current = null;
   }, [product.id]);
 
@@ -40,7 +42,14 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
 
   function moveGallery(step: number) {
     if (currentImages.length < 2) return;
+    setGalleryDirection(step > 0 ? "next" : "previous");
     setImageIndex((index) => (index + step + currentImages.length) % currentImages.length);
+  }
+
+  function selectGalleryImage(index: number) {
+    if (index === imageIndex) return;
+    setGalleryDirection(index > imageIndex ? "next" : "previous");
+    setImageIndex(index);
   }
 
   function finishGallerySwipe(x: number, y: number) {
@@ -128,21 +137,20 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
           <section className="store-gallery" aria-label="تصاویر محصول">
             <div
               className="store-main-image"
+              data-gallery-direction={galleryDirection}
               role="group"
               onTouchStart={(event) => { const touch = event.changedTouches[0]; if (touch) touchStart.current = { x: touch.clientX, y: touch.clientY }; }}
               onTouchEnd={(event) => { const touch = event.changedTouches[0]; if (touch) finishGallerySwipe(touch.clientX, touch.clientY); }}
               onTouchCancel={() => { touchStart.current = null; }}
               aria-label={mainImage ? `تصویر ${imageIndex + 1} از ${currentImages.length} برای ${product.name}` : `تصویر ${product.name}`}
             >
-              {mainImage ? <StoreImage src={mainImage.path} alt={mainImage.alt || product.name} fill priority sizes="(max-width: 760px) 100vw, 54vw" /> : <div className="store-no-image">تصویر محصول</div>}
+              {mainImage ? <StoreImage key={mainImage.id} src={mainImage.path} alt={mainImage.alt || product.name} fill priority sizes="(max-width: 760px) 100vw, 54vw" /> : <div className="store-no-image">تصویر محصول</div>}
               {discount > 0 && <span className="store-detail-sale">{new Intl.NumberFormat("fa-IR").format(discount)}٪ تخفیف</span>}
               {currentImages.length > 1 && <>
-                <button type="button" className="store-gallery-arrow store-gallery-previous" aria-label="تصویر قبلی" onClick={() => moveGallery(-1)}><ChevronRight size={20} /></button>
-                <button type="button" className="store-gallery-arrow store-gallery-next" aria-label="تصویر بعدی" onClick={() => moveGallery(1)}><ChevronLeft size={20} /></button>
                 <span className="store-image-count" aria-live="polite">{new Intl.NumberFormat("fa-IR").format(imageIndex + 1)} / {new Intl.NumberFormat("fa-IR").format(currentImages.length)}</span>
               </>}
             </div>
-            {currentImages.length > 1 && <div className="store-thumbnails">{currentImages.map((image, index) => <button type="button" key={image.id} className={index === imageIndex ? "active" : ""} onClick={() => setImageIndex(index)} aria-label={`نمایش تصویر ${index + 1}`} aria-pressed={index === imageIndex}><StoreImage src={image.path} alt={image.alt || product.name} fill sizes="84px" /></button>)}</div>}
+            {currentImages.length > 1 && <div className="store-thumbnails">{currentImages.map((image, index) => <button type="button" key={image.id} className={index === imageIndex ? "active" : ""} onClick={() => selectGalleryImage(index)} aria-label={`نمایش تصویر ${index + 1}`} aria-pressed={index === imageIndex}><StoreImage src={image.path} alt={image.alt || product.name} fill sizes="84px" /></button>)}</div>}
           </section>
 
           <section className="store-product-info">
