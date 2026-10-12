@@ -244,6 +244,11 @@ export class CatalogService {
       image: product.images[0]
         ? { path: product.images[0].imagePath, alt: product.images[0].altText }
         : null,
+      images: product.images.map((image) => ({
+        id: image.id.toString(),
+        path: image.imagePath,
+        alt: image.altText,
+      })),
       priceToman: cheapestVariant ? toSafeNumber(cheapestVariant.priceToman) : null,
       compareAtPriceToman: cheapestVariant?.compareAtPriceToman == null
         ? null

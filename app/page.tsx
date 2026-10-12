@@ -37,6 +37,7 @@ type Product = {
   reviews: number;
   image: string;
   imageAlt: string;
+  images?: { id: string; path: string; alt: string | null }[];
   badge?: string;
   colors: { name: string; value: string }[];
   sizes: string[];
@@ -67,6 +68,7 @@ type ApiProduct = {
   shortDescription: string | null;
   category: { id: string; name: string; slug: string } | null;
   image: { path: string; alt: string | null } | null;
+  images: { id: string; path: string; alt: string | null }[];
   priceToman: number | null;
   compareAtPriceToman: number | null;
   colors: { name: string; value: string }[];
@@ -270,12 +272,15 @@ export default function Home() {
   const [activeCategory, setActiveCategory] = useState("همه محصولات");
   const [sortBy, setSortBy] = useState("newest");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [galleryDirection, setGalleryDirection] = useState<"next" | "previous">("next");
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState("");
   const [cartOpen, setCartOpen] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [toast, setToast] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  const galleryTouchStart = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -316,6 +321,7 @@ export default function Home() {
             reviews: hint?.reviews ?? 0,
             image: item.image?.path || hint?.image || products[0].image,
             imageAlt: item.image?.alt || hint?.imageAlt || item.name,
+            images: item.images,
             badge: hint?.badge ?? (discount > 0 ? `${discount}٪ تخفیف` : undefined),
             colors: item.colors.length ? item.colors : hint?.colors ?? [],
             sizes: item.sizes.length ? item.sizes : hint?.sizes ?? [],
@@ -449,8 +455,28 @@ export default function Home() {
 
   function openProduct(product: Product) {
     setSelectedProduct(product);
+    setSelectedImageIndex(0);
+    setGalleryDirection("next");
+    galleryTouchStart.current = null;
     setSelectedSize("");
     setSelectedColor(product.colors[0]?.name ?? "");
+  }
+
+  function moveSelectedGallery(step: number) {
+    const imageCount = selectedProduct?.images?.length ?? 0;
+    if (imageCount < 2) return;
+    setGalleryDirection(step > 0 ? "next" : "previous");
+    setSelectedImageIndex((index) => (index + step + imageCount) % imageCount);
+  }
+
+  function finishSelectedGallerySwipe(x: number, y: number) {
+    const start = galleryTouchStart.current;
+    galleryTouchStart.current = null;
+    if (!start) return;
+    const dx = x - start.x;
+    const dy = y - start.y;
+    if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    moveSelectedGallery(dx < 0 ? 1 : -1);
   }
 
   function addToCart(product: Product, size: string, color: string) {
@@ -782,7 +808,36 @@ export default function Home() {
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedProduct(null); }}>
           <section className="product-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <button className="modal-close icon-button" onClick={() => setSelectedProduct(null)} aria-label="بستن"><X size={21} /></button>
-            <div className="modal-image"><StoreImage src={selectedProduct.image} alt={selectedProduct.imageAlt} fill sizes="(max-width: 680px) 90vw, 420px" /></div>
+            {(() => {
+              const galleryImages = selectedProduct.images?.length
+                ? selectedProduct.images
+                : [{ id: `${selectedProduct.id}-primary`, path: selectedProduct.image, alt: selectedProduct.imageAlt }];
+              const currentImage = galleryImages[Math.min(selectedImageIndex, galleryImages.length - 1)];
+              return <div
+                className="modal-image quick-gallery"
+                data-gallery-direction={galleryDirection}
+                role="group"
+                aria-label={`تصاویر ${selectedProduct.name}`}
+                onTouchStart={(event) => { const touch = event.changedTouches[0]; if (touch) galleryTouchStart.current = { x: touch.clientX, y: touch.clientY }; }}
+                onTouchEnd={(event) => { const touch = event.changedTouches[0]; if (touch) finishSelectedGallerySwipe(touch.clientX, touch.clientY); }}
+                onTouchCancel={() => { galleryTouchStart.current = null; }}
+              >
+                <StoreImage key={currentImage.id} className="quick-gallery-current" src={currentImage.path} alt={currentImage.alt || selectedProduct.name} fill sizes="(max-width: 680px) 90vw, 420px" />
+                {galleryImages.length > 1 && <>
+                  <span className="quick-gallery-count" aria-live="polite">{new Intl.NumberFormat("fa-IR").format(selectedImageIndex + 1)} / {new Intl.NumberFormat("fa-IR").format(galleryImages.length)}</span>
+                  <div className="quick-gallery-thumbnails" aria-label="انتخاب تصویر">
+                    {galleryImages.map((image, index) => <button
+                      key={image.id}
+                      type="button"
+                      className={index === selectedImageIndex ? "active" : ""}
+                      onClick={() => { setGalleryDirection(index > selectedImageIndex ? "next" : "previous"); setSelectedImageIndex(index); }}
+                      aria-label={`نمایش تصویر ${index + 1}`}
+                      aria-pressed={index === selectedImageIndex}
+                    ><StoreImage src={image.path} alt={image.alt || `${selectedProduct.name}، تصویر ${index + 1}`} fill sizes="54px" /></button>)}
+                  </div>
+                </>}
+              </div>;
+            })()}
             <div className="modal-content">
               <span className="section-kicker">{selectedProduct.category}</span>
               <h2 id="modal-title">{selectedProduct.name}</h2>
