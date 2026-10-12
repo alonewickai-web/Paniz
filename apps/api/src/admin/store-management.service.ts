@@ -30,6 +30,12 @@ type BannerWriteData = {
   description?: string | null;
   imagePath?: string;
   targetUrl?: string | null;
+  eyebrowText?: string | null;
+  buttonLabel?: string | null;
+  buttonSideText?: string | null;
+  stickerLabel?: string | null;
+  stickerText?: string | null;
+  backgroundColor?: string | null;
   startsAt?: Date | null;
   endsAt?: Date | null;
   sortOrder?: number;
@@ -55,7 +61,19 @@ export class StoreManagementService {
           ],
         },
         orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
-        select: { id: true, title: true, description: true, imagePath: true, targetUrl: true },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          imagePath: true,
+          targetUrl: true,
+          eyebrowText: true,
+          buttonLabel: true,
+          buttonSideText: true,
+          stickerLabel: true,
+          stickerText: true,
+          backgroundColor: true,
+        },
       }),
     ]);
 
@@ -351,6 +369,12 @@ export class StoreManagementService {
       ...(input.description !== undefined ? { description: input.description?.trim() || null } : {}),
       ...(input.imagePath !== undefined ? { imagePath: input.imagePath.trim() } : {}),
       ...(input.targetUrl !== undefined ? { targetUrl: input.targetUrl?.trim() || null } : {}),
+      ...(input.eyebrowText !== undefined ? { eyebrowText: input.eyebrowText?.trim() || null } : {}),
+      ...(input.buttonLabel !== undefined ? { buttonLabel: input.buttonLabel?.trim() || null } : {}),
+      ...(input.buttonSideText !== undefined ? { buttonSideText: input.buttonSideText?.trim() || null } : {}),
+      ...(input.stickerLabel !== undefined ? { stickerLabel: input.stickerLabel?.trim() || null } : {}),
+      ...(input.stickerText !== undefined ? { stickerText: input.stickerText?.trim() || null } : {}),
+      ...(input.backgroundColor !== undefined ? { backgroundColor: input.backgroundColor?.trim().toUpperCase() || null } : {}),
       ...(startsAt !== undefined ? { startsAt } : {}),
       ...(endsAt !== undefined ? { endsAt } : {}),
       ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),

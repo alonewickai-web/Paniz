@@ -391,58 +391,793 @@ class _BannerDialog extends StatefulWidget {
 
 class _BannerDialogState extends State<_BannerDialog> {
   final _form = GlobalKey<FormState>();
-  late final _title = TextEditingController(text: '${widget.existing?['title'] ?? ''}');
-  late final _description = TextEditingController(text: '${widget.existing?['description'] ?? ''}');
-  late final _target = TextEditingController(text: '${widget.existing?['targetUrl'] ?? ''}');
-  late final _starts = TextEditingController(text: '${widget.existing?['startsAt'] ?? ''}');
-  late final _ends = TextEditingController(text: '${widget.existing?['endsAt'] ?? ''}');
+  late final _title = TextEditingController(
+    text: '${widget.existing?['title'] ?? ''}',
+  );
+  late final _description = TextEditingController(
+    text: '${widget.existing?['description'] ?? ''}',
+  );
+  late final _eyebrow = TextEditingController(
+    text: '${widget.existing?['eyebrowText'] ?? 'کالکشن تازهٔ پانیذ'}',
+  );
+  late final _buttonLabel = TextEditingController(
+    text: '${widget.existing?['buttonLabel'] ?? 'دیدن محصولات'}',
+  );
+  late final _buttonSideText = TextEditingController(
+    text: '${widget.existing?['buttonSideText'] ?? 'انتخاب‌هایی از جنس خودت'}',
+  );
+  late final _stickerLabel = TextEditingController(
+    text: '${widget.existing?['stickerLabel'] ?? 'حس خوب'}',
+  );
+  late final _stickerText = TextEditingController(
+    text: '${widget.existing?['stickerText'] ?? 'از همین‌جا\nشروع می‌شه'}',
+  );
+  late final _target = TextEditingController(
+    text: '${widget.existing?['targetUrl'] ?? ''}',
+  );
+  late final _starts = TextEditingController(
+    text: '${widget.existing?['startsAt'] ?? ''}',
+  );
+  late final _ends = TextEditingController(
+    text: '${widget.existing?['endsAt'] ?? ''}',
+  );
+  late final _colorSearch = TextEditingController();
   String? _imagePath;
+  late String _backgroundColor;
   bool _imageError = false;
   bool _active = true;
 
   @override
-  void initState() { super.initState(); _imagePath = _optionalPath(widget.existing?['imagePath']); _active = widget.existing?['isActive'] != false; }
+  void initState() {
+    super.initState();
+    _imagePath = _optionalPath(widget.existing?['imagePath']);
+    _active = widget.existing?['isActive'] != false;
+    final savedColor = '${widget.existing?['backgroundColor'] ?? ''}';
+    _backgroundColor =
+        _isBannerHex(savedColor) ? savedColor.toUpperCase() : '#FCE4DB';
+    for (final field in [
+      _title,
+      _description,
+      _eyebrow,
+      _buttonLabel,
+      _buttonSideText,
+      _stickerLabel,
+      _stickerText,
+    ]) {
+      field.addListener(_refreshPreview);
+    }
+  }
+
+  void _refreshPreview() {
+    if (mounted) setState(() {});
+  }
+
   @override
-  void dispose() { for (final item in [_title, _description, _target, _starts, _ends]) { item.dispose(); } super.dispose(); }
+  void dispose() {
+    for (final item in [
+      _title,
+      _description,
+      _eyebrow,
+      _buttonLabel,
+      _buttonSideText,
+      _stickerLabel,
+      _stickerText,
+      _target,
+      _starts,
+      _ends,
+      _colorSearch,
+    ]) {
+      item.dispose();
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: Text(widget.existing == null ? 'بنر جدید' : 'ویرایش بنر'),
-    content: SizedBox(width: 450, child: Form(key: _form, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      _textField(_title, 'عنوان بنر', required: true),
-      _textField(_description, 'توضیح'),
-      AdminImagePickerField(
-        label: 'تصویر بنر',
-        imagePath: _imagePath,
-        errorText: _imageError ? 'برای ثبت بنر یک تصویر انتخاب کن.' : null,
-        onChanged: (value) => setState(() {
-          _imagePath = value;
-          _imageError = false;
-        }),
+    content: SizedBox(
+      width: 450,
+      child: Form(
+        key: _form,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _livePreview(),
+              const SizedBox(height: 18),
+              sectionTitle('متن‌های بنر'),
+              _textField(_eyebrow, 'متن بالای عنوان'),
+              _textField(_title, 'عنوان اصلی بنر', required: true, maxLines: 2),
+              _textField(_description, 'توضیح زیر عنوان', maxLines: 3),
+              _textField(_buttonLabel, 'متن دکمهٔ بنر'),
+              _textField(_buttonSideText, 'متن کنار دکمه'),
+              _textField(
+                _target,
+                'نشانی مقصد دکمه (مثلاً /products)',
+                ltr: true,
+              ),
+              const SizedBox(height: 4),
+              sectionTitle('نوشته‌های دایره'),
+              _textField(_stickerLabel, 'متن کوچک دایره'),
+              _textField(_stickerText, 'متن اصلی دایره', maxLines: 2),
+              const SizedBox(height: 4),
+              sectionTitle('پس‌زمینهٔ بنر'),
+              _colorPicker(),
+              const SizedBox(height: 14),
+              sectionTitle('تصویر و زمان‌بندی'),
+              AdminImagePickerField(
+                label: 'تصویر بنر',
+                imagePath: _imagePath,
+                aspectRatio: 1.45,
+                errorText:
+                    _imageError ? 'برای ثبت بنر یک تصویر انتخاب کن.' : null,
+                onChanged:
+                    (value) => setState(() {
+                      _imagePath = value;
+                      _imageError = false;
+                    }),
+              ),
+              _textField(
+                _starts,
+                'شروع زمان‌بندی (اختیاری، ISO-8601)',
+                ltr: true,
+              ),
+              _textField(
+                _ends,
+                'پایان زمان‌بندی (اختیاری، ISO-8601)',
+                ltr: true,
+              ),
+              SwitchListTile(
+                value: _active,
+                onChanged: (value) => setState(() => _active = value),
+                title: const Text('بنر فعال باشد'),
+              ),
+            ],
+          ),
+        ),
       ),
-      _textField(_target, 'پیوند مقصد (مثلاً /products)', ltr: true),
-      _textField(_starts, 'شروع زمان‌بندی (اختیاری، ISO-8601)', ltr: true),
-      _textField(_ends, 'پایان زمان‌بندی (اختیاری، ISO-8601)', ltr: true),
-      SwitchListTile(value: _active, onChanged: (value) => setState(() => _active = value), title: const Text('بنر فعال باشد')),
-    ])))),
+    ),
     actions: [
-      TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
-      FilledButton(onPressed: () {
-        if (_imagePath == null) {
-          setState(() => _imageError = true);
-          return;
-        }
-        if (!_form.currentState!.validate()) return;
-        Navigator.pop(context, <String, dynamic>{
-          'title': _title.text.trim(), 'description': _description.text.trim().isEmpty ? null : _description.text.trim(),
-          'imagePath': _imagePath, 'targetUrl': _target.text.trim().isEmpty ? null : _target.text.trim(),
-          'startsAt': _starts.text.trim().isEmpty ? null : _starts.text.trim(), 'endsAt': _ends.text.trim().isEmpty ? null : _ends.text.trim(),
-          'isActive': _active,
-        });
-      }, child: const Text('ذخیره')),
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('انصراف'),
+      ),
+      FilledButton(
+        onPressed: () {
+          if (_imagePath == null) {
+            setState(() => _imageError = true);
+            return;
+          }
+          if (!_form.currentState!.validate()) return;
+          Navigator.pop(context, <String, dynamic>{
+            'title': _title.text.trim(),
+            'description':
+                _description.text.trim().isEmpty
+                    ? null
+                    : _description.text.trim(),
+            'imagePath': _imagePath,
+            'targetUrl':
+                _target.text.trim().isEmpty ? null : _target.text.trim(),
+            'eyebrowText':
+                _eyebrow.text.trim().isEmpty ? null : _eyebrow.text.trim(),
+            'buttonLabel':
+                _buttonLabel.text.trim().isEmpty
+                    ? null
+                    : _buttonLabel.text.trim(),
+            'buttonSideText':
+                _buttonSideText.text.trim().isEmpty
+                    ? null
+                    : _buttonSideText.text.trim(),
+            'stickerLabel':
+                _stickerLabel.text.trim().isEmpty
+                    ? null
+                    : _stickerLabel.text.trim(),
+            'stickerText':
+                _stickerText.text.trim().isEmpty
+                    ? null
+                    : _stickerText.text.trim(),
+            'backgroundColor': _backgroundColor,
+            'startsAt':
+                _starts.text.trim().isEmpty ? null : _starts.text.trim(),
+            'endsAt': _ends.text.trim().isEmpty ? null : _ends.text.trim(),
+            'isActive': _active,
+          });
+        },
+        child: const Text('ذخیره'),
+      ),
     ],
   );
+
+  Widget _livePreview() {
+    final background = _bannerColorValue(_backgroundColor);
+    final textColor =
+        background.computeLuminance() > 0.48
+            ? const Color(0xFF29262A)
+            : Colors.white;
+    final title =
+        _title.text.trim().isEmpty
+            ? 'هر روز، با حالِ خوب بپوش'
+            : _title.text.trim();
+    final imagePath = _imagePath;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        sectionTitle('پیش‌نمایش زنده'),
+        Container(
+          height: 340,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Column(
+            children: [
+              Expanded(
+                flex: 5,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (imagePath != null)
+                      Image.network(
+                        AdminApi.imageUrl(imagePath),
+                        fit: BoxFit.contain,
+                        errorBuilder:
+                            (_, __, ___) => _previewImagePlaceholder(),
+                      )
+                    else
+                      _previewImagePlaceholder(),
+                    Positioned(
+                      left: 10,
+                      top: 10,
+                      child: Container(
+                        width: 78,
+                        height: 78,
+                        padding: const EdgeInsets.all(6),
+                        decoration: const BoxDecoration(
+                          color: Color(0xF7FFFAF7),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _bannerPreviewText(_stickerLabel.text, 'حس خوب'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 8,
+                                color: Color(0xFF9C555F),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _stickerText.text.trim().isEmpty
+                                  ? 'از همین‌جا\nشروع می‌شه'
+                                  : _stickerText.text.trim(),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 9,
+                                height: 1.2,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF514044),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 10,
+                      bottom: 9,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: .88),
+                          borderRadius: BorderRadius.circular(22),
+                        ),
+                        child: Text(
+                          _bannerPreviewText(
+                            _eyebrow.text,
+                            'کالکشن تازهٔ پانیذ',
+                          ),
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: Color(0xFF9C555F),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                flex: 6,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(13, 8, 13, 11),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: Align(
+                          alignment: AlignmentDirectional.topEnd,
+                          child: Text(
+                            title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 18,
+                              height: 1.2,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Text(
+                        _description.text.trim().isEmpty
+                            ? 'لباس‌هایی برای روزهای پرجنب‌وجوش و لحظه‌های آرام تو.'
+                            : _description.text.trim(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          color: textColor.withValues(alpha: .78),
+                          fontSize: 10,
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      Row(
+                        children: [
+                          FilledButton.icon(
+                            onPressed: null,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFFC72E52),
+                              disabledBackgroundColor: const Color(0xFFC72E52),
+                              foregroundColor: Colors.white,
+                              disabledForegroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 5,
+                              ),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            icon: const Icon(
+                              Icons.arrow_back_rounded,
+                              size: 14,
+                            ),
+                            label: Text(
+                              _buttonLabel.text.trim().isEmpty
+                                  ? 'دیدن محصولات'
+                                  : _buttonLabel.text.trim(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 9),
+                            ),
+                          ),
+                          const SizedBox(width: 7),
+                          Expanded(
+                            child: Text(
+                              _buttonSideText.text.trim().isEmpty
+                                  ? 'انتخاب‌هایی از جنس خودت'
+                                  : _buttonSideText.text.trim(),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                color: textColor.withValues(alpha: .75),
+                                fontSize: 8,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _previewImagePlaceholder() => const ColoredBox(
+    color: Color(0x18FFFFFF),
+    child: Center(
+      child: Icon(Icons.image_outlined, size: 36, color: Color(0x88765E62)),
+    ),
+  );
+
+  Widget _colorPicker() {
+    final query = _normalizeBannerColorSearch(_colorSearch.text);
+    final palettes =
+        _bannerColorPalettes
+            .where(
+              (palette) =>
+                  query.isNotEmpty &&
+                  _normalizeBannerColorSearch(
+                    '${palette.name} ${palette.aliases.join(' ')}',
+                  ).contains(query),
+            )
+            .toList();
+    final typedHex = _isBannerHex(
+      _colorSearch.text.trim().startsWith('#')
+          ? _colorSearch.text.trim()
+          : '#${_colorSearch.text.trim()}',
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _colorSearch,
+          textDirection: TextDirection.rtl,
+          decoration: const InputDecoration(
+            labelText: 'جست‌وجوی رنگ یا کد HEX',
+            hintText: 'مثلاً آبی یا #1976D2',
+            prefixIcon: Icon(Icons.search_rounded),
+            isDense: true,
+          ),
+          onChanged: (value) {
+            final candidate =
+                value.trim().startsWith('#')
+                    ? value.trim()
+                    : '#${value.trim()}';
+            if (_isBannerHex(candidate))
+              _backgroundColor = candidate.toUpperCase();
+            setState(() {});
+          },
+        ),
+        if (query.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              'نام رنگ را بنویس تا همهٔ طیف‌هایش نمایش داده شود؛ مثل «آبی».',
+              style: TextStyle(fontSize: 11, color: Color(0xFF74686C)),
+            ),
+          ),
+        if (typedHex)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: OutlinedButton.icon(
+              onPressed:
+                  () => setState(
+                    () =>
+                        _backgroundColor =
+                            (_colorSearch.text.trim().startsWith('#')
+                                    ? _colorSearch.text.trim()
+                                    : '#${_colorSearch.text.trim()}')
+                                .toUpperCase(),
+                  ),
+              icon: Icon(
+                Icons.circle,
+                color: _bannerColorValue(
+                  _colorSearch.text.trim().startsWith('#')
+                      ? _colorSearch.text.trim()
+                      : '#${_colorSearch.text.trim()}',
+                ),
+              ),
+              label: Text('انتخاب رنگ ${_colorSearch.text.toUpperCase()}'),
+            ),
+          ),
+        if (query.isNotEmpty && palettes.isEmpty && !typedHex)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              'رنگی پیدا نشد؛ نام فارسی یا کد HEX را وارد کن.',
+              style: TextStyle(fontSize: 11, color: Color(0xFF74686C)),
+            ),
+          ),
+        ...palettes.map(
+          (palette) => Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  palette.name,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 9,
+                  children:
+                      _bannerPaletteShades(palette).map((shade) {
+                        final hex = _bannerColorHex(shade.color);
+                        final selected = hex == _backgroundColor.toUpperCase();
+                        return SizedBox(
+                          width: 44,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () => setState(() => _backgroundColor = hex),
+                            child: Column(
+                              children: [
+                                Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: shade.color,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color:
+                                          selected
+                                              ? Theme.of(
+                                                context,
+                                              ).colorScheme.primary
+                                              : Theme.of(
+                                                context,
+                                              ).colorScheme.outlineVariant,
+                                      width: selected ? 2.5 : 1,
+                                    ),
+                                  ),
+                                  child:
+                                      selected
+                                          ? Icon(
+                                            Icons.check_rounded,
+                                            size: 18,
+                                            color:
+                                                shade.color.computeLuminance() >
+                                                        .48
+                                                    ? Colors.black87
+                                                    : Colors.white,
+                                          )
+                                          : null,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${shade.shade}',
+                                  style: const TextStyle(fontSize: 9),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                color: _bannerColorValue(_backgroundColor),
+                borderRadius: BorderRadius.circular(7),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'رنگ انتخاب‌شده: $_backgroundColor',
+              textDirection: TextDirection.ltr,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
+
+typedef _BannerShade = ({int shade, Color color});
+typedef _BannerColorPalette =
+    ({String name, ColorSwatch<int> colors, bool accent, List<String> aliases});
+
+const _bannerColorPalettes = <_BannerColorPalette>[
+  (name: 'قرمز', colors: Colors.red, accent: false, aliases: ['red']),
+  (name: 'صورتی', colors: Colors.pink, accent: false, aliases: ['pink']),
+  (name: 'بنفش', colors: Colors.purple, accent: false, aliases: ['purple']),
+  (
+    name: 'بنفش تیره',
+    colors: Colors.deepPurple,
+    accent: false,
+    aliases: ['deep purple'],
+  ),
+  (
+    name: 'نیلی',
+    colors: Colors.indigo,
+    accent: false,
+    aliases: ['indigo', 'آبی تیره'],
+  ),
+  (name: 'آبی', colors: Colors.blue, accent: false, aliases: ['blue']),
+  (
+    name: 'آبی روشن',
+    colors: Colors.lightBlue,
+    accent: false,
+    aliases: ['light blue'],
+  ),
+  (
+    name: 'فیروزه‌ای',
+    colors: Colors.cyan,
+    accent: false,
+    aliases: ['cyan', 'آبی فیروزه ای'],
+  ),
+  (
+    name: 'سبزآبی',
+    colors: Colors.teal,
+    accent: false,
+    aliases: ['teal', 'فیروزه‌ای تیره'],
+  ),
+  (name: 'سبز', colors: Colors.green, accent: false, aliases: ['green']),
+  (
+    name: 'سبز روشن',
+    colors: Colors.lightGreen,
+    accent: false,
+    aliases: ['light green'],
+  ),
+  (name: 'لیمویی', colors: Colors.lime, accent: false, aliases: ['lime']),
+  (name: 'زرد', colors: Colors.yellow, accent: false, aliases: ['yellow']),
+  (name: 'کهربایی', colors: Colors.amber, accent: false, aliases: ['amber']),
+  (name: 'نارنجی', colors: Colors.orange, accent: false, aliases: ['orange']),
+  (
+    name: 'نارنجی تیره',
+    colors: Colors.deepOrange,
+    accent: false,
+    aliases: ['deep orange'],
+  ),
+  (name: 'قهوه‌ای', colors: Colors.brown, accent: false, aliases: ['brown']),
+  (
+    name: 'خاکستری',
+    colors: Colors.grey,
+    accent: false,
+    aliases: ['grey', 'gray'],
+  ),
+  (
+    name: 'خاکستری آبی',
+    colors: Colors.blueGrey,
+    accent: false,
+    aliases: ['blue grey', 'blue gray'],
+  ),
+  (
+    name: 'آبی درخشان',
+    colors: Colors.blueAccent,
+    accent: true,
+    aliases: ['blue accent'],
+  ),
+  (
+    name: 'آبی روشن درخشان',
+    colors: Colors.lightBlueAccent,
+    accent: true,
+    aliases: ['light blue accent'],
+  ),
+  (
+    name: 'فیروزه‌ای درخشان',
+    colors: Colors.cyanAccent,
+    accent: true,
+    aliases: ['cyan accent', 'آبی فیروزه‌ای'],
+  ),
+  (
+    name: 'سبزآبی درخشان',
+    colors: Colors.tealAccent,
+    accent: true,
+    aliases: ['teal accent'],
+  ),
+  (
+    name: 'سبز درخشان',
+    colors: Colors.greenAccent,
+    accent: true,
+    aliases: ['green accent'],
+  ),
+  (
+    name: 'سبز روشن درخشان',
+    colors: Colors.lightGreenAccent,
+    accent: true,
+    aliases: ['light green accent'],
+  ),
+  (
+    name: 'لیمویی درخشان',
+    colors: Colors.limeAccent,
+    accent: true,
+    aliases: ['lime accent'],
+  ),
+  (
+    name: 'زرد درخشان',
+    colors: Colors.yellowAccent,
+    accent: true,
+    aliases: ['yellow accent'],
+  ),
+  (
+    name: 'کهربایی درخشان',
+    colors: Colors.amberAccent,
+    accent: true,
+    aliases: ['amber accent'],
+  ),
+  (
+    name: 'نارنجی درخشان',
+    colors: Colors.orangeAccent,
+    accent: true,
+    aliases: ['orange accent'],
+  ),
+  (
+    name: 'نارنجی تیره درخشان',
+    colors: Colors.deepOrangeAccent,
+    accent: true,
+    aliases: ['deep orange accent'],
+  ),
+  (
+    name: 'قرمز درخشان',
+    colors: Colors.redAccent,
+    accent: true,
+    aliases: ['red accent'],
+  ),
+  (
+    name: 'صورتی درخشان',
+    colors: Colors.pinkAccent,
+    accent: true,
+    aliases: ['pink accent'],
+  ),
+  (
+    name: 'بنفش درخشان',
+    colors: Colors.purpleAccent,
+    accent: true,
+    aliases: ['purple accent'],
+  ),
+  (
+    name: 'بنفش تیره درخشان',
+    colors: Colors.deepPurpleAccent,
+    accent: true,
+    aliases: ['deep purple accent'],
+  ),
+  (
+    name: 'نیلی درخشان',
+    colors: Colors.indigoAccent,
+    accent: true,
+    aliases: ['indigo accent', 'آبی تیره درخشان'],
+  ),
+];
+
+List<_BannerShade> _bannerPaletteShades(_BannerColorPalette palette) {
+  final shades =
+      palette.accent
+          ? const [100, 200, 400, 700]
+          : const [50, 100, 200, 300, 400, 500, 600, 700, 800, 900];
+  final colors = shades
+      .map((shade) => palette.colors[shade]!)
+      .toList(growable: false);
+  return List.generate(
+    colors.length,
+    (index) => (shade: shades[index], color: colors[index]),
+  );
+}
+
+bool _isBannerHex(String value) => RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(value);
+
+Color _bannerColorValue(String value) {
+  if (!_isBannerHex(value)) return const Color(0xFFFCE4DB);
+  return Color(0xFF000000 | int.parse(value.substring(1), radix: 16));
+}
+
+String _bannerColorHex(Color color) =>
+    '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+
+String _normalizeBannerColorSearch(String value) => value
+    .trim()
+    .toLowerCase()
+    .replaceAll('ي', 'ی')
+    .replaceAll('ك', 'ک')
+    .replaceAll('آ', 'ا')
+    .replaceAll('‌', ' ')
+    .replaceAll(RegExp(r'\s+'), ' ');
+
+String _bannerPreviewText(String value, String fallback) =>
+    value.trim().isEmpty ? fallback : value.trim();
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState({required this.label});
@@ -459,14 +1194,27 @@ class _ErrorState extends StatelessWidget {
   Widget build(BuildContext context) => Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Text(message, textAlign: TextAlign.center), const SizedBox(height: 8), OutlinedButton(onPressed: onRetry, child: const Text('تلاش دوباره'))])));
 }
 
-Widget _textField(TextEditingController controller, String label, {bool required = false, bool ltr = false}) => Padding(
+Widget _textField(
+  TextEditingController controller,
+  String label, {
+  bool required = false,
+  bool ltr = false,
+  int maxLines = 1,
+}) => Padding(
   padding: const EdgeInsets.only(bottom: 10),
   child: TextFormField(
     controller: controller,
     textDirection: ltr ? TextDirection.ltr : null,
     textAlign: ltr ? TextAlign.left : TextAlign.start,
+    maxLines: maxLines,
     decoration: InputDecoration(labelText: label),
-    validator: required ? (value) => value == null || value.trim().isEmpty ? 'این فیلد الزامی است' : null : null,
+    validator:
+        required
+            ? (value) =>
+                value == null || value.trim().isEmpty
+                    ? 'این فیلد الزامی است'
+                    : null
+            : null,
   ),
 );
 

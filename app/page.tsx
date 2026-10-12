@@ -87,8 +87,60 @@ type ApiCategory = {
 type StorefrontConfig = {
   theme: string;
   sections: { sectionKey: string; title: string | null; isActive: boolean; sortOrder: number }[];
-  banners: { id: string; title: string; description: string | null; imagePath: string; targetUrl: string | null }[];
+  banners: {
+    id: string;
+    title: string;
+    description: string | null;
+    imagePath: string;
+    targetUrl: string | null;
+    eyebrowText: string | null;
+    buttonLabel: string | null;
+    buttonSideText: string | null;
+    stickerLabel: string | null;
+    stickerText: string | null;
+    backgroundColor: string | null;
+  }[];
 };
+
+function getBannerTextColors(backgroundColor?: string | null) {
+  if (!backgroundColor || !/^#[0-9a-fA-F]{6}$/.test(backgroundColor)) {
+    return { text: "#2c272a", muted: "#685e60", accent: "#c72e52" };
+  }
+
+  const channel = (offset: number) =>
+    Number.parseInt(backgroundColor.slice(offset, offset + 2), 16) / 255;
+  const linear = (value: number) =>
+    value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  const luminance =
+    0.2126 * linear(channel(1)) +
+    0.7152 * linear(channel(3)) +
+    0.0722 * linear(channel(5));
+
+  return luminance > 0.18
+    ? { text: "#29262a", muted: "#51474a", accent: "#ad1f43" }
+    : { text: "#ffffff", muted: "#f3e9ec", accent: "#ffd1db" };
+}
+
+function openBannerTarget(target: string | null | undefined, fallback: () => void) {
+  const value = target?.trim();
+  if (!value) {
+    fallback();
+    return;
+  }
+
+  try {
+    const destination = new URL(value, window.location.origin);
+    if (!["http:", "https:"].includes(destination.protocol)) {
+      fallback();
+    } else if (destination.origin === window.location.origin) {
+      window.location.assign(destination.href);
+    } else {
+      window.open(destination.href, "_blank", "noopener,noreferrer");
+    }
+  } catch {
+    fallback();
+  }
+}
 
 const products: Product[] = [
   {
@@ -425,6 +477,7 @@ export default function Home() {
   const activeBanner = storefrontConfig.banners.length
     ? storefrontConfig.banners[bannerIndex % storefrontConfig.banners.length]
     : null;
+  const bannerTextColors = getBannerTextColors(activeBanner?.backgroundColor);
   const sectionIsActive = (key: string) => storefrontConfig.sections.find((section) => section.sectionKey === key)?.isActive ?? true;
   const sectionOrder = (key: string, fallback: number) => storefrontConfig.sections.find((section) => section.sectionKey === key)?.sortOrder ?? fallback;
   const cartTotal = cart.reduce((sum, line) => {
@@ -604,21 +657,26 @@ export default function Home() {
       </header>
 
       <div className="page-shell page-content" id="top">
-        {sectionIsActive("hero") && <section className="hero" aria-labelledby="hero-title" style={{ order: sectionOrder("hero", 0) }}>
+        {sectionIsActive("hero") && <section className="hero" aria-labelledby="hero-title" style={{
+          order: sectionOrder("hero", 0),
+          ...(activeBanner?.backgroundColor ? {
+            background: activeBanner.backgroundColor,
+            "--hero-text-color": bannerTextColors.text,
+            "--hero-muted-color": bannerTextColors.muted,
+            "--hero-accent-color": bannerTextColors.accent,
+          } : {}),
+        } as CSSProperties}>
           <div className="hero-copy">
-            <span className="eyebrow"><span className="eyebrow-dot" /> {activeBanner ? "پیشنهاد تازهٔ پانیذ" : "کالکشن تازهٔ پانیذ"}</span>
+            <span className="eyebrow"><span className="eyebrow-dot" /> {activeBanner?.eyebrowText || (activeBanner ? "پیشنهاد تازهٔ پانیذ" : "کالکشن تازهٔ پانیذ")}</span>
             <h1 id="hero-title">{activeBanner?.title ?? <>هر روز،<br />با <em>حالِ خوب</em> بپوش</>}</h1>
             <p>{activeBanner?.description || "لباس‌هایی برای روزهای پرجنب‌وجوش و لحظه‌های آرام تو. راحت، خوش‌دوخت و دوست‌داشتنی."}</p>
             <div className="hero-buttons">
-              <button className="button-primary" onClick={() => {
-                const target = activeBanner?.targetUrl;
-                if (target?.startsWith("/")) window.location.assign(target);
-                else if (target?.startsWith("https://")) window.open(target, "_blank", "noopener,noreferrer");
-                else chooseCategory("همه محصولات");
-              }}>
-                دیدن محصولات <ArrowLeft size={18} />
+              <button className="button-primary" onClick={() =>
+                openBannerTarget(activeBanner?.targetUrl, () => chooseCategory("همه محصولات"))
+              }>
+                {activeBanner?.buttonLabel || "دیدن محصولات"} <ArrowLeft size={18} />
               </button>
-              <span className="hero-note"><span className="note-line" /> انتخاب‌هایی از جنس خودت</span>
+              <span className="hero-note"><span className="note-line" /> {activeBanner?.buttonSideText || "انتخاب‌هایی از جنس خودت"}</span>
             </div>
             <div className="hero-proof">
               <div className="avatar-stack" aria-hidden="true">
@@ -641,7 +699,7 @@ export default function Home() {
                 className="hero-image"
               />
             </div>
-            <div className="hero-sticker"><span>حس خوب</span><strong>از همین‌جا<br />شروع می‌شه</strong><Sparkles size={18} /></div>
+            <div className="hero-sticker"><span>{activeBanner?.stickerLabel || "حس خوب"}</span><strong>{activeBanner?.stickerText || <>از همین‌جا<br />شروع می‌شه</>}</strong><Sparkles size={18} /></div>
             <div className="hero-tag"><span className="tag-line" /><span>برای روزهای خودت</span></div>
             <div className="hero-orbit" aria-hidden="true" />
           </div>
