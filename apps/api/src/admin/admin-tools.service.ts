@@ -54,6 +54,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   private rubikaTimer?: NodeJS.Timeout;
   private backupTimer?: NodeJS.Timeout;
   private socialBusy = false;
+  private socialRunRequested = false;
   private smsBusy = false;
   private rubikaBusy = false;
   private backupBusy = false;
@@ -67,7 +68,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit(): Promise<void> {
     try { await this.recoverInterruptedJobs(); }
     catch (error) { this.logger.warn(`Could not recover interrupted work: ${error instanceof Error ? error.message : "unknown error"}`); }
-    this.socialTimer = setInterval(() => void this.publishDuePosts(), 20_000);
+    this.socialTimer = setInterval(() => void this.publishDuePosts(), 5_000);
     this.socialTimer.unref();
     if (this.smsCampaignWorkerEnabled()) {
       this.smsTimer = setInterval(() => void this.processQueuedSms(), 15_000);
@@ -439,11 +440,12 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
 
   async listSocialPosts(admin: AuthenticatedAdmin) {
     requireManager(admin);
-    const posts = await this.prisma.socialPost.findMany({ orderBy: { createdAt: "desc" }, take: 50 });
+    const posts = await this.prisma.socialPost.findMany({ orderBy: { createdAt: "desc" } });
     return { data: posts.map((post) => ({
       id: post.id.toString(), caption: post.caption, imageUrl: post.imageUrl,
       channels: post.channels, status: post.status, publishAt: post.publishAt.toISOString(),
-      channelResults: post.channelResults, lastError: post.lastError, publishedAt: post.publishedAt?.toISOString() ?? null,
+      channelResults: post.channelResults, lastError: post.lastError,
+      publishedAt: post.publishedAt?.toISOString() ?? null, createdAt: post.createdAt.toISOString(),
     })) };
   }
 
@@ -473,11 +475,55 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     if (!publishAt) throw badInput("publishAt is invalid.");
     const post = await this.prisma.socialPost.create({ data: {
       caption, imageUrl, channels: channels as Prisma.InputJsonArray, publishAt,
-      status: "queued", createdByAdminId: admin.id,
+      status: "awaiting_approval", createdByAdminId: admin.id,
     } });
-    await this.audit(admin, "social_post.queued", "social_post", post.id, { channels, publishAt: publishAt.toISOString() });
-    if (publishAt <= new Date()) void this.publishDuePosts();
+    await this.audit(admin, "social_post.awaiting_approval", "social_post", post.id, { channels, publishAt: publishAt.toISOString() });
     return { data: { id: post.id.toString(), status: post.status, publishAt: post.publishAt.toISOString() } };
+  }
+
+  async approveSocialPost(admin: AuthenticatedAdmin, rawId: string) {
+    requireManager(admin);
+    const id = parseId(rawId, "id");
+    const post = await this.prisma.socialPost.findUnique({ where: { id }, select: { id: true, status: true, publishAt: true } });
+    if (!post) throw new NotFoundException({ code: "SOCIAL_POST_NOT_FOUND", message: "پیام انتشار پیدا نشد." });
+    if (post.status !== "awaiting_approval") throw new ConflictException({ code: "SOCIAL_POST_NOT_AWAITING_APPROVAL", message: "این پیام دیگر در انتظار تأیید نیست." });
+    const updated = await this.prisma.socialPost.updateMany({ where: { id, status: "awaiting_approval" }, data: { status: "queued" } });
+    if (updated.count !== 1) throw new ConflictException({ code: "SOCIAL_POST_ALREADY_PROCESSED", message: "وضعیت پیام هم‌زمان تغییر کرده است؛ فهرست را تازه‌سازی کن." });
+    await this.audit(admin, "social_post.approved", "social_post", id, { publishAt: post.publishAt.toISOString() });
+    if (post.publishAt <= new Date()) void this.publishDuePosts();
+    return { data: { id: id.toString(), status: "queued", publishAt: post.publishAt.toISOString() } };
+  }
+
+  async sendSocialPostNow(admin: AuthenticatedAdmin, rawId: string) {
+    requireManager(admin);
+    const id = parseId(rawId, "id");
+    const post = await this.prisma.socialPost.findUnique({ where: { id }, select: { id: true, status: true } });
+    if (!post) throw new NotFoundException({ code: "SOCIAL_POST_NOT_FOUND", message: "پیام انتشار پیدا نشد." });
+    if (post.status !== "queued") throw new ConflictException({ code: "SOCIAL_POST_NOT_QUEUED", message: "فقط پیام تأییدشدهٔ در صف را می‌توان فوری ارسال کرد." });
+    const publishAt = new Date();
+    const updated = await this.prisma.socialPost.updateMany({
+      where: { id, status: "queued" }, data: { publishAt },
+    });
+    if (updated.count !== 1) throw new ConflictException({ code: "SOCIAL_POST_ALREADY_PROCESSED", message: "وضعیت پیام هم‌زمان تغییر کرده است؛ فهرست را تازه‌سازی کن." });
+    await this.audit(admin, "social_post.send_now", "social_post", id, { publishAt: publishAt.toISOString() });
+    void this.publishDuePosts();
+    return { data: { id: id.toString(), status: "queued", publishAt: publishAt.toISOString() } };
+  }
+
+  async cancelSocialPost(admin: AuthenticatedAdmin, rawId: string) {
+    requireManager(admin);
+    const id = parseId(rawId, "id");
+    const post = await this.prisma.socialPost.findUnique({ where: { id }, select: { id: true, status: true } });
+    if (!post) throw new NotFoundException({ code: "SOCIAL_POST_NOT_FOUND", message: "پیام انتشار پیدا نشد." });
+    if (post.status !== "awaiting_approval" && post.status !== "queued") {
+      throw new ConflictException({ code: "SOCIAL_POST_CANNOT_BE_CANCELLED", message: "این پیام در حال ارسال است یا قبلاً پردازش شده و دیگر قابل لغو نیست." });
+    }
+    const updated = await this.prisma.socialPost.updateMany({
+      where: { id, status: { in: ["awaiting_approval", "queued"] } }, data: { status: "cancelled" },
+    });
+    if (updated.count !== 1) throw new ConflictException({ code: "SOCIAL_POST_ALREADY_PROCESSED", message: "وضعیت پیام هم‌زمان تغییر کرده است؛ فهرست را تازه‌سازی کن." });
+    await this.audit(admin, "social_post.cancelled", "social_post", id, { previousStatus: post.status });
+    return { data: { id: id.toString(), status: "cancelled" } };
   }
 
   async operationsStatus(admin: AuthenticatedAdmin) {
@@ -563,7 +609,10 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async publishDuePosts(): Promise<void> {
-    if (this.socialBusy) return;
+    if (this.socialBusy) {
+      this.socialRunRequested = true;
+      return;
+    }
     this.socialBusy = true;
     try {
       for (let index = 0; index < 5; index++) {
@@ -573,6 +622,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
         if (!post) break;
         const claim = await this.prisma.socialPost.updateMany({ where: { id: post.id, status: "queued" }, data: { status: "publishing" } });
         if (claim.count !== 1) continue;
+        const startedAt = Date.now();
         const channels = Array.isArray(post.channels) ? post.channels.filter((item): item is string => typeof item === "string") : [];
         const results: Record<string, unknown> = {};
         for (const channel of channels) {
@@ -589,10 +639,17 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
           lastError: failures.length ? failures.map(([channel, result]) => `${channel}: ${(result as { error?: string }).error ?? "failed"}`).join("; ").slice(0, 1000) : null,
           publishedAt: state === "published" ? new Date() : null,
         } });
+        this.logger.log(`Social post ${post.id} finished with status ${state} in ${Date.now() - startedAt}ms.`);
       }
     } catch (error) {
       this.logger.error(`Social publishing worker failed: ${error instanceof Error ? error.message : "unknown error"}`);
-    } finally { this.socialBusy = false; }
+    } finally {
+      this.socialBusy = false;
+      if (this.socialRunRequested) {
+        this.socialRunRequested = false;
+        setImmediate(() => void this.publishDuePosts());
+      }
+    }
   }
 
   private async publishRubika(caption: string, imageUrl: string | null) {

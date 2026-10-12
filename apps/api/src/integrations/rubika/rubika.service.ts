@@ -104,11 +104,17 @@ export class RubikaBotService implements OnModuleInit {
     const mimeType = extension === "png" ? "image/png" : extension === "jpg" || extension === "jpeg" ? "image/jpeg" : "image/webp";
     const form = new FormData();
     form.append("file", new Blob([Uint8Array.from(bytes)], { type: mimeType }), fileName);
-    const uploadResponse = await fetch(uploadEndpoint, {
-      method: "POST",
-      body: form,
-      signal: AbortSignal.timeout(30_000),
-    });
+    const uploadStartedAt = Date.now();
+    let uploadResponse: Response;
+    try {
+      uploadResponse = await fetch(uploadEndpoint, {
+        method: "POST",
+        body: form,
+        signal: AbortSignal.timeout(30_000),
+      });
+    } finally {
+      this.logger.log(`Rubika image transfer took ${Date.now() - uploadStartedAt}ms.`);
+    }
     const uploadResult = asRecord(await uploadResponse.json().catch(() => ({})));
     const uploadStatus = typeof uploadResult.status === "string" ? uploadResult.status.toLowerCase() : "";
     if (!uploadResponse.ok || uploadResult.ok === false || uploadStatus === "error" || Boolean(uploadResult.error)) {
@@ -221,18 +227,23 @@ export class RubikaBotService implements OnModuleInit {
     if (apiBase.protocol !== "https:") {
       throw new ServiceUnavailableException({ code: "RUBIKA_API_HTTPS_REQUIRED", message: "Rubika API must be called over HTTPS." });
     }
-    const response = await fetch(apiBase.toString().replace(/\/+$/, "") + "/" + encodeURIComponent(token) + "/" + method, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-      signal: AbortSignal.timeout(15_000),
-    });
-    const result = asRecord(await response.json().catch(() => ({})));
-    const status = typeof result.status === "string" ? result.status.toLowerCase() : "";
-    if (!response.ok || result.ok === false || status === "error" || Boolean(result.error)) {
-      throw new ServiceUnavailableException({ code: "RUBIKA_API_ERROR", message: "Rubika API returned HTTP " + response.status + "." });
+    const startedAt = Date.now();
+    try {
+      const response = await fetch(apiBase.toString().replace(/\/+$/, "") + "/" + encodeURIComponent(token) + "/" + method, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+        signal: AbortSignal.timeout(15_000),
+      });
+      const result = asRecord(await response.json().catch(() => ({})));
+      const status = typeof result.status === "string" ? result.status.toLowerCase() : "";
+      if (!response.ok || result.ok === false || status === "error" || Boolean(result.error)) {
+        throw new ServiceUnavailableException({ code: "RUBIKA_API_ERROR", message: "Rubika API returned HTTP " + response.status + "." });
+      }
+      return result;
+    } finally {
+      this.logger.log(`Rubika API ${method} took ${Date.now() - startedAt}ms.`);
     }
-    return result;
   }
 
   private token(): string {

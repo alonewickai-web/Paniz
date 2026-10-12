@@ -363,6 +363,9 @@ class _SocialPublishingScreenState extends ConsumerState<SocialPublishingScreen>
   bool _loading = false;
   JsonMap _status = {};
   List<JsonMap> _posts = const [];
+  final Set<String> _actingPostIds = {};
+  String _postFilter = 'queue';
+  String _channelFilter = 'rubika';
   String? _error;
 
   @override
@@ -374,8 +377,19 @@ class _SocialPublishingScreenState extends ConsumerState<SocialPublishingScreen>
       final status = await ref.read(adminApiProvider).socialStatus();
       final posts = await ref.read(adminApiProvider).socialPosts();
       final products = await ref.read(adminApiProvider).socialProducts();
-      if (mounted) setState(() { _status = status; _posts = posts; _products = products; });
+      if (mounted) setState(() { _status = status; _posts = posts; _products = products; _error = null; });
     } catch (error) { if (mounted) setState(() => _error = AdminApi.friendlyError(error)); }
+  }
+
+  List<JsonMap> get _visiblePosts {
+    final channelPosts = _posts.where((post) {
+      final channels = post['channels'];
+      return _channelFilter == 'all' || (channels is List && channels.contains(_channelFilter));
+    });
+    bool isQueue(JsonMap post) => const {'awaiting_approval', 'queued', 'publishing'}.contains(post['status']);
+    if (_postFilter == 'queue') return channelPosts.where(isQueue).toList();
+    if (_postFilter == 'history') return channelPosts.where((post) => !isQueue(post)).toList();
+    return channelPosts.toList();
   }
 
   JsonMap? get _selectedProduct {
@@ -450,9 +464,130 @@ class _SocialPublishingScreenState extends ConsumerState<SocialPublishingScreen>
       _caption.clear();
       setState(() { _imagePath = null; _productId = null; _productTitle.clear(); });
       await _load();
-      if (mounted) showAppMessage(context, _schedule ? 'انتشار زمان‌بندی شد.' : 'درخواست انتشار ثبت شد؛ نتیجه در فهرست نمایش داده می‌شود.');
+      if (mounted) showAppMessage(context, _schedule ? 'پیام برای تأیید و انتشار زمان‌بندی‌شده ثبت شد.' : 'پیام در صف تأیید مدیر قرار گرفت؛ تا تأیید ارسال نمی‌شود.');
     } catch (error) { if (mounted) setState(() => _error = AdminApi.friendlyError(error)); }
     finally { if (mounted) setState(() => _loading = false); }
+  }
+
+  String _channelNames(Object? raw) {
+    if (raw is! List) return 'کانال انتخاب‌شده';
+    final names = raw.map((channel) => switch ('$channel') {
+      'rubika' => 'روبیکا', 'instagram' => 'اینستاگرام', _ => '$channel',
+    }).toList();
+    return names.isEmpty ? 'کانال انتخاب‌شده' : names.join(' و ');
+  }
+
+  String _socialDate(Object? raw) {
+    if (raw is! String) return '—';
+    final date = DateTime.tryParse(raw)?.toLocal();
+    if (date == null) return '—';
+    return '${date.year}/${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}  ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _actOnPost(JsonMap post, String action) async {
+    final id = '${post['id'] ?? ''}';
+    if (id.isEmpty) return;
+    final scheduledAt = DateTime.tryParse('${post['publishAt'] ?? ''}')?.toLocal();
+    final scheduled = scheduledAt != null && scheduledAt.isAfter(DateTime.now());
+    final title = switch (action) {
+      'approve' => 'تأیید انتشار', 'send_now' => 'ارسال فوری', _ => 'لغو ارسال',
+    };
+    final message = switch (action) {
+      'approve' => scheduled
+          ? 'پس از تأیید، پیام در زمان ${_socialDate(post['publishAt'])} به ${_channelNames(post['channels'])} ارسال می‌شود.'
+          : 'با تأیید، پیام بلافاصله به ${_channelNames(post['channels'])} ارسال می‌شود.',
+      'send_now' => 'این پیام تأییدشده اکنون به ${_channelNames(post['channels'])} ارسال می‌شود. ادامه می‌دهی؟',
+      _ => 'پیام از صف خارج می‌شود و دیگر به کانال ارسال نخواهد شد. ادامه می‌دهی؟',
+    };
+    final confirmed = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(
+      title: Text(title), content: Text(message),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('بازگشت')),
+        FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text(action == 'cancel' ? 'لغو ارسال' : 'تأیید')),
+      ],
+    ));
+    if (confirmed != true || !mounted) return;
+    setState(() { _actingPostIds.add(id); _error = null; });
+    try {
+      final api = ref.read(adminApiProvider);
+      if (action == 'approve') await api.approveSocialPost(id);
+      if (action == 'send_now') await api.sendSocialPostNow(id);
+      if (action == 'cancel') await api.cancelSocialPost(id);
+      await _load();
+      if (mounted) showAppMessage(context, switch (action) {
+        'approve' => scheduled ? 'پیام تأیید شد و در زمان تعیین‌شده ارسال می‌شود.' : 'پیام تأیید شد و به صف ارسال رفت.',
+        'send_now' => 'درخواست ارسال فوری ثبت شد.', _ => 'ارسال پیام لغو شد.',
+      });
+    } catch (error) {
+      if (mounted) showAppMessage(context, AdminApi.friendlyError(error), error: true);
+      if (mounted) await _load();
+    } finally {
+      if (mounted) setState(() => _actingPostIds.remove(id));
+    }
+  }
+
+  Widget _postCard(JsonMap post) {
+    final id = '${post['id'] ?? ''}';
+    final status = '${post['status'] ?? ''}';
+    final busy = _actingPostIds.contains(id);
+    final canApprove = status == 'awaiting_approval';
+    final canSendNow = status == 'queued';
+    final canCancel = canApprove || canSendNow;
+    final publishAt = DateTime.tryParse('${post['publishAt'] ?? ''}');
+    final scheduled = publishAt != null && publishAt.isAfter(DateTime.now());
+    return Card(child: Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: CircleAvatar(child: Icon(status == 'awaiting_approval' ? Icons.mark_email_unread_outlined : status == 'published' ? Icons.check_circle_outline : Icons.post_add_outlined)),
+          title: Text('${post['caption'] ?? 'پیام بدون متن'}', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: Text('#$id · ${_statusLabel(status)} · ${_channelNames(post['channels'])}\n${status == 'published' ? 'ارسال' : 'زمان انتشار'}: ${_socialDate(status == 'published' ? post['publishedAt'] : post['publishAt'])}'),
+          isThreeLine: true,
+          trailing: const Icon(Icons.chevron_left),
+          onTap: () => showDialog<void>(context: context, builder: (dialogContext) => AlertDialog(
+            title: Text('جزئیات پیام #$id'),
+            content: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Text('وضعیت: ${_statusLabel(status)}'),
+              Text('کانال: ${_channelNames(post['channels'])}'),
+              Text('زمان انتشار: ${_socialDate(post['publishAt'])}'),
+              if (post['publishedAt'] is String) Text('ارسال‌شده در: ${_socialDate(post['publishedAt'])}'),
+              const SizedBox(height: 10),
+              const Text('متن پیام', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4), Text('${post['caption'] ?? ''}'),
+              if (post['lastError'] is String && '${post['lastError']}'.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text('خطا: ${post['lastError']}', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              ],
+              if (post['channelResults'] != null) ...[
+                const SizedBox(height: 10),
+                const Text('نتیجهٔ کانال‌ها', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text('${post['channelResults']}'),
+              ],
+            ])),
+            actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('بستن'))],
+          )),
+        ),
+        if (canApprove || canSendNow || canCancel) ...[
+          const SizedBox(height: 4),
+          Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.end, children: [
+            if (canApprove) FilledButton.icon(
+              onPressed: busy ? null : () => _actOnPost(post, 'approve'),
+              icon: const Icon(Icons.check_circle_outline), label: Text(scheduled ? 'تأیید زمان‌بندی' : 'تأیید و ارسال'),
+            ),
+            if (canSendNow) FilledButton.tonalIcon(
+              onPressed: busy ? null : () => _actOnPost(post, 'send_now'),
+              icon: const Icon(Icons.send_outlined), label: const Text('ارسال اکنون'),
+            ),
+            if (canCancel) OutlinedButton.icon(
+              onPressed: busy ? null : () => _actOnPost(post, 'cancel'),
+              icon: const Icon(Icons.cancel_outlined), label: const Text('لغو ارسال'),
+            ),
+            if (busy) const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+          ]),
+        ],
+      ]),
+    ));
   }
 
   @override
@@ -460,11 +595,17 @@ class _SocialPublishingScreenState extends ConsumerState<SocialPublishingScreen>
     final rubika = _status['rubika'] is Map ? Map<String, dynamic>.from(_status['rubika'] as Map) : <String, dynamic>{};
     final instagram = _status['instagram'] is Map ? Map<String, dynamic>.from(_status['instagram'] as Map) : <String, dynamic>{};
     return RefreshIndicator(onRefresh: _load, child: ListView(padding: const EdgeInsets.all(16), children: [
-      const _PageIntro(icon: Icons.campaign_outlined, title: 'انتشار تبلیغات', subtitle: 'ارسال به روبیکا یا انتشار زمان‌بندی‌شده در اینستاگرام'),
+      const _PageIntro(icon: Icons.campaign_outlined, title: 'انتشار تبلیغات', subtitle: 'صف تأیید، ارسال پیام و مشاهدهٔ سوابق روبیکا و اینستاگرام'),
       const SizedBox(height: 10),
       _IntegrationTile(title: 'ربات روبیکا', configured: rubika['configured'] == true, hint: 'توکن محرمانه و وب‌هوک HTTPS'),
       _IntegrationTile(title: 'Instagram Graph API', configured: instagram['configured'] == true, hint: 'INSTAGRAM_USER_ID، token و Graph API version مجاز'),
       const SizedBox(height: 8),
+      Card(child: ExpansionTile(
+        leading: const Icon(Icons.edit_note_outlined),
+        title: const Text('نوشتن پیام جدید', style: TextStyle(fontWeight: FontWeight.w800)),
+        subtitle: const Text('پیام تا زمان تأیید مدیر ارسال نمی‌شود.'),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        children: [
       DropdownButtonFormField<String?>(
         initialValue: _productId,
         decoration: const InputDecoration(
@@ -528,15 +669,40 @@ class _SocialPublishingScreenState extends ConsumerState<SocialPublishingScreen>
       CheckboxListTile(value: _instagram, onChanged: (value) => setState(() => _instagram = value ?? false), contentPadding: EdgeInsets.zero, title: const Text('انتشار در Instagram')),
       SwitchListTile.adaptive(value: _schedule, onChanged: (value) => setState(() => _schedule = value), contentPadding: EdgeInsets.zero, title: const Text('زمان‌بندی انتشار')),
       if (_schedule) OutlinedButton.icon(onPressed: _chooseTime, icon: const Icon(Icons.schedule), label: Text(_publishAt == null ? 'انتخاب تاریخ و ساعت' : _publishAt!.toLocal().toString().substring(0, 16))),
-      FilledButton.icon(onPressed: _loading ? null : _publish, icon: const Icon(Icons.send_outlined), label: Text(_loading ? 'در حال ثبت…' : 'ثبت انتشار')),
+      FilledButton.icon(onPressed: _loading ? null : _publish, icon: const Icon(Icons.send_outlined), label: Text(_loading ? 'در حال ثبت…' : 'ثبت در صف تأیید')),
       if (_error != null) _ErrorCard(message: _error!, onRetry: _load),
-      const SizedBox(height: 20), Text('انتشارهای اخیر', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-      if (_posts.isEmpty) const _EmptyCard(text: 'انتشاری ثبت نشده است.'),
-      ..._posts.map((post) => Card(child: ListTile(
-        leading: const Icon(Icons.post_add_outlined), title: Text('${post['caption']}', maxLines: 2, overflow: TextOverflow.ellipsis),
-        subtitle: Text('${_statusLabel(post['status'])} · ${_date(post['publishAt'])}'),
-        trailing: const Icon(Icons.chevron_left), onTap: () => showDialog<void>(context: context, builder: (context) => AlertDialog(title: const Text('نتیجهٔ انتشار'), content: SingleChildScrollView(child: Text('${post['lastError'] ?? post['channelResults'] ?? 'در صف انتشار'}')), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('بستن'))])),
-      ))),
+        ],
+      )),
+      const SizedBox(height: 16),
+      Row(children: [
+        Expanded(child: Text(_channelFilter == 'rubika' ? 'صف انتشار روبیکا' : 'صف انتشار', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900))),
+        Text('${persianNumber(_posts.where((post) => post['status'] == 'awaiting_approval' && (_channelFilter == 'all' || (post['channels'] is List && (post['channels'] as List).contains(_channelFilter)))).length)} در انتظار تأیید', style: Theme.of(context).textTheme.bodySmall),
+      ]),
+      const SizedBox(height: 8),
+      DropdownButtonFormField<String>(
+        initialValue: _channelFilter,
+        decoration: const InputDecoration(labelText: 'کانال انتشار'),
+        items: const [
+          DropdownMenuItem(value: 'rubika', child: Text('روبیکا')),
+          DropdownMenuItem(value: 'instagram', child: Text('اینستاگرام')),
+          DropdownMenuItem(value: 'all', child: Text('همهٔ کانال‌ها')),
+        ],
+        onChanged: (value) => setState(() => _channelFilter = value ?? 'rubika'),
+      ),
+      const SizedBox(height: 8),
+      SegmentedButton<String>(
+        segments: const [
+          ButtonSegment(value: 'queue', label: Text('صف'), icon: Icon(Icons.pending_actions_outlined)),
+          ButtonSegment(value: 'history', label: Text('سوابق'), icon: Icon(Icons.history)),
+          ButtonSegment(value: 'all', label: Text('همه'), icon: Icon(Icons.list_alt)),
+        ],
+        selected: {_postFilter},
+        onSelectionChanged: (value) => setState(() => _postFilter = value.first),
+      ),
+      const SizedBox(height: 8),
+      if (_posts.isEmpty) const _EmptyCard(text: 'هنوز پیامی برای انتشار ثبت نشده است.'),
+      if (_posts.isNotEmpty && _visiblePosts.isEmpty) _EmptyCard(text: _postFilter == 'queue' ? 'صف انتشار خالی است.' : 'در این بخش پیامی وجود ندارد.'),
+      ..._visiblePosts.map(_postCard),
     ]));
   }
 }
@@ -676,8 +842,9 @@ String _initial(Object? raw) {
 }
 
 String _statusLabel(Object? raw) => switch (raw) {
-  'draft' => 'پیش‌نویس', 'queued' => 'در صف', 'sending' || 'publishing' => 'در حال انجام',
-  'sent' || 'published' => 'موفق', 'partial' => 'نیمه‌کاره', 'failed' => 'ناموفق', _ => '$raw',
+  'draft' => 'پیش‌نویس', 'awaiting_approval' => 'در انتظار تأیید', 'queued' => 'تأیید شده · در صف',
+  'sending' || 'publishing' => 'در حال ارسال', 'sent' || 'published' => 'ارسال‌شده',
+  'partial' => 'ارسال ناقص', 'failed' => 'ناموفق', 'cancelled' => 'لغو شده', _ => '$raw',
 };
 
 String _size(Object? raw) {

@@ -244,6 +244,15 @@ class AdminApi {
   Future<JsonMap> createSocialPost(JsonMap input) async =>
       _data(await dio.post('admin/social/posts', data: input));
 
+  Future<JsonMap> approveSocialPost(String id) async =>
+      _data(await dio.post('admin/social/posts/$id/approve'));
+
+  Future<JsonMap> sendSocialPostNow(String id) async =>
+      _data(await dio.post('admin/social/posts/$id/send-now'));
+
+  Future<JsonMap> cancelSocialPost(String id) async =>
+      _data(await dio.post('admin/social/posts/$id/cancel'));
+
   Future<JsonMap> operationsStatus() async =>
       _data(await dio.get('admin/operations/status'));
 

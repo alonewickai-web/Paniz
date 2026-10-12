@@ -109,7 +109,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
       if (mounted) {
         showAppMessage(
           context,
-          'درخواست انتشار «$productName» همراه تصویر در روبیکا ثبت شد.',
+          '«$productName» همراه تصویر در صف تأیید انتشار روبیکا قرار گرفت.',
         );
       }
     } catch (error) {

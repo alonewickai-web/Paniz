@@ -95,6 +95,21 @@ export class AdminToolsController {
     return this.tools.createSocialPost(request.admin!, body);
   }
 
+  @Post("social/posts/:id/approve")
+  approveSocialPost(@Req() request: AdminRequest, @Param("id") id: string) {
+    return this.tools.approveSocialPost(request.admin!, id);
+  }
+
+  @Post("social/posts/:id/send-now")
+  sendSocialPostNow(@Req() request: AdminRequest, @Param("id") id: string) {
+    return this.tools.sendSocialPostNow(request.admin!, id);
+  }
+
+  @Post("social/posts/:id/cancel")
+  cancelSocialPost(@Req() request: AdminRequest, @Param("id") id: string) {
+    return this.tools.cancelSocialPost(request.admin!, id);
+  }
+
   @Get("operations/status")
   operationsStatus(@Req() request: AdminRequest) {
     return this.tools.operationsStatus(request.admin!);
