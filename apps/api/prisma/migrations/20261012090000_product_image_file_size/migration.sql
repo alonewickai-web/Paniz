@@ -1,0 +1,2 @@
+ALTER TABLE `product_images`
+  ADD COLUMN `file_size_bytes` INTEGER UNSIGNED NOT NULL DEFAULT 0;

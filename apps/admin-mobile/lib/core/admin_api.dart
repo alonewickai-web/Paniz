@@ -275,15 +275,30 @@ class AdminApi {
       _data(await dio.post('admin/banners/$id/restore'));
 
   Future<List<JsonMap>> products({String? query}) async {
-    final response = await dio.get(
+    Future<Response<dynamic>> fetchPage(int page) => dio.get(
       'admin/products',
       queryParameters: {
-        'page': 1,
+        'page': page,
         'pageSize': 100,
         if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
       },
     );
-    return _list(_payload(response));
+
+    final firstPage = await fetchPage(1);
+    final products = _list(_payload(firstPage));
+    final body = firstPage.data;
+    final meta = body is Map ? body['meta'] : null;
+    final totalPages =
+        meta is Map ? int.tryParse('${meta['totalPages']}') ?? 1 : 1;
+    if (totalPages <= 1) return products;
+
+    final remainingPages = await Future.wait(
+      List.generate(totalPages - 1, (index) => fetchPage(index + 2)),
+    );
+    return [
+      ...products,
+      for (final response in remainingPages) ..._list(_payload(response)),
+    ];
   }
 
   Future<List<JsonMap>> categories() async {

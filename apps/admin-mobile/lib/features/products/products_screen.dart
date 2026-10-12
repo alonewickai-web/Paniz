@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../core/admin_image_picker_field.dart';
 import '../../core/admin_api.dart';
@@ -30,16 +29,6 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     setState(() => _saving = true);
     try {
       final api = ref.read(adminApiProvider);
-      final imageBytes = values.remove('_imageBytes') as Uint8List;
-      final imageName = values.remove('_imageFilename') as String;
-      final image = await api.uploadProductImage(imageBytes, imageName);
-      values['images'] = [
-        {
-          'imagePath': image['imagePath'],
-          'altText': values['name'],
-          'isPrimary': true,
-        },
-      ];
       final created = await api.createProduct(values);
       ref.invalidate(productsProvider);
       if (mounted)
@@ -52,8 +41,8 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     }
   }
 
-  Future<void> _toggleStatus(JsonMap product) async {
-    final next = product['status'] == 'published' ? 'draft' : 'published';
+  Future<void> _toggleStatus(JsonMap product, bool active) async {
+    final next = active ? 'published' : 'draft';
     try {
       await ref.read(adminApiProvider).updateProduct('${product['id']}', {
         'status': next,
@@ -65,6 +54,24 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
           next == 'published'
               ? 'محصول در سایت منتشر شد.'
               : 'محصول به پیش‌نویس برگشت.',
+        );
+    } catch (error) {
+      if (mounted)
+        showAppMessage(context, AdminApi.friendlyError(error), error: true);
+    }
+  }
+
+  Future<void> _toggleVariantStatus(JsonMap variant, bool active) async {
+    try {
+      await ref.read(adminApiProvider).updateVariant('${variant['id']}', {
+        'isActive': active,
+      });
+      ref.invalidate(productsProvider);
+      ref.invalidate(dashboardProvider);
+      if (mounted)
+        showAppMessage(
+          context,
+          active ? 'این تنوع فعال شد.' : 'این تنوع غیرفعال شد.',
         );
     } catch (error) {
       if (mounted)
@@ -194,6 +201,25 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
           .updateProductImage('${product['id']}', '${image['id']}', changes);
       ref.invalidate(productsProvider);
       if (mounted) showAppMessage(context, 'تصویر و تنظیماتش ذخیره شد.');
+    } catch (error) {
+      if (mounted)
+        showAppMessage(context, AdminApi.friendlyError(error), error: true);
+    }
+  }
+
+  Future<void> _makePrimaryImage(JsonMap product, JsonMap image) async {
+    try {
+      await ref.read(adminApiProvider).updateProductImage(
+        '${product['id']}',
+        '${image['id']}',
+        {'isPrimary': true},
+      );
+      ref.invalidate(productsProvider);
+      if (mounted)
+        showAppMessage(
+          context,
+          'تصویر انتخاب‌شده به تصویر اصلی و اولین عکس تبدیل شد.',
+        );
     } catch (error) {
       if (mounted)
         showAppMessage(context, AdminApi.friendlyError(error), error: true);
@@ -332,7 +358,8 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                           padding: const EdgeInsets.only(bottom: 10),
                           child: _ProductCard(
                             product: product,
-                            onStatus: () => _toggleStatus(product),
+                            onStatus:
+                                (active) => _toggleStatus(product, active),
                             onEditProduct: () => _editProduct(product),
                             onArchive: () => _archive(product),
                             onEditVariant: _editVariant,
@@ -344,6 +371,11 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                             onEditImage: (image) => _editImage(product, image),
                             onDeleteImage:
                                 (image) => _deleteImage(product, image),
+                            onMakePrimaryImage:
+                                (image) => _makePrimaryImage(product, image),
+                            onToggleVariant:
+                                (variant, active) =>
+                                    _toggleVariantStatus(variant, active),
                           ),
                         ),
                       ),
@@ -383,9 +415,11 @@ class _ProductCard extends StatelessWidget {
     required this.onAddImage,
     required this.onEditImage,
     required this.onDeleteImage,
+    required this.onMakePrimaryImage,
+    required this.onToggleVariant,
   });
   final JsonMap product;
-  final VoidCallback onStatus;
+  final ValueChanged<bool> onStatus;
   final VoidCallback onEditProduct;
   final VoidCallback onArchive;
   final ValueChanged<JsonMap> onEditVariant;
@@ -394,13 +428,18 @@ class _ProductCard extends StatelessWidget {
   final VoidCallback onAddImage;
   final ValueChanged<JsonMap> onEditImage;
   final ValueChanged<JsonMap> onDeleteImage;
+  final ValueChanged<JsonMap> onMakePrimaryImage;
+  final void Function(JsonMap variant, bool active) onToggleVariant;
 
   @override
   Widget build(BuildContext context) {
     final images =
         product['images'] is List
-            ? (product['images'] as List).whereType<Map>().toList()
-            : const [];
+            ? (product['images'] as List)
+                .whereType<Map>()
+                .map((entry) => Map<String, dynamic>.from(entry))
+                .toList()
+            : const <JsonMap>[];
     final variants =
         product['variants'] is List
             ? (product['variants'] as List)
@@ -471,49 +510,47 @@ class _ProductCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onStatus,
-                  icon: Icon(
-                    status == 'published'
-                        ? Icons.visibility_off_outlined
-                        : Icons.publish_rounded,
-                    size: 17,
-                  ),
-                  label: Text(status == 'published' ? 'پیش‌نویس' : 'انتشار'),
+                child: _ActiveStateSwitch(
+                  title: 'نمایش در سایت',
+                  value: status == 'published',
+                  onChanged: onStatus,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            alignment: WrapAlignment.start,
+          Row(
             children: [
-              IconButton(
-                tooltip: 'افزودن رنگ یا سایز',
-                onPressed: onAddVariant,
-                color: Theme.of(context).colorScheme.primary,
-                icon: const Icon(Icons.add_box_outlined),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onAddVariant,
+                  icon: const Icon(Icons.add_box_outlined, size: 18),
+                  label: const Text('افزودن تنوع'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: images.length >= 4 ? null : onAddImage,
+                  icon: const Icon(
+                    Icons.add_photo_alternate_outlined,
+                    size: 18,
+                  ),
+                  label: Text('افزودن تصویر ${persianNumber(images.length)}/۴'),
+                ),
               ),
               IconButton(
-                tooltip: 'افزودن تصویر',
-                onPressed: onAddImage,
-                color: Theme.of(context).colorScheme.primary,
-                icon: const Icon(Icons.add_photo_alternate_outlined),
-              ),
-              IconButton(
-                tooltip: 'بایگانی',
+                tooltip: 'بایگانی محصول',
                 onPressed: onArchive,
-                color: Theme.of(context).colorScheme.primary,
-                icon: Icon(Icons.archive_outlined),
+                icon: const Icon(Icons.archive_outlined),
               ),
             ],
           ),
+          const SizedBox(height: 8),
           Align(
             alignment: AlignmentDirectional.centerStart,
             child: Text(
-              'تصاویر محصول',
+              'گالری تصاویر (${persianNumber(images.length)}/۴)',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
@@ -521,119 +558,281 @@ class _ProductCard extends StatelessWidget {
               ),
             ),
           ),
-          ...images.map(
-            (image) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              leading: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  AdminApi.imageUrl('${image['imagePath'] ?? ''}'),
-                  width: 42,
-                  height: 52,
-                  fit: BoxFit.cover,
-                  errorBuilder:
-                      (_, __, ___) => Icon(
-                        Icons.image_outlined,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final indexedImage in images.indexed)
+                _ProductImageTile(
+                  index: indexedImage.$1,
+                  image: indexedImage.$2,
+                  onEdit: () => onEditImage(indexedImage.$2),
+                  onDelete: () => onDeleteImage(indexedImage.$2),
+                  onMakePrimary: () => onMakePrimaryImage(indexedImage.$2),
                 ),
-              ),
-              title: Text(
-                '${image['altText'] ?? image['imagePath'] ?? ''}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 11),
-              ),
-              subtitle:
-                  image['isPrimary'] == true
-                      ? Text(
-                        'تصویر اصلی',
-                        style: TextStyle(
-                          fontSize: 10,
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...variants.map(
+            (variant) => Column(
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: _productColorFromHex(
+                        variant['colorHex'],
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
+                      ),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    '${variant['colorName'] ?? ''} · ${variant['sizeLabel'] ?? ''}  (${variant['sku'] ?? ''})',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Text(
+                    '${toman(variant['priceToman'] ?? 0)} · قابل‌فروش ${persianNumber(variant['availableQuantity'] ?? 0)} · رزرو ${persianNumber(variant['reservedQuantity'] ?? 0)}${variant['isActive'] == true ? '' : ' · غیرفعال'}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: Wrap(
+                    spacing: 0,
+                    children: [
+                      IconButton(
+                        tooltip: 'ویرایش همهٔ مشخصات تنوع',
+                        onPressed: () => onEditVariant(variant),
+                        icon: Icon(
+                          Icons.edit_outlined,
                           color: Theme.of(context).colorScheme.primary,
                         ),
-                      )
-                      : null,
-              trailing: Wrap(
-                spacing: 2,
-                children: [
-                  IconButton(
-                    tooltip: 'ویرایش یا تعویض تصویر',
-                    onPressed:
-                        () => onEditImage(Map<String, dynamic>.from(image)),
-                    icon: Icon(
-                      Icons.edit_outlined,
-                      color: Theme.of(context).colorScheme.primary,
-                      size: 20,
-                    ),
+                      ),
+                      IconButton(
+                        tooltip: 'اصلاح موجودی این تنوع',
+                        onPressed: () => onAdjustVariant(variant),
+                        icon: Icon(
+                          Icons.inventory_2_outlined,
+                          color: Theme.of(context).colorScheme.tertiary,
+                        ),
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    tooltip: 'حذف تصویر',
-                    onPressed:
-                        () => onDeleteImage(Map<String, dynamic>.from(image)),
-                    icon: Icon(
-                      Icons.delete_outline,
-                      color: Theme.of(context).colorScheme.error,
-                      size: 20,
-                    ),
+                ),
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(
+                    start: 40,
+                    bottom: 8,
                   ),
-                ],
-              ),
+                  child: _ActiveStateSwitch(
+                    title: 'وضعیت این تنوع',
+                    value: variant['isActive'] == true,
+                    onChanged: (active) => onToggleVariant(variant, active),
+                  ),
+                ),
+                const Divider(height: 8),
+              ],
             ),
           ),
-          ...variants.map(
-            (variant) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              leading: Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  color: _productColorFromHex(
-                    variant['colorHex'],
-                    Theme.of(context).colorScheme.surfaceContainerHighest,
-                  ),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                  ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProductImageTile extends StatelessWidget {
+  const _ProductImageTile({
+    required this.index,
+    required this.image,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onMakePrimary,
+  });
+  final int index;
+  final JsonMap image;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onMakePrimary;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final primary = image['isPrimary'] == true;
+    final bytes = int.tryParse('${image['fileSizeBytes'] ?? 0}') ?? 0;
+    final sizeLabel =
+        bytes <= 0
+            ? 'حجم فایل: نامشخص'
+            : bytes < 1024 * 1024
+            ? 'حجم فایل: ${persianNumber((bytes / 1024).ceil())} کیلوبایت'
+            : 'حجم فایل: ${persianNumber((bytes / (1024 * 1024)).toStringAsFixed(1))} مگابایت';
+    return SizedBox(
+      width: 148,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: primary ? colors.primary : colors.outlineVariant,
+            width: primary ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                height: 112,
+                child: Image.network(
+                  AdminApi.imageUrl('${image['imagePath'] ?? ''}'),
+                  fit: BoxFit.contain,
+                  cacheWidth: 360,
+                  errorBuilder:
+                      (_, __, ___) => Center(
+                        child: Icon(
+                          Icons.image_not_supported_outlined,
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                  loadingBuilder:
+                      (context, child, progress) =>
+                          progress == null
+                              ? child
+                              : const Center(
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
                 ),
-              ),
-              title: Text(
-                '${variant['colorName'] ?? ''} · ${variant['sizeLabel'] ?? ''}  (${variant['sku'] ?? ''})',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              subtitle: Text(
-                '${toman(variant['priceToman'] ?? 0)} · قابل‌فروش ${persianNumber(variant['availableQuantity'] ?? 0)} · رزرو ${persianNumber(variant['reservedQuantity'] ?? 0)}${variant['isActive'] == true ? '' : ' · غیرفعال'}',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: Wrap(
-                spacing: 0,
-                children: [
-                  IconButton(
-                    tooltip: 'ویرایش همهٔ مشخصات تنوع',
-                    onPressed: () => onEditVariant(variant),
-                    icon: Icon(
-                      Icons.edit_outlined,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'اصلاح موجودی این تنوع',
-                    onPressed: () => onAdjustVariant(variant),
-                    icon: Icon(
-                      Icons.inventory_2_outlined,
-                      color: Theme.of(context).colorScheme.tertiary,
-                    ),
-                  ),
-                ],
               ),
             ),
+            const SizedBox(height: 6),
+            Text(
+              primary
+                  ? 'تصویر اصلی · اولین عکس'
+                  : 'تصویر ${persianNumber(index + 1)}',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: primary ? colors.primary : colors.onSurface,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              sizeLabel,
+              style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (!primary)
+              TextButton.icon(
+                onPressed: onMakePrimary,
+                icon: const Icon(Icons.vertical_align_top_rounded, size: 15),
+                label: const Text(
+                  'تصویر اصلی کن',
+                  style: TextStyle(fontSize: 10),
+                ),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 34),
+                ),
+              ),
+            if (primary) const SizedBox(height: 34),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  tooltip: 'ویرایش یا تعویض تصویر',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined, size: 19),
+                ),
+                IconButton(
+                  tooltip: 'حذف تصویر',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onDelete,
+                  color: colors.error,
+                  icon: const Icon(Icons.delete_outline, size: 19),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActiveStateSwitch extends StatelessWidget {
+  const _ActiveStateSwitch({
+    required this.title,
+    required this.value,
+    required this.onChanged,
+  });
+  final String title;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsetsDirectional.only(
+        start: 10,
+        end: 4,
+        top: 2,
+        bottom: 2,
+      ),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  value ? 'فعال' : 'غیرفعال',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: value ? colors.primary : colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: colors.primary,
+            activeTrackColor: colors.primaryContainer,
+            inactiveTrackColor: colors.surfaceContainerHighest,
+            inactiveThumbColor: colors.outline,
           ),
         ],
       ),
@@ -674,12 +873,12 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
   final _name = TextEditingController();
   final _price = TextEditingController();
   final _stock = TextEditingController(text: '0');
-  final _imagePicker = ImagePicker();
   ProductColorOption? _selectedColor = productColorPalette.first;
   String? _categoryId;
   String _size = 'M';
-  Uint8List? _imageBytes;
-  String? _imageFilename;
+  final List<_ProductImageDraft> _images = [_ProductImageDraft()];
+  int _primaryImageIndex = 0;
+  bool _imageError = false;
 
   static const _sizes = <(String, String)>[
     ('XS', 'XS'),
@@ -700,31 +899,36 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
-    try {
-      final selected = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1800,
-        imageQuality: 84,
+  void _setImagePath(int index, String? path) {
+    setState(() {
+      final previous = _images[index];
+      _images[index] = _ProductImageDraft(
+        imagePath: path,
+        fileSizeBytes: path == null ? null : previous.fileSizeBytes,
       );
-      if (selected == null || !mounted) return;
-      final bytes = await selected.readAsBytes();
-      if (bytes.length > 8 * 1024 * 1024) {
-        showAppMessage(
-          context,
-          'حجم تصویر باید کمتر از ۸ مگابایت باشد.',
-          error: true,
-        );
-        return;
-      }
-      setState(() {
-        _imageBytes = bytes;
-        _imageFilename = selected.name;
-      });
-    } catch (error) {
-      if (mounted)
-        showAppMessage(context, AdminApi.friendlyError(error), error: true);
-    }
+      if (_images[index].imagePath?.isNotEmpty == true) _imageError = false;
+    });
+  }
+
+  void _setImageSize(int index, int? fileSizeBytes) {
+    setState(() {
+      _images[index] = _ProductImageDraft(
+        imagePath: _images[index].imagePath,
+        fileSizeBytes: fileSizeBytes,
+      );
+    });
+  }
+
+  void _removeImageSlot(int index) {
+    setState(() {
+      _images.removeAt(index);
+      if (_images.isEmpty) _images.add(const _ProductImageDraft());
+      if (_primaryImageIndex == index)
+        _primaryImageIndex = 0;
+      else if (_primaryImageIndex > index)
+        _primaryImageIndex--;
+      _imageError = false;
+    });
   }
 
   Future<void> _manageCategories() async {
@@ -833,7 +1037,7 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
                       ),
                 ),
                 const SizedBox(height: 4),
-                _imagePickerControl(context),
+                _imageGalleryPicker(context),
                 const SizedBox(height: 14),
                 Row(
                   children: [
@@ -942,10 +1146,35 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
         FilledButton.icon(
           onPressed: () {
             if (!_form.currentState!.validate()) return;
-            if (_imageBytes == null || _imageFilename == null) {
+            final validImages = <JsonMap>[];
+            final selectedPrimary = _images.indexWhere(
+              (image) =>
+                  image.imagePath?.isNotEmpty == true &&
+                  _images.indexOf(image) == _primaryImageIndex,
+            );
+            final primaryIndex =
+                selectedPrimary >= 0
+                    ? selectedPrimary
+                    : _images.indexWhere(
+                      (image) => image.imagePath?.isNotEmpty == true,
+                    );
+            for (var i = 0; i < _images.length; i++) {
+              final image = _images[i];
+              final path = image.imagePath?.trim();
+              if (path == null || path.isEmpty) continue;
+              validImages.add({
+                'imagePath': path,
+                'altText': _name.text.trim(),
+                'fileSizeBytes': image.fileSizeBytes ?? 0,
+                'sortOrder': i,
+                'isPrimary': i == primaryIndex,
+              });
+            }
+            if (validImages.isEmpty) {
+              setState(() => _imageError = true);
               showAppMessage(
                 context,
-                'ابتدا تصویر محصول را اضافه کنید.',
+                'حداقل یک تصویر برای محصول انتخاب کن.',
                 error: true,
               );
               return;
@@ -957,6 +1186,7 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
               'name': _name.text.trim(),
               'categoryId': _categoryId,
               'status': 'draft',
+              'images': validImages,
               'variants': [
                 {
                   'colorName': _selectedColor!.name,
@@ -966,8 +1196,6 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
                   'stockQuantity': stock,
                 },
               ],
-              '_imageBytes': _imageBytes,
-              '_imageFilename': _imageFilename,
             });
           },
           icon: const Icon(Icons.save_outlined),
@@ -977,77 +1205,130 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
     );
   }
 
-  Widget _imagePickerControl(BuildContext context) {
-    final hasImage = _imageBytes != null;
+  Widget _imageGalleryPicker(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          height: 164,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outlineVariant,
-            ),
-          ),
-          child:
-              hasImage
-                  ? Image.memory(_imageBytes!, fit: BoxFit.cover)
-                  : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.add_photo_alternate_outlined,
-                        size: 34,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'تصویر اصلی محصول',
-                        style: Theme.of(context).textTheme.labelLarge,
-                      ),
-                      Text(
-                        'JPG، PNG یا WebP · حداکثر ۸ مگابایت',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-        ),
-        const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _pickImage,
-                icon: Icon(
-                  hasImage
-                      ? Icons.swap_horiz_rounded
-                      : Icons.add_photo_alternate_outlined,
-                ),
-                label: Text(hasImage ? 'تغییر تصویر' : 'افزودن تصویر از گالری'),
+              child: Text(
+                'تصاویر محصول (حداکثر ۴ عکس)',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
               ),
             ),
-            if (hasImage) ...[
-              const SizedBox(width: 8),
-              IconButton.filledTonal(
-                tooltip: 'حذف تصویر انتخاب‌شده',
-                onPressed:
-                    () => setState(() {
-                      _imageBytes = null;
-                      _imageFilename = null;
-                    }),
-                icon: const Icon(Icons.delete_outline_rounded),
-              ),
-            ],
+            Text(
+              '${persianNumber(_images.where((image) => image.imagePath?.isNotEmpty == true).length)}/۴',
+              style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
+            ),
           ],
         ),
+        const SizedBox(height: 8),
+        for (var index = 0; index < _images.length; index++) ...[
+          Container(
+            padding: const EdgeInsets.all(10),
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: colors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color:
+                    _imageError && _images[index].imagePath == null
+                        ? colors.error
+                        : colors.outlineVariant,
+              ),
+            ),
+            child: Column(
+              children: [
+                AdminImagePickerField(
+                  label: 'تصویر ${persianNumber(index + 1)}',
+                  imagePath: _images[index].imagePath,
+                  aspectRatio: 4 / 5,
+                  onChanged: (path) => _setImagePath(index, path),
+                  onFileSizeChanged: (size) => _setImageSize(index, size),
+                ),
+                if (_images[index].fileSizeBytes case final bytes?
+                    when bytes > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Text(
+                        'حجم فایل: ${persianNumber((bytes / 1024).ceil())} کیلوبایت',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: ChoiceChip(
+                          selected: _primaryImageIndex == index,
+                          onSelected:
+                              _images[index].imagePath?.isNotEmpty == true
+                                  ? (_) =>
+                                      setState(() => _primaryImageIndex = index)
+                                  : null,
+                          avatar:
+                              _primaryImageIndex == index
+                                  ? const Icon(Icons.check_rounded, size: 17)
+                                  : const Icon(
+                                    Icons.vertical_align_top_rounded,
+                                    size: 17,
+                                  ),
+                          label: const Text(
+                            'تصویر اصلی و اولین عکس',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'حذف این جای تصویر',
+                      onPressed:
+                          _images.length > 1
+                              ? () => _removeImageSlot(index)
+                              : () => _setImagePath(index, null),
+                      icon: const Icon(Icons.delete_outline_rounded),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (_imageError)
+          Text(
+            'حداقل یک تصویر لازم است.',
+            style: TextStyle(color: colors.error, fontSize: 12),
+          ),
+        if (_images.length < 4)
+          OutlinedButton.icon(
+            onPressed:
+                () => setState(() => _images.add(const _ProductImageDraft())),
+            icon: const Icon(Icons.add_photo_alternate_outlined),
+            label: const Text('افزودن تصویر'),
+          ),
       ],
     );
   }
+}
+
+class _ProductImageDraft {
+  const _ProductImageDraft({this.imagePath, this.fileSizeBytes});
+  final String? imagePath;
+  final int? fileSizeBytes;
 }
 
 class _CategoryRemoved {
@@ -1417,14 +1698,10 @@ class _EditProductDialogState extends ConsumerState<_EditProductDialog> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
+                _ActiveStateSwitch(
+                  title: 'نمایش و فروش در سایت',
                   value: _published,
                   onChanged: (value) => setState(() => _published = value),
-                  title: const Text('نمایش و فروش در سایت'),
-                  subtitle: Text(
-                    _published ? 'کالا منتشر می‌شود' : 'کالا پیش‌نویس می‌ماند',
-                  ),
                 ),
                 ExpansionTile(
                   tilePadding: EdgeInsets.zero,
@@ -1697,16 +1974,10 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
                   },
                 ),
                 const SizedBox(height: 6),
-                SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
+                _ActiveStateSwitch(
+                  title: 'فعال و قابل خرید',
                   value: _active,
                   onChanged: (value) => setState(() => _active = value),
-                  title: const Text('این تنوع فعال و قابل خرید باشد'),
-                  subtitle: Text(
-                    _active
-                        ? 'در انتخاب‌های خرید نمایش داده می‌شود'
-                        : 'از خرید پنهان می‌شود',
-                  ),
                 ),
               ],
             ),
@@ -2111,6 +2382,8 @@ class _EditProductImageDialogState extends State<_EditProductImageDialog> {
     text: '${widget.image['sortOrder'] ?? 0}',
   );
   late String? _imagePath = '${widget.image['imagePath'] ?? ''}';
+  late int _fileSizeBytes =
+      int.tryParse('${widget.image['fileSizeBytes'] ?? 0}') ?? 0;
   late bool _primary = widget.image['isPrimary'] == true;
 
   @override
@@ -2150,9 +2423,23 @@ class _EditProductImageDialogState extends State<_EditProductImageDialog> {
                 onChanged:
                     (value) => setState(() {
                       _imagePath = value;
+                      if (value == null) _fileSizeBytes = 0;
                       if (value?.trim().isNotEmpty == true) _imageError = false;
                     }),
+                onFileSizeChanged:
+                    (value) => setState(() => _fileSizeBytes = value ?? 0),
               ),
+              if (_fileSizeBytes > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Text(
+                      'حجم فایل: ${persianNumber((_fileSizeBytes / 1024).ceil())} کیلوبایت',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _alt,
@@ -2173,11 +2460,10 @@ class _EditProductImageDialogState extends State<_EditProductImageDialog> {
                       : null;
                 },
               ),
-              SwitchListTile.adaptive(
-                contentPadding: EdgeInsets.zero,
+              _ActiveStateSwitch(
+                title: 'تصویر اصلی و اولین عکس',
                 value: _primary,
                 onChanged: (value) => setState(() => _primary = value),
-                title: const Text('تصویر اصلی محصول'),
               ),
             ],
           ),
@@ -2202,6 +2488,7 @@ class _EditProductImageDialogState extends State<_EditProductImageDialog> {
             'altText': _alt.text.trim(),
             'sortOrder': int.parse(_asciiDigits(_sortOrder.text)),
             'isPrimary': _primary,
+            'fileSizeBytes': _fileSizeBytes,
           });
         },
         icon: const Icon(Icons.save_outlined),
@@ -2215,6 +2502,7 @@ class _AddProductImageDialogState extends State<_AddProductImageDialog> {
   final _form = GlobalKey<FormState>();
   final _alt = TextEditingController();
   String? _imagePath;
+  int? _fileSizeBytes;
   bool _imageError = false;
   bool _primary = false;
   @override
@@ -2246,9 +2534,23 @@ class _AddProductImageDialogState extends State<_AddProductImageDialog> {
               onChanged:
                   (value) => setState(() {
                     _imagePath = value;
+                    if (value == null) _fileSizeBytes = null;
                     _imageError = false;
                   }),
+              onFileSizeChanged:
+                  (value) => setState(() => _fileSizeBytes = value),
             ),
+            if (_fileSizeBytes != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    'حجم فایل: ${persianNumber((_fileSizeBytes! / 1024).ceil())} کیلوبایت',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ),
             const SizedBox(height: 10),
             TextFormField(
               controller: _alt,
@@ -2257,14 +2559,10 @@ class _AddProductImageDialogState extends State<_AddProductImageDialog> {
               ),
             ),
             const SizedBox(height: 6),
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
+            _ActiveStateSwitch(
+              title: 'تصویر اصلی و اولین عکس',
               value: _primary,
               onChanged: (value) => setState(() => _primary = value),
-              title: const Text(
-                'تصویر اصلی محصول',
-                style: TextStyle(fontSize: 13),
-              ),
             ),
           ],
         ),
@@ -2286,6 +2584,7 @@ class _AddProductImageDialogState extends State<_AddProductImageDialog> {
             'imagePath': _imagePath,
             'altText': _alt.text.trim(),
             'isPrimary': _primary,
+            'fileSizeBytes': _fileSizeBytes ?? 0,
           });
         },
         child: const Text('افزودن تصویر'),

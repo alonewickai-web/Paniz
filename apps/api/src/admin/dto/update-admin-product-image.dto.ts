@@ -23,4 +23,11 @@ export class UpdateAdminProductImageDto {
   @IsOptional()
   @IsBoolean()
   isPrimary?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(1_048_575)
+  fileSizeBytes?: number;
 }

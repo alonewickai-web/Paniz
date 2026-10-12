@@ -39,19 +39,19 @@ export class AdminController {
         callback(null, `${randomUUID()}${extension ?? ".img"}`);
       },
     }),
-    limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+    limits: { fileSize: 1024 * 1024 - 1, files: 1 },
     fileFilter: (_request, file, callback) => {
       const supported = ["image/jpeg", "image/png", "image/webp"].includes(file.mimetype);
       callback(supported ? null : new BadRequestException({ code: "UNSUPPORTED_IMAGE_TYPE", message: "Only JPG, PNG, and WebP images are supported." }), supported);
     },
   }))
   @ApiOperation({ summary: "Upload a product image from the admin app" })
-  uploadProductImage(@Req() request: AdminRequest, @UploadedFile() file?: { filename: string; mimetype: string }) {
+  uploadProductImage(@Req() request: AdminRequest, @UploadedFile() file?: { filename: string; mimetype: string; size: number }) {
     if (request.admin?.role !== "owner" && request.admin?.role !== "admin") {
       throw new ForbiddenException({ code: "ADMIN_PERMISSION_REQUIRED", message: "Manager access is required." });
     }
     if (!file) throw new BadRequestException({ code: "PRODUCT_IMAGE_REQUIRED", message: "Select a product image first." });
-    return { data: { imagePath: `/uploads/products/${file.filename}`, mimeType: file.mimetype } };
+    return { data: { imagePath: `/uploads/products/${file.filename}`, mimeType: file.mimetype, fileSizeBytes: file.size } };
   }
 
   @Get("orders")

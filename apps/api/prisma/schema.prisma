@@ -182,6 +182,7 @@ model ProductImage {
   productId BigInt   @map("product_id") @db.UnsignedBigInt
   imagePath String   @map("image_path") @db.VarChar(500)
   altText   String?  @map("alt_text") @db.VarChar(240)
+  fileSizeBytes Int  @default(0) @map("file_size_bytes") @db.UnsignedInt
   sortOrder Int      @default(0) @map("sort_order")
   isPrimary Boolean  @default(false) @map("is_primary")
   createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)

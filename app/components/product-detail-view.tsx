@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { Check, Heart, Minus, Plus, Share2, ShieldCheck, ShoppingBag, Truck } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronLeft, ChevronRight, Heart, Minus, Plus, Share2, ShieldCheck, ShoppingBag, Truck } from "lucide-react";
 import { StoreProductCard } from "./store-product-card";
 import { apiBaseUrl, formatToman, type StoreProduct, type StoreProductDetail } from "../lib/catalog";
 import { useStorefront } from "../lib/storefront-state";
@@ -21,6 +21,12 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
   const [isSharing, setIsSharing] = useState(false);
   const [related, setRelated] = useState<StoreProduct[]>([]);
   const [relatedLoaded, setRelatedLoaded] = useState(false);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    setImageIndex(0);
+    touchStart.current = null;
+  }, [product.id]);
 
   const variant = product.variants.find((item) => item.color.name === color && item.size === size);
   const stock = variant?.availableQuantity ?? 0;
@@ -31,6 +37,21 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
     ? Math.round((1 - variant.priceToman / variant.compareAtPriceToman) * 100)
     : 0;
   const sizeGuideRows = useMemo(() => readSizeGuide(product.sizeGuide), [product.sizeGuide]);
+
+  function moveGallery(step: number) {
+    if (currentImages.length < 2) return;
+    setImageIndex((index) => (index + step + currentImages.length) % currentImages.length);
+  }
+
+  function finishGallerySwipe(x: number, y: number) {
+    const start = touchStart.current;
+    touchStart.current = null;
+    if (!start) return;
+    const dx = x - start.x;
+    const dy = y - start.y;
+    if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    moveGallery(dx < 0 ? 1 : -1);
+  }
 
   async function addToCart() {
     if (!variant || stock < quantity) {
@@ -105,11 +126,23 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
         <nav className="store-breadcrumb" aria-label="مسیر صفحه"><Link href="/">خانه</Link><span>/</span><Link href={`/products${product.category ? `?category=${product.category.slug}` : ""}`}>{product.category?.name ?? "محصولات"}</Link><span>/</span><span>{product.name}</span></nav>
         <div className="store-product-detail-grid">
           <section className="store-gallery" aria-label="تصاویر محصول">
-            <div className="store-main-image">
+            <div
+              className="store-main-image"
+              role="group"
+              onTouchStart={(event) => { const touch = event.changedTouches[0]; if (touch) touchStart.current = { x: touch.clientX, y: touch.clientY }; }}
+              onTouchEnd={(event) => { const touch = event.changedTouches[0]; if (touch) finishGallerySwipe(touch.clientX, touch.clientY); }}
+              onTouchCancel={() => { touchStart.current = null; }}
+              aria-label={mainImage ? `تصویر ${imageIndex + 1} از ${currentImages.length} برای ${product.name}` : `تصویر ${product.name}`}
+            >
               {mainImage ? <StoreImage src={mainImage.path} alt={mainImage.alt || product.name} fill priority sizes="(max-width: 760px) 100vw, 54vw" /> : <div className="store-no-image">تصویر محصول</div>}
               {discount > 0 && <span className="store-detail-sale">{new Intl.NumberFormat("fa-IR").format(discount)}٪ تخفیف</span>}
+              {currentImages.length > 1 && <>
+                <button type="button" className="store-gallery-arrow store-gallery-previous" aria-label="تصویر قبلی" onClick={() => moveGallery(-1)}><ChevronRight size={20} /></button>
+                <button type="button" className="store-gallery-arrow store-gallery-next" aria-label="تصویر بعدی" onClick={() => moveGallery(1)}><ChevronLeft size={20} /></button>
+                <span className="store-image-count" aria-live="polite">{new Intl.NumberFormat("fa-IR").format(imageIndex + 1)} / {new Intl.NumberFormat("fa-IR").format(currentImages.length)}</span>
+              </>}
             </div>
-            {currentImages.length > 1 && <div className="store-thumbnails">{currentImages.map((image, index) => <button key={image.id} className={index === imageIndex ? "active" : ""} onClick={() => setImageIndex(index)} aria-label={`تصویر ${index + 1}`}><StoreImage src={image.path} alt={image.alt || product.name} fill sizes="84px" /></button>)}</div>}
+            {currentImages.length > 1 && <div className="store-thumbnails">{currentImages.map((image, index) => <button type="button" key={image.id} className={index === imageIndex ? "active" : ""} onClick={() => setImageIndex(index)} aria-label={`نمایش تصویر ${index + 1}`} aria-pressed={index === imageIndex}><StoreImage src={image.path} alt={image.alt || product.name} fill sizes="84px" /></button>)}</div>}
           </section>
 
           <section className="store-product-info">

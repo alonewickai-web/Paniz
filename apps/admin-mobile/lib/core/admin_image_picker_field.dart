@@ -12,7 +12,7 @@ import 'admin_api.dart';
 import 'providers.dart';
 import 'ui_helpers.dart';
 
-const _maxUploadBytes = 8 * 1024 * 1024;
+const _maxUploadBytes = 1024 * 1024 - 1;
 const _maxOriginalBytes = 40 * 1024 * 1024;
 
 /// Lets an admin crop and review an image before compressing and uploading it.
@@ -21,6 +21,7 @@ class AdminImagePickerField extends ConsumerStatefulWidget {
     super.key,
     required this.imagePath,
     required this.onChanged,
+    this.onFileSizeChanged,
     this.label = 'تصویر',
     this.aspectRatio = 16 / 9,
     this.errorText,
@@ -28,6 +29,7 @@ class AdminImagePickerField extends ConsumerStatefulWidget {
 
   final String? imagePath;
   final ValueChanged<String?> onChanged;
+  final ValueChanged<int?>? onFileSizeChanged;
   final String label;
   final double aspectRatio;
   final String? errorText;
@@ -211,6 +213,12 @@ class _AdminImagePickerFieldState extends ConsumerState<AdminImagePickerField> {
       (maxDimension: 1800, quality: 82),
       (maxDimension: 1600, quality: 74),
       (maxDimension: 1400, quality: 66),
+      (maxDimension: 1200, quality: 60),
+      (maxDimension: 1000, quality: 54),
+      (maxDimension: 850, quality: 46),
+      (maxDimension: 720, quality: 40),
+      (maxDimension: 600, quality: 32),
+      (maxDimension: 480, quality: 28),
     ]) {
       final scale = math.min(
         1.0,
@@ -259,6 +267,7 @@ class _AdminImagePickerFieldState extends ConsumerState<AdminImagePickerField> {
       }
       if (!mounted) return;
       widget.onChanged(imagePath);
+      widget.onFileSizeChanged?.call(bytes.length);
       setState(() {
         _pendingImage = null;
         _pendingPreview = null;
@@ -287,6 +296,7 @@ class _AdminImagePickerFieldState extends ConsumerState<AdminImagePickerField> {
   void _removeImage() {
     _cancelPendingImage();
     widget.onChanged(null);
+    widget.onFileSizeChanged?.call(null);
   }
 
   @override
@@ -410,9 +420,9 @@ class _AdminImagePickerFieldState extends ConsumerState<AdminImagePickerField> {
           padding: const EdgeInsetsDirectional.only(top: 3),
           child: Text(
             pending != null
-                ? 'پیش‌نمایش برش نهایی است؛ با تأیید، ضلع بلند تصویر تا ۱۸۰۰ پیکسل و حجم فایل تا ۸ مگابایت بهینه می‌شود.'
+                ? 'پیش‌نمایش برش نهایی است؛ با تأیید، تصویر فشرده می‌شود تا حجم فایل کمتر از ۱ مگابایت باشد.'
                 : _compressionSummary ??
-                    'JPG، PNG، WebP یا HEIC · فایل ورودی تا ۴۰ مگابایت · برش در اپ و فشرده‌سازی تا ۸ مگابایت پس از تأیید',
+                    'JPG، PNG، WebP یا HEIC · فایل ورودی تا ۴۰ مگابایت · فایل نهایی کمتر از ۱ مگابایت',
             style: theme.textTheme.bodySmall?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),

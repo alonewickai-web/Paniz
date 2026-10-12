@@ -36,6 +36,13 @@ export class AdminProductImageDto {
   @IsOptional()
   @IsBoolean()
   isPrimary?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(1_048_575)
+  fileSizeBytes?: number;
 }
 
 export class AdminProductVariantDto {
@@ -115,7 +122,7 @@ export class CreateAdminProductDto {
 
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(12)
+  @ArrayMaxSize(4)
   @ValidateNested({ each: true })
   @Type(() => AdminProductImageDto)
   images!: AdminProductImageDto[];

@@ -230,7 +230,7 @@ export class AdminService {
         seoTitle: product.seoTitle,
         seoDescription: product.seoDescription,
         category: product.category ? { id: product.category.id.toString(), name: product.category.name, slug: product.category.slug } : null,
-        images: product.images.map((image) => ({ id: image.id.toString(), imagePath: image.imagePath, altText: image.altText, isPrimary: image.isPrimary, sortOrder: image.sortOrder })),
+        images: product.images.map((image) => ({ id: image.id.toString(), imagePath: image.imagePath, altText: image.altText, fileSizeBytes: image.fileSizeBytes, isPrimary: image.isPrimary, sortOrder: image.sortOrder })),
         variants: product.variants.map((variant) => ({
           id: variant.id.toString(),
           sku: variant.sku,
@@ -254,6 +254,7 @@ export class AdminService {
   async createProduct(admin: AuthenticatedAdmin, input: CreateAdminProductDto) {
     requireManager(admin);
     const categoryId = parseId(input.categoryId, "شناسهٔ دسته‌بندی");
+    if (input.images.length > 4) throw new BadRequestException({ code: "PRODUCT_IMAGE_LIMIT", message: "برای هر محصول حداکثر ۴ تصویر ثبت می‌شود." });
     const primaryIndex = Math.max(0, input.images.findIndex((image) => image.isPrimary));
     validateVariants(input.variants);
 
@@ -273,12 +274,14 @@ export class AdminService {
             status: input.status,
             publishedAt: input.status === "published" ? new Date() : null,
             images: {
-              create: input.images.map((image, index) => ({
-                imagePath: image.imagePath.trim(),
-                altText: image.altText?.trim() || null,
-                sortOrder: image.sortOrder ?? index,
-                isPrimary: index === primaryIndex,
-              })),
+              create: [input.images[primaryIndex], ...input.images.filter((_, index) => index !== primaryIndex)]
+                .map((image, index) => ({
+                  imagePath: image.imagePath.trim(),
+                  altText: image.altText?.trim() || null,
+                  fileSizeBytes: image.fileSizeBytes ?? 0,
+                  sortOrder: index,
+                  isPrimary: index === 0,
+                })),
             },
           },
         });
@@ -481,6 +484,9 @@ export class AdminService {
 
     const image = await this.prisma.$transaction(async (tx) => {
       const imageCount = await tx.productImage.count({ where: { productId } });
+      if (imageCount >= 4) {
+        throw new ConflictException({ code: "PRODUCT_IMAGE_LIMIT", message: "برای هر محصول حداکثر ۴ تصویر ثبت می‌شود." });
+      }
       if (input.isPrimary || imageCount === 0) {
         await tx.productImage.updateMany({ where: { productId, isPrimary: true }, data: { isPrimary: false } });
       }
@@ -489,10 +495,17 @@ export class AdminService {
           productId,
           imagePath: input.imagePath.trim(),
           altText: input.altText?.trim() || null,
-          sortOrder: input.sortOrder ?? imageCount,
+          fileSizeBytes: input.fileSizeBytes ?? 0,
+          sortOrder: input.isPrimary ? 0 : input.sortOrder ?? imageCount,
           isPrimary: input.isPrimary || imageCount === 0,
         },
       });
+      if (created.isPrimary) {
+        const otherImages = await tx.productImage.findMany({ where: { productId, id: { not: created.id } }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] });
+        for (const [index, other] of otherImages.entries()) {
+          await tx.productImage.update({ where: { id: other.id }, data: { sortOrder: index + 1 } });
+        }
+      }
       await tx.adminAuditLog.create({
         data: {
           adminId: admin.id,
@@ -504,7 +517,7 @@ export class AdminService {
       });
       return created;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-    return { data: { id: image.id.toString(), imagePath: image.imagePath, isPrimary: image.isPrimary } };
+    return { data: { id: image.id.toString(), imagePath: image.imagePath, fileSizeBytes: image.fileSizeBytes, isPrimary: image.isPrimary } };
   }
 
   async deleteProductImage(admin: AuthenticatedAdmin, rawProductId: string, rawImageId: string) {
@@ -548,7 +561,11 @@ export class AdminService {
       if (!current) throw new NotFoundException({ code: "PRODUCT_IMAGE_NOT_FOUND", message: "تصویر محصول پیدا نشد" });
 
       if (input.isPrimary === true) {
-        await tx.productImage.updateMany({ where: { productId, id: { not: imageId }, isPrimary: true }, data: { isPrimary: false } });
+        const ordered = await tx.productImage.findMany({ where: { productId }, orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }, { id: "asc" }] });
+        const reordered = [current, ...ordered.filter((image) => image.id !== imageId)];
+        for (const [sortOrder, image] of reordered.entries()) {
+          await tx.productImage.update({ where: { id: image.id }, data: { sortOrder, isPrimary: image.id === imageId } });
+        }
       } else if (input.isPrimary === false && current.isPrimary) {
         const nextPrimary = await tx.productImage.findFirst({
           where: { productId, id: { not: imageId } },
@@ -565,7 +582,8 @@ export class AdminService {
         data: {
           ...(input.imagePath !== undefined ? { imagePath: input.imagePath.trim() } : {}),
           ...(input.altText !== undefined ? { altText: input.altText.trim() || null } : {}),
-          ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+          ...(input.fileSizeBytes !== undefined ? { fileSizeBytes: input.fileSizeBytes } : {}),
+          ...(input.isPrimary === true ? { sortOrder: 0 } : input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
           ...(input.isPrimary !== undefined ? { isPrimary: input.isPrimary } : {}),
         },
       });
@@ -575,12 +593,12 @@ export class AdminService {
           action: "product_image.updated",
           entityType: "product_image",
           entityId: image.id,
-          details: { productId: productId.toString(), imagePath: image.imagePath, altText: image.altText, isPrimary: image.isPrimary, sortOrder: image.sortOrder },
+          details: { productId: productId.toString(), imagePath: image.imagePath, altText: image.altText, fileSizeBytes: image.fileSizeBytes, isPrimary: image.isPrimary, sortOrder: image.sortOrder },
         },
       });
       return image;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-    return { data: { id: updated.id.toString(), imagePath: updated.imagePath, altText: updated.altText, isPrimary: updated.isPrimary, sortOrder: updated.sortOrder } };
+    return { data: { id: updated.id.toString(), imagePath: updated.imagePath, altText: updated.altText, fileSizeBytes: updated.fileSizeBytes, isPrimary: updated.isPrimary, sortOrder: updated.sortOrder } };
   }
 
   async archiveProduct(admin: AuthenticatedAdmin, rawProductId: string) {
