@@ -1,0 +1,11 @@
+panizstyle.ir, www.panizstyle.ir {
+	encode zstd gzip
+	reverse_proxy storefront:3000
+	log
+}
+
+api.panizstyle.ir {
+	encode zstd gzip
+	reverse_proxy api:4000
+	log
+}

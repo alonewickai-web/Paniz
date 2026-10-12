@@ -1,46 +1,30 @@
 # فعال‌سازی نهایی PanizStyle
 
-## وضعیت فعلی
+استقرار فعلی روی سرور ایران انجام می‌شود و از دیتابیس تازهٔ MySQL استفاده می‌کند. Railway مرجع اجرای API یا سایت نیست.
 
-- فروشگاه: <https://paniz-production-17f9.up.railway.app/>
-- API: <https://api-production-bbf4.up.railway.app>
-- سلامت API و اتصال MySQL: <https://api-production-bbf4.up.railway.app/api/v1/health/ready>
-- دامنهٔ موردنظر: `panizstyle.ir`
-- فایل‌های APK نسخهٔ `0.2.4+6` با HTTPS به API Railway وصل می‌شوند.
+## دامنه و HTTPS
 
-## اتصال دامنه به Railway
+در Cloudflare رکوردهای `panizstyle.ir`، `www.panizstyle.ir` و `api.panizstyle.ir` را به IPv4 سرور ایران وصل کنید. ابتدا رکوردها را DNS only بگذارید تا Caddy گواهی معتبر HTTPS بگیرد. جزئیات firewall، اجرای Compose و بررسی سلامت سرویس در [راهنمای سرور ایران](deploy-arvan.md) است.
 
-در سرویس سایت `Paniz`، از **Settings → Networking → Custom Domain** دامنه‌های `panizstyle.ir` و `www.panizstyle.ir` را اضافه کنید. پورت سرویس سایت `8080` است.
+نشانی‌های نهایی:
 
-در سرویس `api` نیز `api.panizstyle.ir` را اضافه کنید. پورت API `4000` است. Railway برای هر دامنه رکوردهای DNS مخصوص همان دامنه را نمایش می‌دهد. رکورد CNAME و رکورد TXT تأیید مالکیت را عیناً در پنل DNS دامنه ثبت کنید؛ مقدار این رکوردها یکتا است و نباید حدس زده شود. برای دامنهٔ ریشه، DNS باید ALIAS/ANAME یا CNAME flattening را پشتیبانی کند. پس از تأیید DNS و صدور HTTPS، هر سه نشانی را بازبینی کنید.
+- فروشگاه: `https://panizstyle.ir`
+- API: `https://api.panizstyle.ir/api/v1`
+- سلامت API و دیتابیس: `https://api.panizstyle.ir/api/v1/health/ready`
 
-## متغیرهای Railway
+## اپ مدیر
 
-در سرویس سایت:
+APK نصب‌شده قبلی در زمان ساخت به API قبلی اشاره می‌کند. بعد از انتشار نسخه‌ای که دامنهٔ API ایران را دارد، APK تازه بسازید و نصب کنید. دستور ساخت در [README اپ اندروید](../apps/admin-mobile/README.md) آمده است.
 
-```text
-NEXT_PUBLIC_SITE_URL=https://panizstyle.ir
-NEXT_PUBLIC_API_BASE_URL=https://api.panizstyle.ir/api/v1
-```
+## SMS و شبکه‌های اجتماعی
 
-در سرویس API:
-
-```text
-WEB_ORIGINS=https://panizstyle.ir,https://www.panizstyle.ir
-CUSTOMER_AUTH_SECRET=<راز تصادفی و محرمانه، حداقل ۳۲ نویسه>
-```
-
-این مقادیر را در **Variables** سرویس‌های Railway وارد کنید، نه در GitHub. در محیط آزمایشی، پس از Deploy با نام کاربری `erfan` و گذرواژهٔ `2018` وارد اپ شوید؛ API حساب را فقط یک‌بار هنگام راه‌اندازی ایجاد می‌کند. این گذرواژهٔ آزمایشی را پیش از استفاده روی سرور اصلی تغییر دهید.
-
-## تکمیل فروشگاه
-
-پس از ورود به اپ مدیر، محصولات واقعی، تصاویر، قیمت‌ها، رنگ‌ها، اندازه‌ها و موجودی را ثبت و منتشر کنید. دیتابیس فعلی هنوز محصول منتشرشده ندارد. ورود پیامکی مشتری به سرویس SMS واقعی نیاز دارد و پرداخت بانکی/ارسال سفارش نیز تا اتصال سرویس‌دهندهٔ مربوط آمادهٔ دریافت سفارش واقعی نیست.
+کلیدهای SMS.ir، Rubika و Instagram به دیتابیس وابسته نیستند و خودکار از Railway منتقل نمی‌شوند. آن‌ها را در فایل خصوصی `.env.server` روی سرور ثبت کنید. برای استفاده از کلید SMS افشاشدهٔ قبلی، اول آن را در پنل SMS.ir تعویض کنید.
 
 ## ثبت در گوگل
 
-پس از فعال‌شدن دامنه و Deploy، این مسیرها باید باز شوند:
+پس از فعال‌شدن دامنه و HTTPS، این مسیرها را بازبینی کنید:
 
-- <https://panizstyle.ir/robots.txt>
-- <https://panizstyle.ir/sitemap.xml>
+- `https://panizstyle.ir/robots.txt`
+- `https://panizstyle.ir/sitemap.xml`
 
-در [Google Search Console](https://search.google.com/search-console)، مالکیت دامنه را تأیید و `https://panizstyle.ir/sitemap.xml` را در بخش **Sitemaps** ثبت کنید. گوگل زمان مشخصی برای نمایش سایت در نتایج تضمین نمی‌کند؛ ابتدا باید دامنه قابل دسترسی و محتوای واقعی سایت منتشر شده باشد.
+سپس دامنه را در [Google Search Console](https://search.google.com/search-console) تأیید و `https://panizstyle.ir/sitemap.xml` را ثبت کنید. ثبت sitemap زمان نمایش در نتایج گوگل را تضمین نمی‌کند.

@@ -83,11 +83,11 @@ IP را با نشانی رایانهٔ خود جایگزین کنید و دست�
 
 ~~~powershell
 flutter build apk --release --target-platform android-arm64 --split-per-abi `
-  --dart-define=PANIZ_API_BASE_URL=https://api-production-bbf4.up.railway.app/api/v1/ `
-  --dart-define=PANIZ_WEB_BASE_URL=https://paniz-production-17f9.up.railway.app/
+  --dart-define=PANIZ_API_BASE_URL=https://api.panizstyle.ir/api/v1/ `
+  --dart-define=PANIZ_WEB_BASE_URL=https://panizstyle.ir/
 ~~~
 
-خروجی در **build/app/outputs/flutter-apk/app-arm64-v8a-release.apk** قرار می‌گیرد. وقتی دامنهٔ سفارشی روی Railway فعال شد، URLها را به `https://api.panizstyle.ir/api/v1/` و `https://panizstyle.ir/` تغییر دهید. Release باید از HTTPS استفاده کند؛ نسخهٔ Release به API با HTTP وصل نمی‌شود.
+خروجی در **build/app/outputs/flutter-apk/app-arm64-v8a-release.apk** قرار می‌گیرد. نشانی پیش‌فرض نسخهٔ جدید `https://api.panizstyle.ir/api/v1/` است. Release باید از HTTPS استفاده کند؛ نسخهٔ Release به API با HTTP وصل نمی‌شود.
 
 پیکربندی امضای Release در **android/app/build.gradle.kts** انجام شده است. فایل keystore و رمز آن را در Git یا APK قرار ندهید.
 
