@@ -260,8 +260,7 @@ export class RubikaBotService implements OnModuleInit {
 
   private webhookBaseUrl(): string | null {
     const configured = this.config.get<string>("RUBIKA_WEBHOOK_BASE_URL", "").trim()
-      || this.config.get<string>("PUBLIC_API_URL", "").trim()
-      || this.config.get<string>("RAILWAY_PUBLIC_DOMAIN", "").trim();
+      || this.config.get<string>("PUBLIC_API_URL", "").trim();
     if (!configured) return null;
     const candidate = configured.includes("://") ? configured : "https://" + configured;
     try {

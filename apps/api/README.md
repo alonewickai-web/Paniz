@@ -49,14 +49,14 @@ Backend مستقل پروژه، با NestJS و API نسخه‌دار `/api/v1`.
 - `POST /api/v1/orders`: ثبت سفارش برای مشتری واردشده با شناسهٔ نشانی متعلق به همان حساب.
 - `/api/docs`: مستندات OpenAPI/Swagger.
 
-## Migration در Railway
+## Migration در سرور production
 
-در سرویس API، فرمان Pre-deploy روی `npm run prisma:migrate:deploy` تنظیم شده است تا پیش از هر انتشار، migrationهای جدید دیتابیس اعمال شوند. اگر migration در production با وضعیت failed متوقف شد، ابتدا لاگ و schema را بررسی کنید؛ فقط وقتی هیچ بخشی از آن اعمال نشده باشد، آن را با `prisma migrate resolve --rolled-back <migration-name>` resolve و deployment را دوباره اجرا کنید.
+اسکریپت `ops/deploy-server.sh` image را می‌سازد و `npm run prisma:migrate:deploy` را پیش از شروع API اجرا می‌کند. اگر migration در production با وضعیت failed متوقف شد، ابتدا لاگ و schema را بررسی کنید؛ فقط وقتی هیچ بخشی از آن اعمال نشده باشد، آن را با `prisma migrate resolve --rolled-back <migration-name>` resolve و deployment را دوباره اجرا کنید.
 
 برای ورود واقعی مشتری، سرویس پیامک و `CUSTOMER_AUTH_SECRET` حداقل ۳۲ کاراکتری را تنظیم کنید. حالت توسعه کد آزمایشی را در پاسخ API برمی‌گرداند؛ این مسیر در production غیرفعال است. شرح جریان و محدودیت‌ها در `docs/customer-account.md` است.
 
 `prisma:seed` هشت محصول نمایشی و دسته‌بندی‌های آنها را وارد دیتابیس توسعه می‌کند. اجرای دوبارهٔ seed موجودی SKUهای موجود را بازنشانی نمی‌کند. از داده‌های نمونه برای فروش واقعی استفاده نکنید.
 
-برای Dockerfile و راه‌اندازی روی Railway، [راهنمای استقرار پروژه](../../docs/deploy-railway.md) را ببینید.
+برای Dockerfile و راه‌اندازی روی VPS، [راهنمای استقرار سرور ایران](../../docs/deploy-arvan.md) را ببینید.
 
-تصاویر آپلودشده در مسیر `UPLOADS_DIR` و زیرشاخهٔ `products` نگهداری می‌شوند. برای ماندگاری روی Railway، Volume سرویس API را روی `/data` سوار و `UPLOADS_DIR=/data/uploads` تنظیم کنید.
+تصاویر آپلودشده در مسیر `UPLOADS_DIR` و زیرشاخهٔ `products` نگهداری می‌شوند. در Compose production، volume پایدار API روی `/data` سوار شده است.

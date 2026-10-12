@@ -761,7 +761,7 @@ class _OperationsScreenState extends ConsumerState<OperationsScreen> {
         _statusLine('انتشار در کانال روبیکا', integrations['rubika'] == true),
         _statusLine('Instagram', integrations['instagram'] == true),
       ]))),
-      Card(child: Padding(padding: const EdgeInsets.all(14), child: Text('مسیر پشتیبان: ${volume['path'] ?? 'BACKUP_DIR'}\nبرای نگهداری پس از restart در Railway یک Volume با mount path برابر /data بساز و BACKUP_DIR را روی /data/backups قرار بده. ابزار mysqldump باید داخل image نصب باشد.', style: Theme.of(context).textTheme.bodySmall))),
+      Card(child: Padding(padding: const EdgeInsets.all(14), child: Text('مسیر پشتیبان: ${volume['path'] ?? 'BACKUP_DIR'}\nبرای نگهداری پس از راه‌اندازی مجدد، volume پایدار /data باید به API متصل باشد و BACKUP_DIR روی /data/backups تنظیم شود. ابزار mysqldump باید داخل image نصب باشد.', style: Theme.of(context).textTheme.bodySmall))),
       FilledButton.icon(onPressed: _loading ? null : _backup, icon: const Icon(Icons.backup_outlined), label: const Text('ساخت پشتیبان همین حالا')),
       const SizedBox(height: 18), Text('نسخه‌های ذخیره‌شده', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
       if (_backups.isEmpty) const _EmptyCard(text: 'هنوز فایل پشتیبانی در volume ثبت نشده است.'),

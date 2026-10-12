@@ -24,6 +24,7 @@ NODE_ENV=production
 PORT=4000
 WEB_ORIGINS=https://panizstyle.ir,https://www.panizstyle.ir
 PUBLIC_WEB_URL=https://panizstyle.ir
+PUBLIC_API_URL=https://api.panizstyle.ir
 DATABASE_CONNECTION_LIMIT=5
 DATABASE_URL=mysql://panizstyle_app:${mysql_password}@mysql:3306/panizstyle
 CUSTOMER_AUTH_SECRET=${customer_auth_secret}

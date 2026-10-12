@@ -26,7 +26,7 @@
 
 ## قابلیت‌هایی که هنوز متصل نیستند
 
-قابلیت‌های امنیتی پیشرفته شامل TOTP، فهرست دستگاه‌های فعال، تاریخچهٔ کامل امنیتی و بازکردن نشست با اثر انگشت هنوز پیاده‌سازی نشده‌اند. صفحهٔ آمار فروش روز و ماه را کنار آمار بازدید روزانه، بازدیدکنندهٔ یکتا، نمودار هفت‌روزه و صفحات پربازدید نمایش می‌دهد. ارسال پیامک و انتشار در شبکه‌های اجتماعی پس از تنظیم کلیدهای سرویس مربوط در Railway کار می‌کند.
+قابلیت‌های امنیتی پیشرفته شامل TOTP، فهرست دستگاه‌های فعال، تاریخچهٔ کامل امنیتی و بازکردن نشست با اثر انگشت هنوز پیاده‌سازی نشده‌اند. صفحهٔ آمار فروش روز و ماه را کنار آمار بازدید روزانه، بازدیدکنندهٔ یکتا، نمودار هفت‌روزه و صفحات پربازدید نمایش می‌دهد. ارسال پیامک و انتشار در شبکه‌های اجتماعی پس از تنظیم کلیدهای سرویس مربوط در `.env.server` روی سرور کار می‌کند.
 
 ## دریافت APK از GitHub
 
@@ -79,7 +79,7 @@ flutter build apk --debug --dart-define=PANIZ_API_BASE_URL=http://192.168.1.20:4
 
 IP را با نشانی رایانهٔ خود جایگزین کنید و دسترسی فایروال به پورت API را بررسی کنید. HTTP فقط در ساخت Debug مجاز است.
 
-برای ساخت APK نسخهٔ Release روی گوشی واقعی، از URLهای HTTPS استفاده کنید. آدرس‌های Railway فعلی پیش‌فرض اپ هستند؛ فرمان صریح ساخت فقط ARM64:
+برای ساخت APK نسخهٔ Release روی گوشی واقعی، از URLهای HTTPS استفاده کنید. فرمان صریح ساخت فقط ARM64:
 
 ~~~powershell
 flutter build apk --release --target-platform android-arm64 --split-per-abi `
@@ -108,5 +108,5 @@ See [the admin mobile design notes](../../design-system/panizstyle/pages/admin-m
 
 ## New management tools
 
-Version `0.2.8+10` adds customer filters, consent-aware SMS campaigns, coupon management, scheduled Rubika/Instagram publishing, and server/SQL-backup status. Setup requirements and Railway variables are listed in [the admin tools guide](../../docs/admin-customer-marketing-ops.md). External providers remain inactive until their API secrets and account permissions are configured on the backend.
+Version `0.2.8+10` adds customer filters, consent-aware SMS campaigns, coupon management, scheduled Rubika/Instagram publishing, and server/SQL-backup status. Setup requirements are listed in [the admin tools guide](../../docs/admin-customer-marketing-ops.md). External providers remain inactive until their API secrets and account permissions are configured on the backend.
 

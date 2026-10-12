@@ -541,7 +541,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
       await rm(probe, { force: true });
       const files = await this.listBackupFiles();
       backupVolume = { available: true, persistentConfigured: Boolean(this.config.get<string>("BACKUP_DIR")), backupCount: files.length, latestAt: files[0]?.createdAt ?? null, path: directory };
-    } catch { /* a missing Railway volume is reported as unavailable */ }
+    } catch { /* an unavailable persistent backup volume is reported below */ }
     const rubikaStatus = await this.rubika.integrationStatus();
     return { data: {
       api: "online", database, backupVolume,
@@ -841,7 +841,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
       });
     } catch (error) {
       await rm(outputPath, { force: true }).catch(() => undefined);
-      throw new ServiceUnavailableException({ code: "BACKUP_FAILED", message: "mysqldump failed. In Railway, mount a persistent volume and install/configure the MySQL client." });
+      throw new ServiceUnavailableException({ code: "BACKUP_FAILED", message: "mysqldump failed. Mount persistent storage at /data and install/configure the MySQL client in the API image." });
     }
     const metadata = await stat(outputPath);
     return { filename, createdAt: metadata.mtime.toISOString(), sizeBytes: metadata.size, path: outputPath };

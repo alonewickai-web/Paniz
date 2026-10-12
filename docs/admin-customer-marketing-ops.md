@@ -1,6 +1,6 @@
 # راه‌اندازی ابزارهای مدیریتی PANIZ
 
-این نسخه API و صفحه‌های اپ مدیر را برای مشتریان، کد تخفیف، کمپین پیامک و روبیکا، انتشار شبکه‌های اجتماعی و پشتیبان دیتابیس آماده می‌کند. migration دیتابیس باید در محیط Railway جداگانه اجرا شود.
+این نسخه API و صفحه‌های اپ مدیر را برای مشتریان، کد تخفیف، کمپین پیامک و روبیکا، انتشار شبکه‌های اجتماعی و پشتیبان دیتابیس آماده می‌کند. روی سرور ایران، `ops/deploy-server.sh` migrationها را پیش از شروع API روی دیتابیس تازه اجرا می‌کند.
 
 ## مشتریان و رضایت پیامک
 
@@ -15,7 +15,7 @@
 
 ## پیامک SMS.ir
 
-این متغیرها را فقط در Variables سرویس API در Railway ثبت کنید؛ کلید را در Git، APK یا گفتگو قرار ندهید:
+این متغیرها را فقط در فایل خصوصی `.env.server` روی سرور ثبت کنید؛ کلید را در Git یا APK قرار ندهید:
 
 | متغیر | توضیح |
 | --- | --- |
@@ -34,6 +34,7 @@
 | `RUBIKA_BOT_TOKEN` | توکن باتی که از BotFather روبیکا ساخته شده |
 | `RUBIKA_CHANNEL_ID` | شناسهٔ کانال مقصد؛ بات باید در آن مجوز ارسال داشته باشد |
 | `PUBLIC_WEB_URL` | دامنهٔ HTTPS فروشگاه برای ساخت لینک خرید محصول؛ پیش‌فرض `https://panizstyle.ir` |
+| `PUBLIC_API_URL` | نشانی HTTPS عمومی API برای تنظیم webhook روبیکا؛ `https://api.panizstyle.ir` |
 | `INSTAGRAM_USER_ID` | شناسهٔ حساب حرفه‌ای متصل به Meta |
 | `INSTAGRAM_ACCESS_TOKEN` | توکن دارای مجوز انتشار |
 | `INSTAGRAM_GRAPH_API_VERSION` | نسخهٔ Graph API فعال و مجاز برای برنامهٔ Meta |
@@ -52,18 +53,13 @@
 
 متغیر RUBIKA_CHANNEL_ID فقط برای انتشار پست در کانال لازم است و برای پیام خصوصی کمپین استفاده نمی‌شود. RUBIKA_BOT_API_BASE_URL و RUBIKA_SEND_DELAY_MS اختیاری‌اند؛ مقدار پیش‌فرض API رسمی و فاصلهٔ ۱۵۰ میلی‌ثانیه است.
 
-### رفع migration شکست‌خوردهٔ قبلی
+### اجرای migration روی دیتابیس تازه
 
-در محیط تولید، migration 20261011160000_admin_commerce_tools با خطای BOM قبل از اجرای نخستین دستور SQL متوقف شده است؛ بنابراین در تاریخچهٔ Prisma با وضعیت failed مانده و migrationهای بعدی تا زمان resolve اجرا نمی‌شوند. BOM فایل اصلاح شده است. پس از اطمینان از اینکه خطای ثبت‌شده همچنان خطای نخستین دستور است و هیچ‌کدام از جدول‌های این migration ایجاد نشده‌اند، در محیط API متصل به دیتابیس production این دو دستور را به‌ترتیب اجرا کنید:
-
-    npx prisma migrate resolve --rolled-back 20261011160000_admin_commerce_tools
-    npx prisma migrate deploy
-
-این دستورات را با DATABASE_URL تولید اجرا کنید، نه روی دیتابیس محلی. در Railway CLI، ابتدا پروژه و environment تولید را link کنید و سپس فرمان‌ها را در context همان سرویس اجرا کنید. اگر migration بخشی از جداول را ساخته باشد، پیش از resolve باید وضعیت واقعی دیتابیس بررسی شود.
+دیتابیس سرور ایران از ابتدا ساخته می‌شود؛ سابقهٔ migration شکست‌خوردهٔ Railway در آن وجود ندارد. اسکریپت `ops/deploy-server.sh` migrationها را با `prisma migrate deploy` اجرا می‌کند. اگر اجرای migration روی دیتابیس جدید شکست خورد، سرویس API را بالا نیاورید و logهای مرحلهٔ `migrate` را بررسی کنید؛ وضعیت migration را دستی resolve نکنید مگر schema واقعی بررسی شده باشد.
 
 ## وضعیت و پشتیبان‌گیری
 
-برای ماندگاری backup پس از restart/deploy، در سرویس API در Railway یک Volume به مسیر `/data` وصل کنید و این مقادیر را ثبت کنید:
+برای ماندگاری backup پس از restart/deploy، در Compose سرور ایران volume پایدار API به مسیر `/data` وصل است و این مقادیر در `.env.server` ثبت می‌شوند:
 
 ```text
 BACKUP_DIR=/data/backups
