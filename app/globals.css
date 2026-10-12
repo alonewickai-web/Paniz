@@ -14,6 +14,7 @@
   --mint: #e9f1e9;
   --lilac: #f0edfa;
   --sand: #f5eee6;
+  --brand-gradient: linear-gradient(135deg, #c72e52, #ee536b);
   --shadow-soft: 0 12px 35px rgba(63, 38, 43, 0.075);
 }
 
@@ -24,6 +25,7 @@
   --rose-light: #eaf5ee;
   --paper: #f8fcf8;
   --peach: #e9f3e9;
+  --brand-gradient: linear-gradient(135deg, #397d61, #82b99b);
 }
 :root[data-theme="peach"] {
   --rose: #c66e4b;
@@ -32,6 +34,7 @@
   --rose-light: #fff0e7;
   --paper: #fffaf6;
   --peach: #ffeadc;
+  --brand-gradient: linear-gradient(135deg, #c66e4b, #f1a27b);
 }
 :root[data-theme="lilac"] {
   --rose: #7868ae;
@@ -40,6 +43,7 @@
   --rose-light: #f1eefb;
   --paper: #fcfbff;
   --lilac: #eeeafb;
+  --brand-gradient: linear-gradient(135deg, #7868ae, #b49ad8);
 }
 :root[data-theme="coral"] {
   --rose: #dc5e5c;
@@ -47,6 +51,7 @@
   --rose-bright: #f27870;
   --rose-light: #fff0ee;
   --paper: #fffafa;
+  --brand-gradient: linear-gradient(135deg, #dc5e5c, #ff9b73);
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -64,7 +69,58 @@
   --mint: #25332c;
   --lilac: #302a3d;
   --sand: #312a29;
+  --brand-gradient: linear-gradient(135deg, #ee7892, #8b536e);
   --shadow-soft: 0 12px 35px rgba(0, 0, 0, .24);
+}
+:root[data-theme="berry"] {
+  --rose: #a21d55; --rose-deep: #78133e; --rose-bright: #e75888; --rose-light: #fff0f6;
+  --paper: #fff9fc; --peach: #fde2ed; --lilac: #f5e5f1; --mint: #e9f2ed; --sand: #f7e9ef;
+  --brand-gradient: linear-gradient(135deg, #a21d55, #e75888);
+}
+:root[data-theme="ocean"] {
+  --rose: #207c9a; --rose-deep: #155d77; --rose-bright: #45c3c0; --rose-light: #e8f7f8;
+  --paper: #f7fcfd; --peach: #e6f3f5; --lilac: #e9f0f9; --mint: #e2f4ef; --sand: #eef5f4;
+  --brand-gradient: linear-gradient(135deg, #207c9a, #45c3c0);
+}
+:root[data-theme="sunset"] {
+  --rose: #c54c3f; --rose-deep: #96382f; --rose-bright: #f4aa4d; --rose-light: #fff1e8;
+  --paper: #fffbf7; --peach: #ffead5; --lilac: #f8e9e4; --mint: #f0f0df; --sand: #f8eddf;
+  --brand-gradient: linear-gradient(135deg, #d75245, #f4aa4d);
+}
+:root[data-theme="forest"] {
+  --rose: #39734d; --rose-deep: #285538; --rose-bright: #a8b94a; --rose-light: #edf5e9;
+  --paper: #fafcf7; --peach: #f0efdf; --lilac: #eef0e5; --mint: #e6f1e5; --sand: #f2f0df;
+  --brand-gradient: linear-gradient(135deg, #2f7049, #a8b94a);
+}
+:root[data-theme="royal"] {
+  --rose: #51459a; --rose-deep: #3e347b; --rose-bright: #be68a7; --rose-light: #f0edfa;
+  --paper: #fbfaff; --peach: #f6e9f1; --lilac: #ece9fa; --mint: #e8f0ed; --sand: #f0ecf3;
+  --brand-gradient: linear-gradient(135deg, #51459a, #be68a7);
+}
+:root[data-theme="citrus"] {
+  --rose: #788d27; --rose-deep: #586b1c; --rose-bright: #e8c843; --rose-light: #f4f5df;
+  --paper: #fcfcf5; --peach: #f8f0d6; --lilac: #f0efdf; --mint: #e9f1df; --sand: #f6f0dc;
+  --brand-gradient: linear-gradient(135deg, #8c9b29, #e8c843);
+}
+:root[data-theme="lagoon"] {
+  --rose: #087e83; --rose-deep: #075d64; --rose-bright: #64d5b1; --rose-light: #e6f7f2;
+  --paper: #f7fcfa; --peach: #e5f3ee; --lilac: #e9f3f4; --mint: #e1f3eb; --sand: #eaf5ef;
+  --brand-gradient: linear-gradient(135deg, #087e83, #64d5b1);
+}
+:root[data-theme="mocha"] {
+  --rose: #80513e; --rose-deep: #613b2e; --rose-bright: #d9a37e; --rose-light: #f7eee8;
+  --paper: #fdfaf7; --peach: #f3e3d6; --lilac: #f1e9e4; --mint: #e9eee5; --sand: #f2e9dd;
+  --brand-gradient: linear-gradient(135deg, #7d5140, #d9a37e);
+}
+:root[data-theme="orchid"] {
+  --rose: #a64690; --rose-deep: #7e3470; --rose-bright: #d68cc4; --rose-light: #f9edf6;
+  --paper: #fdf9fc; --peach: #f7e8ef; --lilac: #f3e8f7; --mint: #eaf2ed; --sand: #f5e9f0;
+  --brand-gradient: linear-gradient(135deg, #a64690, #d68cc4);
+}
+:root[data-theme="slate"] {
+  --rose: #42546e; --rose-deep: #303f56; --rose-bright: #8299af; --rose-light: #edf1f6;
+  --paper: #fafbfd; --peach: #edf0f3; --lilac: #eceef5; --mint: #e8f0ee; --sand: #eff0ee;
+  --brand-gradient: linear-gradient(135deg, #42546e, #8299af);
 }
 
 * { box-sizing: border-box; }
@@ -136,7 +192,7 @@ img { display: block; }
   display: grid;
   place-items: center;
   border-radius: 11px 11px 11px 3px;
-  background: var(--rose);
+  background: var(--brand-gradient);
   color: #fff;
   font: 600 24px/1 Georgia, serif;
   transform: rotate(-4deg);

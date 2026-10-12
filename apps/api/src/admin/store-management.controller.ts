@@ -76,8 +76,14 @@ export class StoreManagementController {
     return this.store.updateBanner(request.admin!, id, body);
   }
 
+  @Post("banners/:id/restore")
+  @ApiOperation({ summary: "بازگردانی بنر بایگانی‌شده به سایت" })
+  restoreBanner(@Req() request: AdminRequest, @Param("id") id: string) {
+    return this.store.restoreBanner(request.admin!, id);
+  }
+
   @Delete("banners/:id")
-  @ApiOperation({ summary: "حذف بنر" })
+  @ApiOperation({ summary: "برداشتن بنر از سایت و انتقال آن به آرشیو" })
   deleteBanner(@Req() request: AdminRequest, @Param("id") id: string) {
     return this.store.deleteBanner(request.admin!, id);
   }

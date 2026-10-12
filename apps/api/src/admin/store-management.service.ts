@@ -48,6 +48,7 @@ export class StoreManagementService {
       this.prisma.banner.findMany({
         where: {
           isActive: true,
+          archivedAt: null,
           AND: [
             { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
             { OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
@@ -79,7 +80,7 @@ export class StoreManagementService {
         theme: safeTheme(themeSetting?.settingValue),
         sections: mergeSections(sections),
         categories: categories.map((category) => ({ ...category, id: category.id.toString(), parentId: category.parentId?.toString() ?? null })),
-        banners: banners.map((banner) => ({ ...banner, id: banner.id.toString() })),
+        banners: banners.map((banner) => ({ ...banner, id: banner.id.toString(), isArchived: banner.archivedAt !== null })),
       },
     };
   }
@@ -265,13 +266,31 @@ export class StoreManagementService {
     const id = parseId(rawId, "شناسهٔ بنر");
     const current = await this.prisma.banner.findUnique({ where: { id } });
     if (!current) throw new NotFoundException({ code: "BANNER_NOT_FOUND", message: "بنر پیدا نشد" });
+    if (current.archivedAt) return { data: { id: id.toString(), archived: true } };
+    const archivedAt = new Date();
     await this.prisma.$transaction(async (tx) => {
-      await tx.banner.delete({ where: { id } });
+      await tx.banner.update({ where: { id }, data: { archivedAt, isActive: false } });
       await tx.adminAuditLog.create({
-        data: { adminId: admin.id, action: "banner.deleted", entityType: "banner", entityId: id, details: { title: current.title } },
+        data: { adminId: admin.id, action: "banner.archived", entityType: "banner", entityId: id, details: { title: current.title } },
       });
     });
-    return { data: { id: id.toString(), deleted: true } };
+    return { data: { id: id.toString(), archived: true } };
+  }
+
+  async restoreBanner(admin: AuthenticatedAdmin, rawId: string) {
+    requireManager(admin);
+    const id = parseId(rawId, "شناسهٔ بنر");
+    const current = await this.prisma.banner.findUnique({ where: { id } });
+    if (!current) throw new NotFoundException({ code: "BANNER_NOT_FOUND", message: "بنر پیدا نشد" });
+    if (!current.archivedAt) return { data: { id: id.toString(), archived: false, isActive: current.isActive } };
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.banner.update({ where: { id }, data: { archivedAt: null, isActive: true } });
+      await tx.adminAuditLog.create({
+        data: { adminId: admin.id, action: "banner.restored", entityType: "banner", entityId: id, details: { title: current.title } },
+      });
+    });
+    return { data: { id: id.toString(), archived: false, isActive: true } };
   }
 
   private categoryValues(input: SaveAdminCategoryDto, create: boolean): CategoryWriteData {

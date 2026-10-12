@@ -25,7 +25,8 @@
 | `DELETE /admin/categories/:id` | بایگانی دسته بدون حذف سوابق محصولات |
 | `POST /admin/banners` | ساخت بنر فعال یا زمان‌بندی‌شده برای صفحهٔ اصلی |
 | `PATCH /admin/banners/:id` | ویرایش تصویر، متن، مقصد، بازهٔ نمایش یا فعال‌بودن بنر |
-| `DELETE /admin/banners/:id` | حذف بنر |
+| `DELETE /admin/banners/:id` | برداشتن بنر از سایت و بایگانی آن بدون حذف تصویر و محتوا |
+| `POST /admin/banners/:id/restore` | بازگردانی بنر بایگانی‌شده و فعال‌کردن آن در سایت |
 | `GET /admin/products?page=&pageSize=&status=&q=` | جست‌وجوی محصولات منتشرشده، پیش‌نویس یا بایگانی‌شده |
 | `POST /admin/products` | ایجاد محصول، تصاویر و تنوع‌های اولیه؛ وضعیت پیش‌فرض پیش‌نویس |
 | `PATCH /admin/products/:id` | ویرایش عنوان، نشانی، دسته، توضیح و انتشار/پیش‌نویس |
@@ -39,6 +40,8 @@
 | `PATCH /admin/orders/:id/status` | تغییر وضعیت مجاز، ثبت تاریخچه و کد رهگیری |
 | `PATCH /admin/inventory/variants/:variantId` | تغییر موجودی با `delta` مثبت/منفی و دلیل اجباری |
 | `GET /storefront/config` | دریافت رنگ‌بندی عمومی، بخش‌های فعال خانه و بنرهای داخل بازهٔ نمایش |
+
+برای `PATCH /admin/store/theme` مقدار `theme` را از بین ۱۶ کلید `rose`, `mint`, `peach`, `lilac`, `coral`, `dark`, `berry`, `ocean`, `sunset`, `forest`, `royal`, `citrus`, `lagoon`, `mocha`, `orchid` و `slate` بفرستید. هر گزینه، رنگ اصلی و ترکیب طیفی هماهنگ خودش را در ویترین اعمال می‌کند.
 
 برای همهٔ مسیرها به‌جز ورود، هدر `Authorization: Bearer <accessToken>` بفرستید. تغییر موجودی، وضعیت سفارش و اطلاعات محصول در `admin_audit_logs` ثبت می‌شود. کاهش موجودی نمی‌تواند از تعداد رزروشده کمتر شود.
 

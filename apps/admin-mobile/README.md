@@ -91,6 +91,8 @@ flutter build apk --release --split-per-abi `
 در توسعه، سرویس پیامک واقعی متصل نیست و کد آزمایشی ورود مشتری از API برمی‌گردد؛ در production باید سرویس پیامک و **CUSTOMER_AUTH_SECRET** تنظیم شوند. درگاه پرداخت و روش ارسال نیز هنوز به پروژه متصل نشده‌اند.
 ## UI refresh
 
+Version `0.2.12+14` adds 16 coordinated storefront palettes, including two-color gradients, and a recoverable homepage banner archive. Removing a banner takes it off the storefront, keeps its image and content in the archive on the same screen, and lets a manager restore it to the site.
+
 Version `0.2.10+12` adds in-place image uploads from the gallery for product galleries, store categories, homepage banners, and social posts. The shared picker shows a preview and upload progress, supports replacing or removing a selected image, and keeps Instagram's public HTTPS image requirement. It also includes the PANIZ Admin launcher artwork and drag-and-drop homepage section ordering from the previous release.
 
 Version `0.2.6+8` introduces the PANIZ Admin mobile design system: a data-driven dashboard, five-tab RTL navigation, secondary tools in the drawer and More screen, consistent status and empty states, and a saved light/dark preference. A moon/sun toggle is visible at the top of the login page, main tabs, and secondary tool pages. The refreshed screens keep the existing API contracts and operational flows. Sales charts remain absent because the current API does not provide daily trend data.

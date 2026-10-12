@@ -214,9 +214,12 @@ class AdminApi {
   Future<JsonMap> updateBanner(String id, JsonMap changes) async =>
       _data(await dio.patch('admin/banners/$id', data: changes));
 
-  Future<void> deleteBanner(String id) async {
+  Future<void> archiveBanner(String id) async {
     await dio.delete('admin/banners/$id');
   }
+
+  Future<JsonMap> restoreBanner(String id) async =>
+      _data(await dio.post('admin/banners/$id/restore'));
 
   Future<List<JsonMap>> products({String? query}) async {
     final response = await dio.get(

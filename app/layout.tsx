@@ -39,7 +39,7 @@ async function getStoreTheme(): Promise<string> {
     const response = await fetch(`${apiBase}/storefront/config`, { cache: "no-store", signal: AbortSignal.timeout(1800) });
     if (!response.ok) return "rose";
     const payload = (await response.json()) as { data?: { theme?: string } };
-    return ["rose", "mint", "peach", "lilac", "coral", "dark"].includes(payload.data?.theme ?? "")
+    return ["rose", "mint", "peach", "lilac", "coral", "dark", "berry", "ocean", "sunset", "forest", "royal", "citrus", "lagoon", "mocha", "orchid", "slate"].includes(payload.data?.theme ?? "")
       ? payload.data!.theme!
       : "rose";
   } catch {

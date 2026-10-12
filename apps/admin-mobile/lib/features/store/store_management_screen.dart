@@ -69,28 +69,60 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
   }
 
   Widget _themePanel(JsonMap data) {
-    const themes = <(String, String, Color)>[
-      ('rose', 'رز پانیز', Color(0xFFC72E52)),
-      ('mint', 'سبز نعنایی', Color(0xFF54866E)),
-      ('peach', 'هلویی', Color(0xFFCE805C)),
-      ('lilac', 'یاسی', Color(0xFF8170B3)),
-      ('coral', 'مرجانی', Color(0xFFE46262)),
-      ('dark', 'تیره', Color(0xFF332D35)),
+    const themes = <({String key, String title, Color first, Color second})>[
+      (key: 'rose', title: 'رز پانیذ', first: Color(0xFFC72E52), second: Color(0xFFEE536B)),
+      (key: 'mint', title: 'سبز نعنایی', first: Color(0xFF397D61), second: Color(0xFF82B99B)),
+      (key: 'peach', title: 'هلویی', first: Color(0xFFC66E4B), second: Color(0xFFF1A27B)),
+      (key: 'lilac', title: 'یاسی', first: Color(0xFF7868AE), second: Color(0xFFB49AD8)),
+      (key: 'coral', title: 'مرجانی', first: Color(0xFFDC5E5C), second: Color(0xFFFF9B73)),
+      (key: 'dark', title: 'تیره و رز', first: Color(0xFF332D35), second: Color(0xFF9A5367)),
+      (key: 'berry', title: 'تمشکی', first: Color(0xFFA21D55), second: Color(0xFFE75888)),
+      (key: 'ocean', title: 'اقیانوسی', first: Color(0xFF207C9A), second: Color(0xFF45C3C0)),
+      (key: 'sunset', title: 'غروب آفتاب', first: Color(0xFFD75245), second: Color(0xFFF4AA4D)),
+      (key: 'forest', title: 'جنگلی', first: Color(0xFF2F7049), second: Color(0xFFA8B94A)),
+      (key: 'royal', title: 'سلطنتی', first: Color(0xFF51459A), second: Color(0xFFBE68A7)),
+      (key: 'citrus', title: 'مرکباتی', first: Color(0xFF8C9B29), second: Color(0xFFE8C843)),
+      (key: 'lagoon', title: 'تالابی', first: Color(0xFF087E83), second: Color(0xFF64D5B1)),
+      (key: 'mocha', title: 'موکا', first: Color(0xFF7D5140), second: Color(0xFFD9A37E)),
+      (key: 'orchid', title: 'ارکیده‌ای', first: Color(0xFFA64690), second: Color(0xFFD68CC4)),
+      (key: 'slate', title: 'خاکستری آبی', first: Color(0xFF42546E), second: Color(0xFF8299AF)),
     ];
     final current = '${data['theme'] ?? 'rose'}';
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       sectionTitle('رنگ‌بندی سایت'),
-      const Padding(padding: EdgeInsets.only(top: 4, bottom: 14), child: Text('رنگ انتخاب‌شده بعد از بارگذاری دوبارهٔ سایت اعمال می‌شود.', style: TextStyle(color: Color(0xFF74686C), fontSize: 12))),
-      ...themes.map((theme) => Card(
-        child: ListTile(
-          leading: CircleAvatar(backgroundColor: theme.$3, child: current == theme.$1 ? const Icon(Icons.check, color: Colors.white) : null),
-          title: Text(theme.$2),
-          trailing: current == theme.$1 ? const Icon(Icons.radio_button_checked, color: Color(0xFFB52F50)) : const Icon(Icons.radio_button_off),
-          onTap: current == theme.$1 ? null : () => _run(() async {
-            await ref.read(adminApiProvider).updateStoreTheme(theme.$1);
-          }, 'رنگ‌بندی سایت ذخیره شد'),
-        ),
-      )),
+      const Padding(padding: EdgeInsets.only(top: 4, bottom: 14), child: Text('از بین ۱۶ ترکیب رنگ روشن، تیره و طیفی انتخاب کن. تغییر بعد از بارگذاری دوبارهٔ سایت دیده می‌شود.', style: TextStyle(color: Color(0xFF74686C), fontSize: 12))),
+      LayoutBuilder(builder: (context, constraints) {
+        final width = (constraints.maxWidth - 8) / 2;
+        return Wrap(spacing: 8, runSpacing: 8, children: themes.map((theme) {
+          final selected = current == theme.key;
+          return SizedBox(width: width, child: Card(
+            margin: EdgeInsets.zero,
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: selected ? null : () => _run(() async {
+                await ref.read(adminApiProvider).updateStoreTheme(theme.key);
+              }, 'رنگ‌بندی سایت ذخیره شد'),
+              child: Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(9, 11, 9, 11),
+                child: Row(children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [theme.first, theme.second]),
+                    ),
+                    child: selected ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(theme.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                  Icon(selected ? Icons.radio_button_checked : Icons.radio_button_off, size: 18, color: selected ? const Color(0xFFB52F50) : null),
+                ]),
+              ),
+            ),
+          ));
+        }).toList());
+      }),
     ]);
   }
 
@@ -135,13 +167,24 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
 
   Widget _bannersPanel(JsonMap data) {
     final banners = _maps(data['banners']);
+    final activeBanners = banners.where((banner) => banner['isArchived'] != true).toList();
+    final archivedBanners = banners.where((banner) => banner['isArchived'] == true).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       sectionTitle('بنرهای صفحهٔ اصلی', trailing: IconButton.filledTonal(
         tooltip: 'بنر جدید', icon: const Icon(Icons.add_photo_alternate_outlined), onPressed: () => _editBanner(null),
       )),
       const Padding(padding: EdgeInsets.only(top: 3, bottom: 10), child: Text('تصویر هر بنر را از گالری انتخاب و همان‌جا بارگذاری کن.', style: TextStyle(color: Color(0xFF74686C), fontSize: 12))),
-      if (banners.isEmpty) const _EmptyState(label: 'هنوز بنری ثبت نشده است.'),
-      ...banners.map((banner) => Card(
+      if (activeBanners.isEmpty) const _EmptyState(label: 'بنر فعالی نداریم. برای افزودن، دکمهٔ بنر جدید را بزن.'),
+      ...activeBanners.map((banner) => _bannerCard(banner)),
+      const SizedBox(height: 20),
+      sectionTitle('آرشیو بنرها (${archivedBanners.length})'),
+      const Padding(padding: EdgeInsets.only(top: 3, bottom: 10), child: Text('بنرهای این بخش در سایت نمایش داده نمی‌شوند و هر زمان بخواهی می‌توانی آن‌ها را بازگردانی کنی.', style: TextStyle(color: Color(0xFF74686C), fontSize: 12))),
+      if (archivedBanners.isEmpty) const _EmptyState(label: 'آرشیو خالی است. بنرهایی که از سایت حذف کنی اینجا نگه‌داری می‌شوند.'),
+      ...archivedBanners.map((banner) => _bannerCard(banner)),
+    ]);
+  }
+
+  Widget _bannerCard(JsonMap banner, {bool archived = false}) => Card(
         clipBehavior: Clip.antiAlias,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           if ('${banner['imagePath'] ?? ''}'.isNotEmpty)
@@ -151,26 +194,30 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
             )),
           ListTile(
             title: Text('${banner['title'] ?? ''}'),
-            subtitle: Text(banner['isActive'] == true ? 'فعال' : 'غیرفعال'),
-            trailing: PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'edit') _editBanner(banner);
-                if (value == 'toggle') _run(() async {
-                  await ref.read(adminApiProvider).updateBanner('${banner['id']}', {'isActive': banner['isActive'] != true});
-                }, 'وضعیت بنر تغییر کرد');
-                if (value == 'delete') _deleteBanner(banner);
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(value: 'edit', child: Text('ویرایش')),
-                PopupMenuItem(value: 'toggle', child: Text(banner['isActive'] == true ? 'غیرفعال‌کردن' : 'فعال‌کردن')),
-                const PopupMenuItem(value: 'delete', child: Text('حذف بنر')),
-              ],
-            ),
+            subtitle: Text(archived ? 'در آرشیو' : (banner['isActive'] == true ? 'فعال' : 'غیرفعال')),
+            trailing: archived
+                ? IconButton.filledTonal(
+                    tooltip: 'بازگردانی به سایت',
+                    icon: const Icon(Icons.unarchive_outlined),
+                    onPressed: _saving ? null : () => _restoreBanner(banner),
+                  )
+                : PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'edit') _editBanner(banner);
+                      if (value == 'toggle') _run(() async {
+                        await ref.read(adminApiProvider).updateBanner('${banner['id']}', {'isActive': banner['isActive'] != true});
+                      }, 'وضعیت بنر تغییر کرد');
+                      if (value == 'archive') _archiveBanner(banner);
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(value: 'edit', child: Text('ویرایش')),
+                      PopupMenuItem(value: 'toggle', child: Text(banner['isActive'] == true ? 'غیرفعال‌کردن' : 'فعال‌کردن')),
+                      const PopupMenuItem(value: 'archive', child: Text('حذف از سایت و بایگانی')),
+                    ],
+                  ),
           ),
         ]),
-      )),
-    ]);
-  }
+      );
 
   Future<void> _editBanner(JsonMap? existing) async {
     final result = await showDialog<JsonMap>(context: context, builder: (_) => _BannerDialog(existing: existing));
@@ -185,10 +232,14 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
     }, existing == null ? 'بنر ثبت شد' : 'بنر ویرایش شد');
   }
 
-  Future<void> _deleteBanner(JsonMap banner) async {
-    final confirmed = await _confirm('بنر «${banner['title']}» حذف شود؟');
+  Future<void> _archiveBanner(JsonMap banner) async {
+    final confirmed = await _confirm('بنر «${banner['title']}» از سایت برداشته و در آرشیو همین صفحه نگه‌داری شود؟');
     if (!confirmed || !mounted) return;
-    await _run(() async => ref.read(adminApiProvider).deleteBanner('${banner['id']}'), 'بنر حذف شد');
+    await _run(() async => ref.read(adminApiProvider).archiveBanner('${banner['id']}'), 'بنر به آرشیو منتقل شد');
+  }
+
+  Future<void> _restoreBanner(JsonMap banner) async {
+    await _run(() async => ref.read(adminApiProvider).restoreBanner('${banner['id']}'), 'بنر به سایت بازگردانده شد');
   }
 
   Widget _sectionsPanel(JsonMap data) {

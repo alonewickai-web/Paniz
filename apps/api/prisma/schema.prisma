@@ -526,6 +526,7 @@ model Banner {
   endsAt      DateTime? @map("ends_at") @db.DateTime(3)
   sortOrder   Int       @default(0) @map("sort_order")
   isActive    Boolean   @default(true) @map("is_active")
+  archivedAt  DateTime? @map("archived_at") @db.DateTime(3)
   createdAt   DateTime  @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
 
