@@ -266,7 +266,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
         const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-API-KEY": this.config.get<string>("SMSIR_API_KEY", "") },
-          body: JSON.stringify({ lineNumber: this.config.get<string>("SMSIR_LINE_NUMBER", ""), MessageText: campaign.message, Mobiles: batch.map((customer) => smsIrPhone(customer.phone)) }),
+          body: JSON.stringify({ lineNumber: Number(this.config.get<string>("SMSIR_LINE_NUMBER", "")), messageText: campaign.message, mobiles: batch.map((customer) => smsIrPhone(customer.phone)) }),
           signal: AbortSignal.timeout(25_000),
         });
         const responseBody = await response.json().catch(() => ({})) as Record<string, unknown>;
