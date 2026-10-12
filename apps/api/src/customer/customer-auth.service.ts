@@ -18,7 +18,7 @@ import { CustomerSmsService } from "./sms.service";
 
 const CODE_TTL_MINUTES = 5;
 const RESEND_DELAY_SECONDS = 60;
-const MAX_DAILY_CODES = 5;
+const MAX_DAILY_CODES = 10;
 const MAX_CODE_ATTEMPTS = 5;
 const CUSTOMER_SESSION_DAYS = 30;
 
@@ -48,7 +48,12 @@ export class CustomerAuthService {
     }
 
     const todayCount = await this.prisma.otpRequest.count({
-      where: { phone, createdAt: { gt: new Date(now.getTime() - 24 * 60 * 60 * 1000) } },
+      // Provider failures never delivered a code, so they must not consume the customer's daily quota.
+      where: {
+        phone,
+        createdAt: { gt: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+        status: { not: "failed" },
+      },
     });
     if (todayCount >= MAX_DAILY_CODES) {
       throw new HttpException({ code: "OTP_DAILY_LIMIT", message: "سقف دریافت کد امروز برای این شماره تکمیل شده است." }, HttpStatus.TOO_MANY_REQUESTS);
