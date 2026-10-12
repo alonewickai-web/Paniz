@@ -606,7 +606,7 @@ html[data-theme="dark"] .store-suggestions { background: var(--surface); border-
   .account-button { display: none; }
   .desktop-nav { display: none; }
   .page-content { padding-top: 13px; }
-  .hero { min-height: 500px; grid-template-columns: 1fr; grid-template-rows: clamp(255px, 78vw, 355px) auto; border-radius: 21px; }
+  .hero { min-height: 500px; grid-template-columns: 1fr; grid-template-rows: clamp(215px, 60vw, 300px) auto; border-radius: 21px; }
   .hero-copy { grid-row: 2; align-self: start; padding: 11px 22px 34px; }
   .hero h1 { font-size: clamp(36px, 9vw, 48px); }
   .hero-copy > p { max-width: 390px; margin: 8px 0 13px; font-size: 12px; line-height: 1.9; }
@@ -615,7 +615,7 @@ html[data-theme="dark"] .store-suggestions { background: var(--surface); border-
   .hero-note { font-size: 9px; }
   .hero-proof { margin-top: 18px; }
   .hero-visual { grid-row: 1; min-height: 0; }
-  .hero-image-wrap { top: 0; right: 50%; bottom: 0; width: min(70%, 340px); transform: translateX(50%); border-radius: 0 0 46% 46% / 0 0 40% 40%; }
+  .hero-image-wrap { top: 0; right: 50%; bottom: 0; width: min(64%, 270px); transform: translateX(50%); border-radius: 0 0 46% 46% / 0 0 40% 40%; }
   .hero-image { object-position: center; }
   .hero-sticker { top: 25px; left: 8%; width: 87px; height: 87px; }
   .hero-sticker span { font-size: 8px; }
