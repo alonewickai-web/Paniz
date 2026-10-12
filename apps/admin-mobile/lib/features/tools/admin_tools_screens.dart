@@ -422,7 +422,7 @@ class _SocialPublishingScreenState extends ConsumerState<SocialPublishingScreen>
         onChanged: (value) => setState(() => _imagePath = value),
       ),
       const SizedBox(height: 4),
-      Text('برای اینستاگرام تصویر الزامی است؛ برای روبیکا اختیاری است.', style: Theme.of(context).textTheme.bodySmall),
+      Text('برای اینستاگرام تصویر الزامی است؛ برای روبیکا اختیاری است و در صورت انتخاب، خود فایل تصویر ارسال می‌شود.', style: Theme.of(context).textTheme.bodySmall),
       CheckboxListTile(value: _rubika, onChanged: (value) => setState(() => _rubika = value ?? false), contentPadding: EdgeInsets.zero, title: const Text('ارسال به کانال روبیکا')),
       CheckboxListTile(value: _instagram, onChanged: (value) => setState(() => _instagram = value ?? false), contentPadding: EdgeInsets.zero, title: const Text('انتشار در Instagram')),
       SwitchListTile.adaptive(value: _schedule, onChanged: (value) => setState(() => _schedule = value), contentPadding: EdgeInsets.zero, title: const Text('زمان‌بندی انتشار')),

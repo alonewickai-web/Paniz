@@ -81,6 +81,49 @@ export class RubikaBotService implements OnModuleInit {
     return this.call(this.requireToken(), "sendMessage", { chat_id: chatId, text });
   }
 
+  async sendImage(chatId: string, bytes: Uint8Array, fileName: string, caption: string) {
+    const token = this.requireToken();
+    const requested = await this.call(token, "requestSendFile", { type: "Image" });
+    const requestedData = asRecord(requested.data);
+    const uploadUrl = stringOrNull(requestedData.upload_url) ?? stringOrNull(requested.upload_url);
+    if (!uploadUrl) {
+      throw new ServiceUnavailableException({ code: "RUBIKA_UPLOAD_URL_MISSING", message: "روبیکا نشانی بارگذاری تصویر را برنگرداند." });
+    }
+
+    let uploadEndpoint: URL;
+    try {
+      uploadEndpoint = new URL(uploadUrl);
+    } catch {
+      throw new ServiceUnavailableException({ code: "RUBIKA_UPLOAD_URL_INVALID", message: "نشانی بارگذاری تصویر روبیکا معتبر نیست." });
+    }
+    if (uploadEndpoint.protocol !== "https:") {
+      throw new ServiceUnavailableException({ code: "RUBIKA_UPLOAD_HTTPS_REQUIRED", message: "بارگذاری تصویر در روبیکا فقط از HTTPS پشتیبانی می‌شود." });
+    }
+
+    const extension = fileName.split(".").pop()?.toLowerCase();
+    const mimeType = extension === "png" ? "image/png" : extension === "jpg" || extension === "jpeg" ? "image/jpeg" : "image/webp";
+    const form = new FormData();
+    form.append("file", new Blob([Uint8Array.from(bytes)], { type: mimeType }), fileName);
+    const uploadResponse = await fetch(uploadEndpoint, {
+      method: "POST",
+      body: form,
+      signal: AbortSignal.timeout(30_000),
+    });
+    const uploadResult = asRecord(await uploadResponse.json().catch(() => ({})));
+    const uploadStatus = typeof uploadResult.status === "string" ? uploadResult.status.toLowerCase() : "";
+    if (!uploadResponse.ok || uploadResult.ok === false || uploadStatus === "error" || Boolean(uploadResult.error)) {
+      throw new ServiceUnavailableException({ code: "RUBIKA_IMAGE_UPLOAD_FAILED", message: "بارگذاری تصویر روی روبیکا ناموفق بود (HTTP " + uploadResponse.status + ")." });
+    }
+
+    const uploadedData = asRecord(uploadResult.data);
+    const fileId = stringOrNull(uploadedData.file_id) ?? stringOrNull(uploadResult.file_id);
+    if (!fileId) {
+      throw new ServiceUnavailableException({ code: "RUBIKA_FILE_ID_MISSING", message: "روبیکا شناسهٔ تصویر بارگذاری‌شده را برنگرداند." });
+    }
+
+    return this.call(token, "sendFile", { chat_id: chatId, file_id: fileId, text: caption });
+  }
+
   async handleWebhook(secret: string, rawBody: unknown) {
     const token = this.token();
     if (!token || !safeSecretEquals(secret, this.webhookSecret(token))) throw new NotFoundException();

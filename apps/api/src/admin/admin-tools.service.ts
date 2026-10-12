@@ -13,12 +13,13 @@ import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 import { execFile as execFileCallback } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { basename, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { AuthenticatedAdmin } from "../admin-auth/admin-session.guard";
 import { PrismaService } from "../database/prisma.service";
 import { RubikaBotService } from "../integrations/rubika/rubika.service";
+import { uploadRoot } from "../uploads/upload-storage";
 
 const execFile = promisify(execFileCallback);
 const MAX_AUDIENCE = 20_000;
@@ -425,6 +426,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     const imageUrl = typeof input.imageUrl === "string" && input.imageUrl.trim() ? input.imageUrl.trim() : null;
     if (imageUrl && !/^https:\/\//i.test(imageUrl)) throw badInput("Social media needs a public HTTPS image URL.");
     if (channels.includes("instagram") && !imageUrl) throw badInput("Instagram posts require a public HTTPS image URL.");
+    if (channels.includes("rubika") && imageUrl) await this.readRubikaImage(imageUrl);
     const publishAt = input.publishAt ? optionalDate(input.publishAt, "publishAt") : new Date();
     if (!publishAt) throw badInput("publishAt is invalid.");
     const post = await this.prisma.socialPost.create({ data: {
@@ -552,18 +554,46 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async publishRubika(caption: string, imageUrl: string | null) {
-    const token = this.config.get<string>("RUBIKA_BOT_TOKEN", "");
     const chatId = this.config.get<string>("RUBIKA_CHANNEL_ID", "");
-    if (!token || !chatId) throw new Error("Rubika bot token/channel ID is not configured.");
-    const endpoint = this.config.get<string>("RUBIKA_BOT_API_URL", `https://botapi.rubika.ir/v3/${encodeURIComponent(token)}/sendMessage`);
-    const response = await fetch(endpoint, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text: imageUrl ? `${caption}\n${imageUrl}` : caption }),
-      signal: AbortSignal.timeout(20_000),
-    });
-    const result = await response.json().catch(() => ({})) as Record<string, unknown>;
-    if (!response.ok || result.ok === false || result.status === "ERROR" || result.status === "error") throw new Error(`Rubika returned HTTP ${response.status}.`);
-    return { ok: true, provider: safeProviderResult(result) };
+    if (!chatId) throw new Error("Rubika bot token/channel ID is not configured.");
+    if (imageUrl) {
+      const image = await this.readRubikaImage(imageUrl);
+      const result = await this.rubika.sendImage(chatId, image.bytes, image.fileName, caption);
+      return { ok: true, media: "image", provider: safeProviderResult(result) };
+    }
+    const result = await this.rubika.sendMessage(chatId, caption);
+    return { ok: true, media: "text", provider: safeProviderResult(result) };
+  }
+
+  private async readRubikaImage(imageUrl: string): Promise<{ bytes: Buffer; fileName: string }> {
+    let pathname: string;
+    try {
+      pathname = new URL(imageUrl).pathname;
+      pathname = decodeURIComponent(pathname);
+    } catch {
+      throw badInput("برای روبیکا، تصویر باید با انتخاب‌گر تصویر اپ ادمین روی سرور بارگذاری شده باشد.");
+    }
+
+    const match = /^\/uploads\/products\/([A-Za-z0-9][A-Za-z0-9._-]*\.(?:jpe?g|png|webp))$/i.exec(pathname);
+    if (!match) {
+      throw badInput("برای روبیکا، تصویر باید با انتخاب‌گر تصویر اپ ادمین روی سرور بارگذاری شده باشد.");
+    }
+
+    const root = resolve(uploadRoot(), "products");
+    const fileName = basename(match[1]);
+    const filePath = resolve(root, fileName);
+    if (!filePath.startsWith(root + sep)) throw badInput("مسیر تصویر روبیکا معتبر نیست.");
+
+    try {
+      const details = await stat(filePath);
+      if (!details.isFile() || details.size <= 0 || details.size > 8 * 1024 * 1024) {
+        throw badInput("حجم تصویر روبیکا باید کمتر از ۸ مگابایت باشد.");
+      }
+      return { bytes: await readFile(filePath), fileName };
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw badInput("فایل تصویر روی سرور پیدا نشد؛ تصویر را دوباره از اپ ادمین بارگذاری کن.");
+    }
   }
 
   private async publishInstagram(caption: string, imageUrl: string | null) {
