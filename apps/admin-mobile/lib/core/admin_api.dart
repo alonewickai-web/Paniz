@@ -33,7 +33,7 @@ class AdminApi {
   AdminApi() : _storage = const FlutterSecureStorage() {
     const apiUrl = String.fromEnvironment(
       'PANIZ_API_BASE_URL',
-      defaultValue: 'http://10.0.2.2:4000/api/v1/',
+      defaultValue: 'https://api-production-bbf4.up.railway.app/api/v1/',
     );
     dio = Dio(
       BaseOptions(
@@ -51,7 +51,7 @@ class AdminApi {
   static const _tokenKey = 'panizstyle.admin.access-token';
   static const _webBaseUrl = String.fromEnvironment(
     'PANIZ_WEB_BASE_URL',
-    defaultValue: 'http://10.0.2.2:3000/',
+    defaultValue: 'https://paniz-production-17f9.up.railway.app/',
   );
 
   static String imageUrl(String path) {
@@ -59,7 +59,7 @@ class AdminApi {
     if (path.startsWith('/uploads/')) {
       const apiUrl = String.fromEnvironment(
         'PANIZ_API_BASE_URL',
-        defaultValue: 'http://10.0.2.2:4000/api/v1/',
+        defaultValue: 'https://api-production-bbf4.up.railway.app/api/v1/',
       );
       return Uri.parse(apiUrl).resolve(path).toString();
     }
