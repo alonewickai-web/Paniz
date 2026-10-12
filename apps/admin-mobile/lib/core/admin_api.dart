@@ -55,15 +55,31 @@ class AdminApi {
   );
 
   static String imageUrl(String path) {
-    if (path.startsWith('https://')) return path;
-    if (path.startsWith('/uploads/')) {
+    final value = path.trim();
+    if (value.isEmpty) return '';
+    if (value.startsWith('//')) return 'https:$value';
+
+    final parsed = Uri.tryParse(value);
+    if (parsed != null &&
+        parsed.hasScheme &&
+        (parsed.scheme == 'http' || parsed.scheme == 'https')) {
+      return parsed.toString();
+    }
+
+    final normalized = value.replaceAll('\\', '/');
+    if (normalized == '/uploads' ||
+        normalized.startsWith('/uploads/') ||
+        normalized == 'uploads' ||
+        normalized.startsWith('uploads/')) {
       const apiUrl = String.fromEnvironment(
         'PANIZ_API_BASE_URL',
         defaultValue: 'https://api-production-bbf4.up.railway.app/api/v1/',
       );
-      return Uri.parse(apiUrl).resolve(path).toString();
+      return Uri.parse(apiUrl)
+          .resolve(normalized.startsWith('/') ? normalized : '/$normalized')
+          .toString();
     }
-    return Uri.parse(_webBaseUrl).resolve(path).toString();
+    return Uri.parse(_webBaseUrl).resolve(normalized).toString();
   }
 
   Future<AdminIdentity?> restoreSession() async {

@@ -9,6 +9,7 @@ import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'admin_api.dart';
+import 'admin_network_image.dart';
 import 'providers.dart';
 import 'ui_helpers.dart';
 
@@ -333,18 +334,10 @@ class _AdminImagePickerFieldState extends ConsumerState<AdminImagePickerField> {
                     )
                     : path == null
                     ? _emptyPreview(theme)
-                    : Image.network(
-                      AdminApi.imageUrl(path),
+                    : AdminNetworkImage(
+                      imagePath: path,
                       fit: BoxFit.contain,
                       cacheWidth: 1280,
-                      errorBuilder: (_, __, ___) => _brokenPreview(theme),
-                      loadingBuilder:
-                          (context, child, progress) =>
-                              progress == null
-                                  ? child
-                                  : const Center(
-                                    child: CircularProgressIndicator(),
-                                  ),
                     ),
           ),
         ),

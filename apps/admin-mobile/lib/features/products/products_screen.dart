@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/admin_image_picker_field.dart';
 import '../../core/admin_api.dart';
+import '../../core/admin_network_image.dart';
 import '../../core/providers.dart';
 import '../../core/ui_helpers.dart';
 import 'product_colors.dart';
@@ -448,8 +449,9 @@ class _ProductCard extends StatelessWidget {
                 .toList()
             : const <JsonMap>[];
     final status = '${product['status'] ?? ''}';
-    final imagePath =
-        images.isNotEmpty ? '${images.first['imagePath'] ?? ''}' : '';
+    final imagePath = images
+        .map((image) => '${image['imagePath'] ?? ''}'.trim())
+        .firstWhere((path) => path.isNotEmpty, orElse: () => '');
     return Card(
       child: ExpansionTile(
         leading: ClipRRect(
@@ -465,23 +467,14 @@ class _ProductCard extends StatelessWidget {
                       color: Theme.of(context).colorScheme.primary,
                     ),
                   )
-                  : Image.network(
-                    AdminApi.imageUrl(imagePath),
+                  : AdminNetworkImage(
+                    imagePath: imagePath,
                     width: 52,
                     height: 58,
                     cacheWidth: 180,
                     fit: BoxFit.contain,
-                    errorBuilder:
-                        (_, __, ___) => Container(
-                          width: 52,
-                          height: 58,
-                          color:
-                              Theme.of(context).colorScheme.secondaryContainer,
-                          child: Icon(
-                            Icons.image_not_supported_outlined,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
+                    placeholderColor:
+                        Theme.of(context).colorScheme.secondaryContainer,
                   ),
         ),
         title: Text(
@@ -693,26 +686,10 @@ class _ProductImageTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               child: SizedBox(
                 height: 112,
-                child: Image.network(
-                  AdminApi.imageUrl('${image['imagePath'] ?? ''}'),
+                child: AdminNetworkImage(
+                  imagePath: '${image['imagePath'] ?? ''}',
                   fit: BoxFit.contain,
                   cacheWidth: 360,
-                  errorBuilder:
-                      (_, __, ___) => Center(
-                        child: Icon(
-                          Icons.image_not_supported_outlined,
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                  loadingBuilder:
-                      (context, child, progress) =>
-                          progress == null
-                              ? child
-                              : const Center(
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
                 ),
               ),
             ),
