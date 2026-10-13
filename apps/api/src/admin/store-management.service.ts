@@ -1,3 +1,4 @@
+import { hasAdminPermission, requireAdminPermission } from "../admin-auth/admin-permissions";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { AuthenticatedAdmin } from "../admin-auth/admin-session.guard";
@@ -104,7 +105,7 @@ export class StoreManagementService {
   }
 
   async saveTheme(admin: AuthenticatedAdmin, input: UpdateStoreThemeDto) {
-    requireManager(admin);
+    requireAdminPermission(admin, "store.content");
     await this.prisma.$transaction(async (tx) => {
       await tx.storeSetting.upsert({
         where: { settingKey: "store.theme" },
@@ -119,7 +120,7 @@ export class StoreManagementService {
   }
 
   async updateHomepageSection(admin: AuthenticatedAdmin, sectionKey: string, input: UpdateHomepageSectionDto) {
-    requireManager(admin);
+    requireAdminPermission(admin, "store.content");
     if (!defaultSections.some((section) => section.sectionKey === sectionKey)) {
       throw new NotFoundException({ code: "HOMEPAGE_SECTION_NOT_FOUND", message: "بخش صفحهٔ اصلی پیدا نشد" });
     }
@@ -152,7 +153,7 @@ export class StoreManagementService {
   }
 
   async reorderHomepageSections(admin: AuthenticatedAdmin, input: ReorderHomepageSectionsDto) {
-    requireManager(admin);
+    requireAdminPermission(admin, "store.content");
     const allowedKeys = defaultSections.map((section) => section.sectionKey);
     if (input.sectionKeys.length !== allowedKeys.length || input.sectionKeys.some((key) => !allowedKeys.includes(key as typeof allowedKeys[number]))) {
       throw new BadRequestException({ code: "INVALID_HOMEPAGE_SECTION_ORDER", message: "ترتیب ارسالی بخش‌های صفحهٔ اصلی معتبر نیست" });
@@ -181,7 +182,7 @@ export class StoreManagementService {
   }
 
   async createCategory(admin: AuthenticatedAdmin, input: SaveAdminCategoryDto) {
-    requireManager(admin);
+    requireAdminPermission(admin, "store.content");
     const values = this.categoryValues(input, true);
     const parentId = await this.validateParent(input.parentId);
     try {
@@ -203,7 +204,7 @@ export class StoreManagementService {
   }
 
   async updateCategory(admin: AuthenticatedAdmin, rawId: string, input: SaveAdminCategoryDto) {
-    requireManager(admin);
+    requireAdminPermission(admin, "store.content");
     const id = parseId(rawId, "شناسهٔ دسته‌بندی");
     if (Object.keys(input).length === 0) throw new BadRequestException({ code: "EMPTY_CATEGORY_UPDATE", message: "تغییری برای ذخیره انتخاب نشده است" });
     const current = await this.prisma.category.findUnique({ where: { id } });
@@ -233,7 +234,7 @@ export class StoreManagementService {
   }
 
   async archiveCategory(admin: AuthenticatedAdmin, rawId: string) {
-    requireManager(admin);
+    requireAdminPermission(admin, "store.content");
     const id = parseId(rawId, "شناسهٔ دسته‌بندی");
     const current = await this.prisma.category.findUnique({ where: { id } });
     if (!current) throw new NotFoundException({ code: "CATEGORY_NOT_FOUND", message: "دسته‌بندی پیدا نشد" });
@@ -247,7 +248,7 @@ export class StoreManagementService {
   }
 
   async createBanner(admin: AuthenticatedAdmin, input: SaveAdminBannerDto) {
-    requireManager(admin);
+    requireAdminPermission(admin, "store.content");
     const values = this.bannerValues(input, true);
     const banner = await this.prisma.$transaction(async (tx) => {
       const created = await tx.banner.create({ data: values as Prisma.BannerUncheckedCreateInput });
@@ -260,7 +261,7 @@ export class StoreManagementService {
   }
 
   async updateBanner(admin: AuthenticatedAdmin, rawId: string, input: SaveAdminBannerDto) {
-    requireManager(admin);
+    requireAdminPermission(admin, "store.content");
     const id = parseId(rawId, "شناسهٔ بنر");
     if (Object.keys(input).length === 0) throw new BadRequestException({ code: "EMPTY_BANNER_UPDATE", message: "تغییری برای ذخیره انتخاب نشده است" });
     const values = this.bannerValues(input, false);
@@ -280,7 +281,7 @@ export class StoreManagementService {
   }
 
   async deleteBanner(admin: AuthenticatedAdmin, rawId: string) {
-    requireManager(admin);
+    requireAdminPermission(admin, "store.content");
     const id = parseId(rawId, "شناسهٔ بنر");
     const current = await this.prisma.banner.findUnique({ where: { id } });
     if (!current) throw new NotFoundException({ code: "BANNER_NOT_FOUND", message: "بنر پیدا نشد" });
@@ -296,7 +297,7 @@ export class StoreManagementService {
   }
 
   async restoreBanner(admin: AuthenticatedAdmin, rawId: string) {
-    requireManager(admin);
+    requireAdminPermission(admin, "store.content");
     const id = parseId(rawId, "شناسهٔ بنر");
     const current = await this.prisma.banner.findUnique({ where: { id } });
     if (!current) throw new NotFoundException({ code: "BANNER_NOT_FOUND", message: "بنر پیدا نشد" });

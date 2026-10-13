@@ -1,3 +1,4 @@
+import { AdminPermissionGuard, RequireAdminPermission, RequireAnyAdminPermission } from "../admin-auth/admin-permission.guard";
 import { Body, BadRequestException, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, Req, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
@@ -19,7 +20,7 @@ import { UpdateAdminOrderDto } from "./dto/update-admin-order.dto";
 
 @ApiTags("مدیریت فروشگاه")
 @ApiBearerAuth("admin-session")
-@UseGuards(AdminSessionGuard)
+@UseGuards(AdminSessionGuard, AdminPermissionGuard)
 @Controller("admin")
 export class AdminController {
   constructor(private readonly admin: AdminService) {}
@@ -46,10 +47,9 @@ export class AdminController {
     },
   }))
   @ApiOperation({ summary: "Upload a product image from the admin app" })
+  @RequireAnyAdminPermission("products.create", "products.edit", "store.content")
   uploadProductImage(@Req() request: AdminRequest, @UploadedFile() file?: { filename: string; mimetype: string; size: number }) {
-    if (request.admin?.role !== "owner" && request.admin?.role !== "admin") {
-      throw new ForbiddenException({ code: "ADMIN_PERMISSION_REQUIRED", message: "Manager access is required." });
-    }
+
     if (!file) throw new BadRequestException({ code: "PRODUCT_IMAGE_REQUIRED", message: "Select a product image first." });
     return { data: { imagePath: `/uploads/products/${file.filename}`, mimeType: file.mimetype, fileSizeBytes: file.size } };
   }
@@ -60,6 +60,7 @@ export class AdminController {
   @ApiQuery({ name: "pageSize", required: false, type: Number })
   @ApiQuery({ name: "status", required: false, type: String })
   @ApiQuery({ name: "q", required: false, type: String })
+  @RequireAdminPermission("orders.view")
   listOrders(@Req() request: AdminRequest, @Query() query: ListAdminOrdersQuery) {
     return this.admin.listOrders(request.admin!, query);
   }
@@ -70,13 +71,27 @@ export class AdminController {
   @ApiQuery({ name: "pageSize", required: false, type: Number })
   @ApiQuery({ name: "status", required: false, enum: ["draft", "published", "archived"] })
   @ApiQuery({ name: "q", required: false, type: String })
+  @RequireAdminPermission("products.view")
   listProducts(@Query() query: ListAdminProductsQuery) {
     return this.admin.listProducts(query);
   }
 
+  @Get("product-categories")
+  @RequireAnyAdminPermission("products.view", "products.create", "products.edit")
+  productCategories() { return this.admin.productCategories(); }
+
+  @Get("products/detail/:id")
+  @RequireAdminPermission("products.view")
+  productDetail(@Req() request: AdminRequest, @Param("id") id: string) { return this.admin.productDetail(request.admin!, id); }
+
+  @Get("orders/:id")
+  @RequireAdminPermission("orders.view")
+  orderDetail(@Req() request: AdminRequest, @Param("id") id: string) { return this.admin.orderDetail(request.admin!, id); }
+
   @Post("products")
   @ApiOperation({ summary: "ثبت محصول همراه تصویرها و تنوع‌های اولیه" })
   @ApiBody({ type: CreateAdminProductDto })
+  @RequireAdminPermission("products.create")
   createProduct(@Req() request: AdminRequest, @Body() body: CreateAdminProductDto) {
     return this.admin.createProduct(request.admin!, body);
   }
@@ -84,6 +99,7 @@ export class AdminController {
   @Patch("products/:id")
   @ApiOperation({ summary: "ویرایش اطلاعات و انتشار یا پیش‌نویس محصول" })
   @ApiBody({ type: UpdateAdminProductDto })
+  @RequireAnyAdminPermission("products.edit", "products.publish")
   updateProduct(@Req() request: AdminRequest, @Param("id") id: string, @Body() body: UpdateAdminProductDto) {
     return this.admin.updateProduct(request.admin!, id, body);
   }
@@ -91,6 +107,7 @@ export class AdminController {
   @Post("products/:id/variants")
   @ApiOperation({ summary: "افزودن تنوع رنگ و سایز به محصول" })
   @ApiBody({ type: AddAdminProductVariantDto })
+  @RequireAdminPermission("products.edit")
   addProductVariant(@Req() request: AdminRequest, @Param("id") id: string, @Body() body: AddAdminProductVariantDto) {
     return this.admin.addProductVariant(request.admin!, id, body);
   }
@@ -98,6 +115,7 @@ export class AdminController {
   @Post("products/:id/images")
   @ApiOperation({ summary: "افزودن تصویر میزبانی‌شده به گالری محصول" })
   @ApiBody({ type: AddAdminProductImageDto })
+  @RequireAdminPermission("products.edit")
   addProductImage(@Req() request: AdminRequest, @Param("id") id: string, @Body() body: AddAdminProductImageDto) {
     return this.admin.addProductImage(request.admin!, id, body);
   }
@@ -105,18 +123,21 @@ export class AdminController {
   @Patch("products/:id/images/:imageId")
   @ApiOperation({ summary: "ویرایش، جایگزینی، مرتب‌سازی یا انتخاب تصویر اصلی محصول" })
   @ApiBody({ type: UpdateAdminProductImageDto })
+  @RequireAdminPermission("products.edit")
   updateProductImage(@Req() request: AdminRequest, @Param("id") id: string, @Param("imageId") imageId: string, @Body() body: UpdateAdminProductImageDto) {
     return this.admin.updateProductImage(request.admin!, id, imageId, body);
   }
 
   @Delete("products/:id/images/:imageId")
   @ApiOperation({ summary: "حذف تصویر از گالری؛ تصویر اصلی در صورت نیاز جایگزین می‌شود" })
+  @RequireAdminPermission("products.edit")
   deleteProductImage(@Req() request: AdminRequest, @Param("id") id: string, @Param("imageId") imageId: string) {
     return this.admin.deleteProductImage(request.admin!, id, imageId);
   }
 
   @Delete("products/:id")
   @ApiOperation({ summary: "بایگانی نرم محصول و نگهداری سابقهٔ سفارش" })
+  @RequireAdminPermission("products.archive")
   archiveProduct(@Req() request: AdminRequest, @Param("id") id: string) {
     return this.admin.archiveProduct(request.admin!, id);
   }
@@ -124,6 +145,7 @@ export class AdminController {
   @Patch("orders/:id/status")
   @ApiOperation({ summary: "تغییر وضعیت سفارش طبق گردش مجاز و ثبت در تاریخچه" })
   @ApiBody({ type: UpdateAdminOrderDto })
+  @RequireAdminPermission("orders.status")
   updateOrderStatus(@Req() request: AdminRequest, @Param("id") id: string, @Body() body: UpdateAdminOrderDto) {
     return this.admin.updateOrderStatus(request.admin!, id, body);
   }
@@ -131,6 +153,7 @@ export class AdminController {
   @Patch("inventory/variants/:variantId")
   @ApiOperation({ summary: "تغییر موجودی تنوع با کنترل رزرو و ثبت گردش انبار" })
   @ApiBody({ type: AdjustInventoryDto })
+  @RequireAdminPermission("products.change_stock")
   adjustInventory(@Req() request: AdminRequest, @Param("variantId") variantId: string, @Body() body: AdjustInventoryDto) {
     return this.admin.adjustInventory(request.admin!, variantId, body);
   }
@@ -138,6 +161,7 @@ export class AdminController {
   @Patch("products/variants/:variantId")
   @ApiOperation({ summary: "ویرایش رنگ، سایز، قیمت، تخفیف، وضعیت فعال یا آستانهٔ کمبود تنوع" })
   @ApiBody({ type: UpdateAdminVariantDto })
+  @RequireAnyAdminPermission("products.edit", "products.change_price", "products.change_stock")
   updateVariant(@Req() request: AdminRequest, @Param("variantId") variantId: string, @Body() body: UpdateAdminVariantDto) {
     return this.admin.updateVariant(request.admin!, variantId, body);
   }

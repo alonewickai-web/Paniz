@@ -1,3 +1,4 @@
+import { hasAdminPermission, requireAdminPermission } from "../admin-auth/admin-permissions";
 import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
@@ -37,13 +38,13 @@ export class AdminService {
   constructor(private readonly prisma: PrismaService) {}
 
   async dashboard(admin: AuthenticatedAdmin) {
-    requireManager(admin);
+
     const now = new Date();
     const iranLocalNow = new Date(now.getTime() + IRAN_UTC_OFFSET_MINUTES * 60_000);
     const iranOffsetMs = IRAN_UTC_OFFSET_MINUTES * 60_000;
     const today = new Date(Date.UTC(iranLocalNow.getUTCFullYear(), iranLocalNow.getUTCMonth(), iranLocalNow.getUTCDate()) - iranOffsetMs);
     const month = new Date(Date.UTC(iranLocalNow.getUTCFullYear(), iranLocalNow.getUTCMonth(), 1) - iranOffsetMs);
-    const [todaySales, monthSales, orderGroups, lowStockRows, recentOrders] = await Promise.all([
+    const [todaySales, monthSales, orderGroups, lowStockRows, recentOrders, productCount, customerCount] = await Promise.all([
       this.prisma.order.aggregate({
         where: { paymentStatus: "paid", placedAt: { gte: today } },
         _sum: { totalToman: true },
@@ -82,6 +83,8 @@ export class AdminService {
           _count: { select: { items: true } },
         },
       }),
+      this.prisma.product.count({ where: { status: "published", deletedAt: null } }),
+      this.prisma.customer.count({ where: { status: "active" } }),
     ]);
 
     const lowStock = lowStockRows
@@ -100,35 +103,38 @@ export class AdminService {
 
     return {
       data: {
-        today: { paidOrderCount: todaySales._count._all, paidSalesToman: toSafeNumber(todaySales._sum.totalToman ?? 0n) },
-        month: { paidOrderCount: monthSales._count._all, paidSalesToman: toSafeNumber(monthSales._sum.totalToman ?? 0n) },
-        orderCounts: Object.fromEntries(orderGroups.map((row) => [row.status, row._count._all])),
-        lowStockCount: lowStockRows.filter((variant) => variant.stockQuantity - variant.reservedQuantity <= variant.lowStockThreshold).length,
-        lowStock,
-        recentOrders: recentOrders.map((order) => ({
+        financialAccess: hasAdminPermission(admin, "reports.financial"),
+        today: hasAdminPermission(admin, "reports.financial") ? { paidOrderCount: todaySales._count._all, paidSalesToman: toSafeNumber(todaySales._sum.totalToman ?? 0n) } : null,
+        month: hasAdminPermission(admin, "reports.financial") ? { paidOrderCount: monthSales._count._all, paidSalesToman: toSafeNumber(monthSales._sum.totalToman ?? 0n) } : null,
+        activeProductCount: hasAdminPermission(admin, "products.view") ? productCount : null,
+        customerCount: hasAdminPermission(admin, "customers.view") ? customerCount : null,
+        orderCounts: hasAdminPermission(admin, "orders.view") ? Object.fromEntries(orderGroups.map((row) => [row.status, row._count._all])) : {},
+        lowStockCount: hasAdminPermission(admin, "products.view") ? lowStockRows.filter((variant) => variant.stockQuantity - variant.reservedQuantity <= variant.lowStockThreshold).length : null,
+        lowStock: hasAdminPermission(admin, "products.view") ? lowStock : [],
+        recentOrders: hasAdminPermission(admin, "orders.view") ? recentOrders.map((order) => ({
           id: order.id.toString(),
           orderNumber: order.orderNumber,
           status: order.status,
           paymentStatus: order.paymentStatus,
-          totalToman: toSafeNumber(order.totalToman),
-          recipientName: order.recipientNameSnapshot,
+          totalToman: hasAdminPermission(admin, "reports.financial") ? toSafeNumber(order.totalToman) : null,
+          recipientName: hasAdminPermission(admin, "orders.view_contact") ? order.recipientNameSnapshot : "مشتری",
           itemCount: order._count.items,
           placedAt: order.placedAt.toISOString(),
-        })),
+        })) : [],
       },
     };
   }
 
-  async listOrders(admin: AuthenticatedAdmin, query: ListAdminOrdersQuery) {
-    requireManager(admin);
+  async listOrders(admin: AuthenticatedAdmin, query: ListAdminOrdersQuery, exactId?: bigint) {
+    requireAdminPermission(admin, "orders.view");
     const where: Prisma.OrderWhereInput = {
+      ...(exactId ? { id: exactId } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.q?.trim()
         ? {
             OR: [
               { orderNumber: { contains: query.q.trim() } },
-              { recipientPhoneSnapshot: { contains: query.q.trim() } },
-              { recipientNameSnapshot: { contains: query.q.trim() } },
+              ...(hasAdminPermission(admin, "orders.view_contact") ? [{ recipientPhoneSnapshot: { contains: query.q.trim() } }, { recipientNameSnapshot: { contains: query.q.trim() } }] : []),
             ],
           }
         : {}),
@@ -160,21 +166,21 @@ export class AdminService {
         orderNumber: order.orderNumber,
         status: order.status,
         paymentStatus: order.paymentStatus,
-        recipientName: order.recipientNameSnapshot,
-        recipientPhone: order.recipientPhoneSnapshot,
-        address: order.shippingAddressSnapshot,
-        customerNote: order.customerNote,
-        subtotalToman: toSafeNumber(order.subtotalToman),
-        discountToman: toSafeNumber(order.discountToman),
-        shippingToman: toSafeNumber(order.shippingToman),
-        totalToman: toSafeNumber(order.totalToman),
+        recipientName: hasAdminPermission(admin, "orders.view_contact") ? order.recipientNameSnapshot : "مشتری",
+        recipientPhone: hasAdminPermission(admin, "orders.view_contact") ? order.recipientPhoneSnapshot : null,
+        address: hasAdminPermission(admin, "orders.view_contact") ? order.shippingAddressSnapshot : null,
+        customerNote: hasAdminPermission(admin, "orders.view_contact") ? order.customerNote : null,
+        subtotalToman: hasAdminPermission(admin, "reports.financial") ? toSafeNumber(order.subtotalToman) : null,
+        discountToman: hasAdminPermission(admin, "reports.financial") ? toSafeNumber(order.discountToman) : null,
+        shippingToman: hasAdminPermission(admin, "reports.financial") ? toSafeNumber(order.shippingToman) : null,
+        totalToman: hasAdminPermission(admin, "reports.financial") ? toSafeNumber(order.totalToman) : null,
         placedAt: order.placedAt.toISOString(),
         items: order.items.map((item) => ({
           name: item.productNameSnapshot,
           color: item.colorNameSnapshot,
           size: item.sizeLabelSnapshot,
           quantity: item.quantity,
-          lineTotalToman: toSafeNumber(item.lineTotalToman),
+          lineTotalToman: hasAdminPermission(admin, "reports.financial") ? toSafeNumber(item.lineTotalToman) : null,
         })),
         shipments: order.shipments.map((shipment) => ({
           trackingCode: shipment.trackingCode,
@@ -186,8 +192,9 @@ export class AdminService {
     };
   }
 
-  async listProducts(query: ListAdminProductsQuery) {
+  async listProducts(query: ListAdminProductsQuery, exactId?: bigint) {
     const where: Prisma.ProductWhereInput = {
+      ...(exactId ? { id: exactId } : {}),
       ...(query.status === "archived"
         ? { deletedAt: { not: null } }
         : { deletedAt: null, ...(query.status ? { status: query.status } : {}) }),
@@ -252,7 +259,8 @@ export class AdminService {
   }
 
   async createProduct(admin: AuthenticatedAdmin, input: CreateAdminProductDto) {
-    requireManager(admin);
+    requireAdminPermission(admin, "products.create");
+    if (input.status === "published") requireAdminPermission(admin, "products.publish");
     const categoryId = parseId(input.categoryId, "شناسهٔ دسته‌بندی");
     if (input.images.length > 4) throw new BadRequestException({ code: "PRODUCT_IMAGE_LIMIT", message: "برای هر محصول حداکثر ۴ تصویر ثبت می‌شود." });
     const primaryIndex = Math.max(0, input.images.findIndex((image) => image.isPrimary));
@@ -332,7 +340,7 @@ export class AdminService {
             action: "product.created",
             entityType: "product",
             entityId: product.id,
-            details: { slug: updatedProduct.slug, status: updatedProduct.status, variantCount: variants.length },
+            details: { sku: variants[0]?.sku ?? productCode, productName: product.name, slug: updatedProduct.slug, status: updatedProduct.status, variantCount: variants.length },
           },
         });
         return { data: { id: product.id.toString(), slug: updatedProduct.slug, status: updatedProduct.status, sku: variants[0]?.sku ?? productCode } };
@@ -347,7 +355,8 @@ export class AdminService {
   }
 
   async updateProduct(admin: AuthenticatedAdmin, rawProductId: string, input: UpdateAdminProductDto) {
-    requireManager(admin);
+    if (Object.keys(input).some((key) => key !== "status")) requireAdminPermission(admin, "products.edit");
+    if (input.status !== undefined) requireAdminPermission(admin, "products.publish");
     const productId = parseId(rawProductId, "شناسهٔ محصول");
     const before = await this.prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
     if (!before) throw new NotFoundException({ code: "PRODUCT_NOT_FOUND", message: "محصول پیدا نشد" });
@@ -393,7 +402,8 @@ export class AdminService {
             action: "product.updated",
             entityType: "product",
             entityId: product.id,
-            details: { changedFields: Object.keys(input), slug: product.slug },
+            details: { changedFields: Object.keys(input), slug: product.slug, productName: product.name,
+              before: auditFields(before, Object.keys(input)), after: auditFields(product, Object.keys(input)) },
           },
         });
         return product;
@@ -408,7 +418,7 @@ export class AdminService {
   }
 
   async addProductVariant(admin: AuthenticatedAdmin, rawProductId: string, input: AddAdminProductVariantDto) {
-    requireManager(admin);
+    requireAdminPermission(admin, "products.edit");
     const productId = parseId(rawProductId, "شناسهٔ محصول");
     const product = await this.prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
     if (!product) throw new NotFoundException({ code: "PRODUCT_NOT_FOUND", message: "محصول پیدا نشد" });
@@ -477,7 +487,7 @@ export class AdminService {
   }
 
   async addProductImage(admin: AuthenticatedAdmin, rawProductId: string, input: AddAdminProductImageDto) {
-    requireManager(admin);
+    requireAdminPermission(admin, "products.edit");
     const productId = parseId(rawProductId, "شناسهٔ محصول");
     const product = await this.prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
     if (!product) throw new NotFoundException({ code: "PRODUCT_NOT_FOUND", message: "محصول پیدا نشد" });
@@ -521,7 +531,7 @@ export class AdminService {
   }
 
   async deleteProductImage(admin: AuthenticatedAdmin, rawProductId: string, rawImageId: string) {
-    requireManager(admin);
+    requireAdminPermission(admin, "products.edit");
     const productId = parseId(rawProductId, "شناسهٔ محصول");
     const imageId = parseId(rawImageId, "شناسهٔ تصویر");
     const image = await this.prisma.$transaction(async (tx) => {
@@ -550,7 +560,7 @@ export class AdminService {
   }
 
   async updateProductImage(admin: AuthenticatedAdmin, rawProductId: string, rawImageId: string, input: UpdateAdminProductImageDto) {
-    requireManager(admin);
+    requireAdminPermission(admin, "products.edit");
     if (Object.keys(input).length === 0) {
       throw new BadRequestException({ code: "EMPTY_PRODUCT_IMAGE_UPDATE", message: "تغییری برای ذخیره انتخاب نشده است" });
     }
@@ -602,7 +612,7 @@ export class AdminService {
   }
 
   async archiveProduct(admin: AuthenticatedAdmin, rawProductId: string) {
-    requireManager(admin);
+    requireAdminPermission(admin, "products.archive");
     const productId = parseId(rawProductId, "شناسهٔ محصول");
     const product = await this.prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
     if (!product) throw new NotFoundException({ code: "PRODUCT_NOT_FOUND", message: "محصول پیدا نشد" });
@@ -616,7 +626,7 @@ export class AdminService {
   }
 
   async adjustInventory(admin: AuthenticatedAdmin, rawVariantId: string, input: AdjustInventoryDto) {
-    requireManager(admin);
+    requireAdminPermission(admin, "products.change_stock");
     if (input.delta === 0 || !input.note.trim()) {
       throw new BadRequestException({ code: "INVALID_INVENTORY_ADJUSTMENT", message: "مقدار تغییر و دلیل آن را وارد کن" });
     }
@@ -684,7 +694,9 @@ export class AdminService {
   }
 
   async updateVariant(admin: AuthenticatedAdmin, rawVariantId: string, input: UpdateAdminVariantDto) {
-    requireManager(admin);
+    if (input.priceToman !== undefined || input.compareAtPriceToman !== undefined) requireAdminPermission(admin, "products.change_price");
+    if (input.lowStockThreshold !== undefined) requireAdminPermission(admin, "products.change_stock");
+    if (Object.keys(input).some((key) => !["priceToman", "compareAtPriceToman", "lowStockThreshold"].includes(key))) requireAdminPermission(admin, "products.edit");
     if (Object.keys(input).length === 0) {
       throw new BadRequestException({ code: "EMPTY_VARIANT_UPDATE", message: "تغییری برای ذخیره انتخاب نشده است" });
     }
@@ -748,6 +760,7 @@ export class AdminService {
             entityType: "product_variant",
             entityId: variant.id,
             details: {
+              productId: current.productId.toString(),
               productName: current.product.name,
               sku: current.sku,
               colorBefore: current.colorName,
@@ -785,7 +798,9 @@ export class AdminService {
   }
 
   async updateOrderStatus(admin: AuthenticatedAdmin, rawOrderId: string, input: UpdateAdminOrderDto) {
-    requireManager(admin);
+    requireAdminPermission(admin, "orders.status");
+    if (input.status === "cancelled") requireAdminPermission(admin, "orders.cancel");
+    if (input.status === "returned") requireAdminPermission(admin, "orders.refund");
     const orderId = parseId(rawOrderId, "شناسهٔ سفارش");
     return this.prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
@@ -878,6 +893,30 @@ export class AdminService {
       return { data: { orderNumber: order.orderNumber, status: input.status } };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
+
+  async productDetail(admin: AuthenticatedAdmin, idText: string) {
+    requireAdminPermission(admin, "products.view");
+    const result = await this.listProducts({ page: 1, pageSize: 1 } as ListAdminProductsQuery, parseId(idText, "شناسهٔ محصول"));
+    if (!result.data.length) throw new NotFoundException({ code: "PRODUCT_NOT_FOUND", message: "محصول پیدا نشد یا بایگانی شده است." });
+    return { data: result.data[0] };
+  }
+
+  async orderDetail(admin: AuthenticatedAdmin, idText: string) {
+    requireAdminPermission(admin, "orders.view");
+    const result = await this.listOrders(admin, { page: 1, pageSize: 1 } as ListAdminOrdersQuery, parseId(idText, "شناسهٔ سفارش"));
+    if (!result.data.length) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "سفارش پیدا نشد." });
+    return { data: result.data[0] };
+  }
+
+  async productCategories() {
+    const categories = await this.prisma.category.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, parentId: true, name: true, isActive: true } });
+    return { data: categories.map((row) => ({ ...row, id: row.id.toString(), parentId: row.parentId?.toString() ?? null })) };
+  }
+}
+
+function auditFields(row: object, fields: string[]): Prisma.InputJsonObject {
+  const source = row as Record<string, unknown>;
+  return JSON.parse(JSON.stringify(Object.fromEntries(fields.map((key) => [key, source[key] ?? null])), (_key, value) => typeof value === "bigint" ? value.toString() : value));
 }
 
 function requireManager(admin: AuthenticatedAdmin): void {

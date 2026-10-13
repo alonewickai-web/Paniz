@@ -1,3 +1,4 @@
+import { hasAdminPermission, requireAdminPermission } from "../admin-auth/admin-permissions";
 import {
   BadRequestException,
   ConflictException,
@@ -94,7 +95,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async listCustomers(admin: AuthenticatedAdmin, query: Record<string, string>) {
-    requireManager(admin);
+    requireAdminPermission(admin, "customers.view");
     const filters = normalizeFilters(query);
     const page = boundedInt(query.page, 1, 1, 100_000);
     const pageSize = boundedInt(query.pageSize, 30, 1, 100);
@@ -107,7 +108,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async productOptions(admin: AuthenticatedAdmin) {
-    requireManager(admin);
+
     const products = await this.prisma.product.findMany({
       where: { deletedAt: null }, orderBy: { name: "asc" }, take: 500,
       select: { id: true, name: true, status: true },
@@ -116,7 +117,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async socialProducts(admin: AuthenticatedAdmin) {
-    requireManager(admin);
+
     const products = await this.prisma.product.findMany({
       where: {
         status: "published",
@@ -134,13 +135,13 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async listCoupons(admin: AuthenticatedAdmin) {
-    requireManager(admin);
+    requireAdminPermission(admin, "marketing.campaign.manage");
     const coupons = await this.prisma.coupon.findMany({ orderBy: { createdAt: "desc" }, take: 200 });
     return { data: coupons.map(toCoupon) };
   }
 
   async saveCoupon(admin: AuthenticatedAdmin, idText: string | null, input: Record<string, unknown>) {
-    requireManager(admin);
+    requireAdminPermission(admin, "marketing.campaign.manage");
     const code = requiredText(input.code, "code", 64).toUpperCase().replace(/\s+/g, "");
     if (!/^[A-Z0-9_-]{3,64}$/.test(code)) throw badInput("Coupon code must contain 3-64 letters, numbers, _ or -.");
     const discountType = input.discountType === "percent" ? "percent" : input.discountType === "fixed" ? "fixed" : "";
@@ -175,14 +176,14 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async previewSmsAudience(admin: AuthenticatedAdmin, rawFilters: unknown) {
-    requireManager(admin);
+
     const filters = normalizeFilters(asObject(rawFilters));
     const audience = await this.loadCustomers(filters, "sms", true);
     return { data: { count: audience.total, capped: audience.capped, filters } };
   }
 
   async listSmsCampaigns(admin: AuthenticatedAdmin) {
-    requireManager(admin);
+
     const campaigns = await this.prisma.smsCampaign.findMany({ where: { channel: "sms" }, orderBy: { createdAt: "desc" }, take: 50 });
     return { data: campaigns.map((item) => ({
       id: item.id.toString(), title: item.title, message: item.message, recipientCount: item.recipientCount,
@@ -192,7 +193,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async createSmsCampaign(admin: AuthenticatedAdmin, input: Record<string, unknown>) {
-    requireManager(admin);
+    requireAdminPermission(admin, "marketing.sms.send");
     const title = requiredText(input.title, "title", 160);
     const message = requiredText(input.message, "message", 1000);
     const filters = normalizeFilters(asObject(input.filters));
@@ -206,7 +207,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async sendSmsCampaign(admin: AuthenticatedAdmin, idText: string) {
-    requireManager(admin);
+    requireAdminPermission(admin, "marketing.sms.send");
     if (!this.smsCampaignWorkerEnabled()) {
       throw new ServiceUnavailableException({ code: "SMS_CAMPAIGNS_DISABLED", message: "ارسال کمپین پیامکی فعلاً غیرفعال است." });
     }
@@ -295,14 +296,14 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async previewRubikaAudience(admin: AuthenticatedAdmin, rawFilters: unknown) {
-    requireManager(admin);
+
     const filters = normalizeFilters(asObject(rawFilters));
     const audience = await this.loadCustomers(filters, "rubika", true);
     return { data: { count: audience.total, capped: audience.capped, filters } };
   }
 
   async listRubikaCampaigns(admin: AuthenticatedAdmin) {
-    requireManager(admin);
+
     const campaigns = await this.prisma.smsCampaign.findMany({
       where: { channel: "rubika" }, orderBy: { createdAt: "desc" }, take: 50,
     });
@@ -314,7 +315,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async createRubikaCampaign(admin: AuthenticatedAdmin, input: Record<string, unknown>) {
-    requireManager(admin);
+    requireAdminPermission(admin, "marketing.rubika.publish");
     if (!(await this.rubika.integrationStatus()).configured) {
       throw new ServiceUnavailableException({ code: "RUBIKA_NOT_CONFIGURED", message: "توکن بات روبیکا در تنظیمات API ثبت نشده است." });
     }
@@ -331,7 +332,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async sendRubikaCampaign(admin: AuthenticatedAdmin, idText: string) {
-    requireManager(admin);
+    requireAdminPermission(admin, "marketing.rubika.publish");
     if (!(await this.rubika.integrationStatus()).configured) {
       throw new ServiceUnavailableException({ code: "RUBIKA_NOT_CONFIGURED", message: "توکن بات روبیکا در تنظیمات API ثبت نشده است." });
     }
@@ -431,7 +432,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   socialStatus(admin: AuthenticatedAdmin) {
-    requireManager(admin);
+
     return { data: {
       rubika: { configured: Boolean(this.config.get("RUBIKA_BOT_TOKEN") && this.config.get("RUBIKA_CHANNEL_ID")) },
       instagram: { configured: Boolean(this.config.get("INSTAGRAM_USER_ID") && this.config.get("INSTAGRAM_ACCESS_TOKEN") && this.config.get("INSTAGRAM_GRAPH_API_VERSION")) },
@@ -439,7 +440,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async listSocialPosts(admin: AuthenticatedAdmin) {
-    requireManager(admin);
+
     const posts = await this.prisma.socialPost.findMany({ orderBy: { createdAt: "desc" } });
     return { data: posts.map((post) => ({
       id: post.id.toString(), caption: post.caption, imageUrl: post.imageUrl,
@@ -450,7 +451,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async createSocialPost(admin: AuthenticatedAdmin, input: Record<string, unknown>) {
-    requireManager(admin);
+    requireAdminPermission(admin, "marketing.rubika.publish");
     const rawCaption = typeof input.caption === "string" ? input.caption.trim() : "";
     if (rawCaption.length > 2200) throw badInput("caption must be at most 2200 characters.");
     if (!Array.isArray(input.channels) || input.channels.length === 0 || input.channels.some((channel) => typeof channel !== "string" || !ALLOWED_CHANNELS.has(channel))) {
@@ -482,7 +483,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async approveSocialPost(admin: AuthenticatedAdmin, rawId: string) {
-    requireManager(admin);
+    requireAdminPermission(admin, "marketing.rubika.publish");
     const id = parseId(rawId, "id");
     const post = await this.prisma.socialPost.findUnique({ where: { id }, select: { id: true, status: true, publishAt: true } });
     if (!post) throw new NotFoundException({ code: "SOCIAL_POST_NOT_FOUND", message: "پیام انتشار پیدا نشد." });
@@ -495,7 +496,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async sendSocialPostNow(admin: AuthenticatedAdmin, rawId: string) {
-    requireManager(admin);
+    requireAdminPermission(admin, "marketing.rubika.publish");
     const id = parseId(rawId, "id");
     const post = await this.prisma.socialPost.findUnique({ where: { id }, select: { id: true, status: true } });
     if (!post) throw new NotFoundException({ code: "SOCIAL_POST_NOT_FOUND", message: "پیام انتشار پیدا نشد." });
@@ -511,7 +512,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async cancelSocialPost(admin: AuthenticatedAdmin, rawId: string) {
-    requireManager(admin);
+    requireAdminPermission(admin, "marketing.rubika.publish");
     const id = parseId(rawId, "id");
     const post = await this.prisma.socialPost.findUnique({ where: { id }, select: { id: true, status: true } });
     if (!post) throw new NotFoundException({ code: "SOCIAL_POST_NOT_FOUND", message: "پیام انتشار پیدا نشد." });
@@ -527,7 +528,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async operationsStatus(admin: AuthenticatedAdmin) {
-    requireManager(admin);
+    requireAdminPermission(admin, "system.monitor");
     let database = "offline";
     try { await this.prisma.$queryRaw`SELECT 1`; database = "online"; } catch { /* report without leaking connection details */ }
     const directory = this.backupDirectory();
@@ -557,12 +558,12 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async listBackups(admin: AuthenticatedAdmin) {
-    requireManager(admin);
+    requireAdminPermission(admin, "system.backup");
     return { data: await this.listBackupFiles() };
   }
 
   async createBackup(admin: AuthenticatedAdmin) {
-    requireManager(admin);
+    requireAdminPermission(admin, "system.backup");
     const file = await this.writeBackup();
     await this.removeOldBackups();
     await this.audit(admin, "database.backup_created", "database_backup", null, { filename: file.filename, sizeBytes: file.sizeBytes });

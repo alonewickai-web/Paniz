@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  BadRequestException,
   Injectable,
   Logger,
   OnModuleInit,
@@ -17,6 +18,8 @@ import { AdminLoginDto } from "./dto/admin-login.dto";
 import { UpdateAdminCredentialsDto } from "./dto/update-admin-credentials.dto";
 import { AdminRequest } from "./admin-session.guard";
 import { PrismaService } from "../database/prisma.service";
+import { ALL_ADMIN_PERMISSION_KEYS } from "./admin-permissions";
+import { UpdateAdminProfileDto } from "../admin/dto/update-admin-profile.dto";
 
 const SESSION_DAYS = 7;
 const TEST_ADMIN_USERNAME = "erfan";
@@ -31,6 +34,7 @@ export class AdminAuthService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit(): Promise<void> {
+    if (process.env.ENABLE_TEST_ADMIN !== "true" || process.env.NODE_ENV === "production") return;
     if (await this.prisma.storeSetting.findUnique({ where: { settingKey: TEST_ADMIN_SEEDED_SETTING } })) {
       await this.prisma.storeSetting.deleteMany({ where: { settingKey: ADMIN_BOOTSTRAP_SETTING } });
       return;
@@ -86,13 +90,14 @@ export class AdminAuthService implements OnModuleInit {
 
   async login(input: AdminLoginDto) {
     const username = normalizeUsername(input.username);
-    const admin = await this.prisma.adminUser.findUnique({ where: { username } });
+    const admin = await this.prisma.adminUser.findUnique({ where: { username }, include: { permissions: true } });
     const validPassword = admin ? await verifyPassword(input.password, admin.passwordHash) : false;
     if (!admin || !admin.isActive || !validPassword) {
       await this.prisma.adminAuditLog.create({
         data: {
           adminId: admin?.id ?? null,
           action: "admin.login_failed",
+          result: "failed",
           entityType: "admin_user",
           entityId: admin?.id ?? null,
           details: { identifierHash: createHash("sha256").update(username).digest("hex") },
@@ -126,7 +131,10 @@ export class AdminAuthService implements OnModuleInit {
         fullName: request.admin!.fullName,
         username: request.admin!.username,
         phone: request.admin!.phone,
+        avatarPath: request.admin!.avatarPath,
         role: request.admin!.role,
+        permissions: request.admin!.permissions,
+        mustChangePassword: request.admin!.mustChangePassword,
       },
     };
   }
@@ -156,11 +164,15 @@ export class AdminAuthService implements OnModuleInit {
         data: {
           adminId: request.admin!.id,
           action: "admin.credentials_reauthentication_failed",
+          result: "failed",
           entityType: "admin_user",
           entityId: request.admin!.id,
         },
       });
       throw new UnauthorizedException({ code: "ADMIN_REAUTHENTICATION_FAILED", message: "گذرواژهٔ فعلی درست نیست" });
+    }
+    if (admin.mustChangePassword && !input.newPassword) {
+      throw new BadRequestException({ code: "ADMIN_NEW_PASSWORD_REQUIRED", message: "گذرواژهٔ جدید را وارد کنید." });
     }
 
     const username = input.username ? normalizeUsername(input.username) : undefined;
@@ -176,10 +188,11 @@ export class AdminAuthService implements OnModuleInit {
           data: {
             ...(username ? { username } : {}),
             ...(passwordHash ? { passwordHash } : {}),
+            mustChangePassword: false,
           },
         });
         const revoked = await tx.adminSession.updateMany({
-          where: { adminId: admin.id, revokedAt: null },
+          where: { adminId: admin.id, revokedAt: null, id: { not: request.adminSessionId } },
           data: { revokedAt: new Date() },
         });
         await tx.adminAuditLog.create({
@@ -200,19 +213,68 @@ export class AdminAuthService implements OnModuleInit {
       throw error;
     }
   }
+
+  async updateProfile(input: UpdateAdminProfileDto, request: AdminRequest, avatarPath?: string | null) {
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        const current = await tx.adminUser.findUniqueOrThrow({ where: { id: request.admin!.id } });
+        const updated = await tx.adminUser.update({
+          where: { id: current.id },
+          data: {
+            ...(input.fullName !== undefined ? { fullName: input.fullName.trim() } : {}),
+            ...(input.phone !== undefined ? { phone: input.phone?.trim() || null } : {}),
+            ...(avatarPath !== undefined ? { avatarPath } : {}),
+          },
+        });
+        await tx.adminAuditLog.create({ data: {
+          adminId: current.id, action: "admin.profile_updated", entityType: "admin_user", entityId: current.id,
+          details: { changedFields: [...Object.keys(input), ...(avatarPath !== undefined ? ["avatarPath"] : [])] },
+        } });
+        return updated;
+      });
+      return { data: { id: result.id.toString(), fullName: result.fullName, phone: result.phone, avatarPath: result.avatarPath } };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException({ code: "ADMIN_PHONE_TAKEN", message: "این شماره برای حساب دیگری ثبت شده است." });
+      }
+      throw error;
+    }
+  }
 }
 
 function sessionResponse(
   accessToken: string,
   expiresAt: Date,
-  admin: { id: bigint; fullName: string; username: string; phone: string | null; role: string },
+  admin: {
+    id: bigint;
+    fullName: string;
+    username: string;
+    phone: string | null;
+    avatarPath: string | null;
+    role: string;
+    mustChangePassword: boolean;
+    permissions: { permissionKey: string; expiresAt: Date | null }[];
+  },
 ) {
+  const now = new Date();
+  const permissions = admin.role === "owner" || admin.role === "admin"
+    ? [...ALL_ADMIN_PERMISSION_KEYS]
+    : admin.permissions.filter((grant) => !grant.expiresAt || grant.expiresAt > now).map((grant) => grant.permissionKey);
   return {
     data: {
       accessToken,
       tokenType: "Bearer",
       expiresAt: expiresAt.toISOString(),
-      admin: { id: admin.id.toString(), fullName: admin.fullName, username: admin.username, phone: admin.phone, role: admin.role },
+      admin: {
+        id: admin.id.toString(),
+        fullName: admin.fullName,
+        username: admin.username,
+        phone: admin.phone,
+        avatarPath: admin.avatarPath,
+        role: admin.role,
+        permissions,
+        mustChangePassword: admin.mustChangePassword,
+      },
     },
   };
 }

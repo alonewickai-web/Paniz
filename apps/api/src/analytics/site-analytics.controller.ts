@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { AdminRequest, AdminSessionGuard } from "../admin-auth/admin-session.guard";
 import { SiteAnalyticsService } from "./site-analytics.service";
 import { CreatePageViewDto } from "./dto/create-page-view.dto";
+import { AdminPermissionGuard, RequireAdminPermission } from "../admin-auth/admin-permission.guard";
 
 @ApiTags("آمار بازدید سایت")
 @Controller("analytics")
@@ -18,17 +19,15 @@ export class PublicSiteAnalyticsController {
 
 @ApiTags("مدیریت فروشگاه")
 @ApiBearerAuth("admin-session")
-@UseGuards(AdminSessionGuard)
+@UseGuards(AdminSessionGuard, AdminPermissionGuard)
 @Controller("admin/analytics")
 export class AdminSiteAnalyticsController {
   constructor(private readonly analytics: SiteAnalyticsService) {}
 
   @Get("site-visits")
+  @RequireAdminPermission("reports.view")
   @ApiOperation({ summary: "بازدیدهای امروز، روند ۷ و ۳۰ روز و صفحه‌های پربازدید" })
   report(@Req() request: AdminRequest) {
-    if (request.admin?.role !== "owner" && request.admin?.role !== "admin") {
-      throw new ForbiddenException({ code: "ADMIN_PERMISSION_REQUIRED", message: "برای مشاهدهٔ گزارش دسترسی مدیر لازم است" });
-    }
     return this.analytics.siteVisitReport();
   }
 }

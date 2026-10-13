@@ -11,9 +11,11 @@ model AdminUser {
   fullName              String               @map("full_name") @db.VarChar(160)
   username              String               @unique(map: "uq_admin_users_username") @db.VarChar(80)
   phone                 String?              @unique(map: "uq_admin_users_phone") @db.VarChar(24)
+  avatarPath            String?              @map("avatar_path") @db.VarChar(512)
   passwordHash          String               @map("password_hash") @db.VarChar(255)
   role                  String               @default("owner") @db.VarChar(32)
   isActive              Boolean              @default(true) @map("is_active")
+  mustChangePassword    Boolean              @default(false) @map("must_change_password")
   lastLoginAt           DateTime?            @map("last_login_at") @db.DateTime(3)
   createdAt             DateTime             @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt             DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
@@ -23,11 +25,45 @@ model AdminUser {
   updatedStoreSettings  StoreSetting[]
   auditLogs             AdminAuditLog[]
   sessions              AdminSession[]
+  permissions           AdminUserPermission[] @relation("AdminPermissionOwner")
+  permissionsGranted    AdminUserPermission[] @relation("AdminPermissionGrantor")
   smsCampaigns          SmsCampaign[]
   socialPosts           SocialPost[]
+  appReleases           AdminAppRelease[]
 
   @@index([role, isActive], map: "ix_admin_users_role_active")
   @@map("admin_users")
+}
+
+model AdminAppRelease {
+  id               BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  versionName      String     @map("version_name") @db.VarChar(40)
+  versionCode      Int        @unique(map: "uq_admin_app_releases_version") @map("version_code")
+  filePath         String     @map("file_path") @db.VarChar(512)
+  sha256           String     @db.Char(64)
+  fileSizeBytes    BigInt     @map("file_size_bytes") @db.UnsignedBigInt
+  releaseNotes     String?    @map("release_notes") @db.Text
+  isCurrent        Boolean    @default(false) @map("is_current")
+  createdByAdminId BigInt?    @map("created_by_admin_id") @db.UnsignedBigInt
+  publishedAt      DateTime   @default(now()) @map("published_at") @db.DateTime(3)
+  publisher        AdminUser? @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
+
+  @@index([isCurrent, versionCode], map: "ix_admin_app_releases_current")
+  @@map("admin_app_releases")
+}
+
+model AdminUserPermission {
+  adminId          BigInt    @map("admin_id") @db.UnsignedBigInt
+  permissionKey    String    @map("permission_key") @db.VarChar(96)
+  grantedByAdminId BigInt?   @map("granted_by_admin_id") @db.UnsignedBigInt
+  expiresAt        DateTime? @map("expires_at") @db.DateTime(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  admin            AdminUser @relation("AdminPermissionOwner", fields: [adminId], references: [id], onDelete: Cascade)
+  grantedByAdmin   AdminUser? @relation("AdminPermissionGrantor", fields: [grantedByAdminId], references: [id], onDelete: SetNull)
+
+  @@id([adminId, permissionKey])
+  @@index([permissionKey, expiresAt], map: "ix_admin_permissions_key_expiry")
+  @@map("admin_user_permissions")
 }
 
 model AdminSession {
@@ -575,6 +611,7 @@ model AdminAuditLog {
   entityType String     @map("entity_type") @db.VarChar(64)
   entityId   BigInt?    @map("entity_id") @db.UnsignedBigInt
   details    Json?
+  result     String     @default("success") @db.VarChar(16)
   requestIp  Bytes?     @map("request_ip") @db.VarBinary(16)
   createdAt  DateTime   @default(now()) @map("created_at") @db.DateTime(3)
   admin      AdminUser? @relation(fields: [adminId], references: [id], onDelete: SetNull)
