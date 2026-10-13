@@ -16,7 +16,7 @@ compose() {
 }
 
 compose up -d mysql
-docker compose --parallel 1 --env-file "$env_file" --file "$compose_file" build api storefront
+docker compose --parallel 1 --env-file "$env_file" --file "$compose_file" build api migrate storefront
 compose --profile setup run --rm migrate
 compose up -d api storefront
 
