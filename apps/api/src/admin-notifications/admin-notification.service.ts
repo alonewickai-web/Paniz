@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../database/prisma.service";
 import { AuthenticatedAdmin } from "../admin-auth/admin-session.guard";
@@ -59,9 +60,10 @@ export class AdminNotificationService {
     if (token.length < 32 || token.length > 4096 || !["android"].includes(platform)) {
       throw new BadRequestException({ code: "PUSH_DEVICE_INVALID", message: "اطلاعات دستگاه برای اعلان معتبر نیست." });
     }
+    const tokenHash = createHash("sha256").update(token).digest("hex");
     await this.prisma.adminPushDevice.upsert({
-      where: { token },
-      create: { adminId: admin.id, token, platform },
+      where: { tokenHash },
+      create: { adminId: admin.id, token, tokenHash, platform },
       update: { adminId: admin.id, platform },
     });
     return { data: { registered: true } };
@@ -73,7 +75,8 @@ export class AdminNotificationService {
     if (!token || token.length > 4096) {
       throw new BadRequestException({ code: "PUSH_DEVICE_INVALID", message: "شناسهٔ دستگاه برای حذف معتبر نیست." });
     }
-    const result = await this.prisma.adminPushDevice.deleteMany({ where: { adminId: admin.id, token } });
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const result = await this.prisma.adminPushDevice.deleteMany({ where: { adminId: admin.id, tokenHash } });
     return { data: { removed: result.count > 0 } };
   }
 
