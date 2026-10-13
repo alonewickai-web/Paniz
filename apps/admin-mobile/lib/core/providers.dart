@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'admin_api.dart';
-import 'push_notification_service.dart';
 
 final adminApiProvider = Provider<AdminApi>((ref) {
   final api = AdminApi();
@@ -22,30 +21,19 @@ class AuthController extends AsyncNotifier<AdminIdentity?> {
   Future<AdminIdentity?> build() async {
     final api = ref.read(adminApiProvider);
     final admin = await api.restoreSession();
-    if (admin?.role == 'owner') unawaited(_registerPush(api));
     return admin;
   }
 
   Future<void> login(String username, String password) async {
     final admin = await ref.read(adminApiProvider).login(username, password);
     state = AsyncData(admin);
-    if (admin.role == 'owner') unawaited(_registerPush(ref.read(adminApiProvider)));
   }
 
   Future<void> logout() async {
-    final api = ref.read(adminApiProvider);
     try {
-      final token = await AdminPushNotifications.currentToken();
-      if (token != null && token.isNotEmpty) await api.unregisterPushDevice(token);
-    } catch (_) {
-      // Continue logout if the API is temporarily unavailable.
+      await ref.read(adminApiProvider).logout();
     } finally {
-      await AdminPushNotifications.stopWatchingTokens();
-      try {
-        await api.logout();
-      } finally {
-        state = const AsyncData(null);
-      }
+      state = const AsyncData(null);
     }
   }
 
@@ -59,16 +47,6 @@ class AuthController extends AsyncNotifier<AdminIdentity?> {
     state = AsyncData(admin);
   }
 
-  Future<void> _registerPush(AdminApi api) async {
-    try {
-      final token = await AdminPushNotifications.requestToken();
-      if (token == null || token.isEmpty) return;
-      await api.registerPushDevice(token);
-      await AdminPushNotifications.watchTokenChanges(api.registerPushDevice);
-    } catch (_) {
-      // Push registration must not block sign-in or opening the management app.
-    }
-  }
 }
 
 final themeModeProvider =

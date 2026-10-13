@@ -220,14 +220,6 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         return order;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
-      void this.notifications.pushToOwners({
-        type: "new_order",
-        title: "سفارش جدید ثبت شد",
-        body: `سفارش ${order.orderNumber} از ${order.recipientNameSnapshot} ثبت شد.`,
-        entityType: "order",
-        entityId: order.id,
-      }).catch(() => this.logger.warn("Could not send the new-order push notification."));
-
       return this.toCreatedOrder(order);
     } catch (error) {
       const duplicate = await this.prisma.order.findUnique({ where: { idempotencyKey } });

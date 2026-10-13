@@ -44,7 +44,6 @@ RUBIKA_BOT_TOKEN=
 RUBIKA_CHANNEL_ID=
 RUBIKA_BOT_API_BASE_URL=https://botapi.rubika.ir/v3
 RUBIKA_SEND_DELAY_MS=150
-FIREBASE_SERVICE_ACCOUNT_BASE64=
 INSTAGRAM_USER_ID=
 INSTAGRAM_ACCESS_TOKEN=
 INSTAGRAM_GRAPH_API_VERSION=
@@ -52,4 +51,4 @@ EOF
 chmod 600 "$env_file"
 
 echo "Created .env.server with generated database and application secrets (permissions 600)."
-echo "Do not print this file or add it to Git. Add SMS.ir, Rubika, and Firebase credentials to it later if needed."
+echo "Do not print this file or add it to Git. Add SMS.ir and Rubika credentials to it later if needed."

@@ -1,9 +1,7 @@
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
-import { createHash } from "node:crypto";
+import { ForbiddenException, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../database/prisma.service";
 import { AuthenticatedAdmin } from "../admin-auth/admin-session.guard";
-import { FirebasePushService } from "./firebase-push.service";
 
 export type AdminNotificationInput = {
   type: "new_order" | "rubika_message" | "customer_message";
@@ -19,7 +17,6 @@ export type AdminNotificationInput = {
 export class AdminNotificationService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly push: FirebasePushService,
   ) {}
 
   async createForOwners(tx: Prisma.TransactionClient, input: AdminNotificationInput) {
@@ -46,38 +43,6 @@ export class AdminNotificationService {
 
   async notifyOwners(input: AdminNotificationInput) {
     await this.prisma.$transaction((tx) => this.createForOwners(tx, input));
-    void this.pushToOwners(input);
-  }
-
-  async pushToOwners(input: AdminNotificationInput) {
-    await this.push.sendToOwners(input);
-  }
-
-  async registerDevice(admin: AuthenticatedAdmin, tokenValue: string, platformValue: string) {
-    this.requireOwner(admin);
-    const token = tokenValue.trim();
-    const platform = platformValue.trim().toLowerCase();
-    if (token.length < 32 || token.length > 4096 || !["android"].includes(platform)) {
-      throw new BadRequestException({ code: "PUSH_DEVICE_INVALID", message: "اطلاعات دستگاه برای اعلان معتبر نیست." });
-    }
-    const tokenHash = createHash("sha256").update(token).digest("hex");
-    await this.prisma.adminPushDevice.upsert({
-      where: { tokenHash },
-      create: { adminId: admin.id, token, tokenHash, platform },
-      update: { adminId: admin.id, platform },
-    });
-    return { data: { registered: true } };
-  }
-
-  async unregisterDevice(admin: AuthenticatedAdmin, tokenValue: string) {
-    this.requireOwner(admin);
-    const token = tokenValue.trim();
-    if (!token || token.length > 4096) {
-      throw new BadRequestException({ code: "PUSH_DEVICE_INVALID", message: "شناسهٔ دستگاه برای حذف معتبر نیست." });
-    }
-    const tokenHash = createHash("sha256").update(token).digest("hex");
-    const result = await this.prisma.adminPushDevice.deleteMany({ where: { adminId: admin.id, tokenHash } });
-    return { data: { removed: result.count > 0 } };
   }
 
   async list(admin: AuthenticatedAdmin, pageValue?: string, pageSizeValue?: string) {

@@ -5,8 +5,6 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
@@ -17,20 +15,6 @@ import java.security.MessageDigest
 import java.util.UUID
 
 class MainActivity : FlutterActivity() {
-    override fun onCreate(savedInstanceState: android.os.Bundle?) {
-        super.onCreate(savedInstanceState)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                "paniz_admin_alerts",
-                "اعلان‌های مدیریت پانیذ",
-                NotificationManager.IMPORTANCE_HIGH,
-            ).apply {
-                description = "سفارش‌های تازه و پیام‌های مشتریان"
-            }
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-        }
-    }
-
     private var pickerResult: MethodChannel.Result? = null
     private val apkPickerRequest = 8401
 

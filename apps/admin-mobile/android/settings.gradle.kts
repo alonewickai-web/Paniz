@@ -11,6 +11,9 @@ pluginManagement {
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
+        System.getenv("PANIZ_ANDROID_MAVEN_MIRROR")?.takeIf { it.isNotBlank() }?.let { mirror ->
+            maven { url = uri(mirror) }
+        }
         gradlePluginPortal()
         google()
         mavenCentral()

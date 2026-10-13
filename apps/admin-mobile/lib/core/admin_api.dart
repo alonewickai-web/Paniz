@@ -298,17 +298,6 @@ class AdminApi {
     await dio.patch('admin/notifications/read-all');
   }
 
-  Future<void> registerPushDevice(String token) async {
-    await dio.post('admin/notifications/devices', data: {
-      'token': token,
-      'platform': 'android',
-    });
-  }
-
-  Future<void> unregisterPushDevice(String token) async {
-    await dio.delete('admin/notifications/devices', data: {'token': token});
-  }
-
   Future<JsonMap> siteVisitAnalytics() async =>
       _data(await dio.get('admin/analytics/site-visits'));
 

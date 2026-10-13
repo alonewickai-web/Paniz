@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/admin_api.dart';
 import '../../core/paniz_theme.dart';
 import '../../core/providers.dart';
-import '../../core/push_notification_service.dart';
 import '../notifications/notification_inbox_screen.dart';
 import '../updates/app_update_screen.dart';
 import '../../core/theme_toggle.dart';
@@ -31,16 +30,6 @@ class AdminHome extends ConsumerStatefulWidget {
 class _AdminHomeState extends ConsumerState<AdminHome> {
   int _index = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (AdminPushNotifications.takePendingInboxNavigation(isOwner: widget.admin.role == 'owner')) {
-        _pushTool('اعلان‌ها', const NotificationInboxScreen());
-      }
-    });
-  }
 
   static const _titles = ['خانه', 'محصولات', 'سفارش‌ها', 'گزارش‌ها', 'بیشتر'];
   static const _icons = [Icons.home_rounded, Icons.checkroom_rounded, Icons.receipt_long_rounded, Icons.bar_chart_rounded, Icons.grid_view_rounded];

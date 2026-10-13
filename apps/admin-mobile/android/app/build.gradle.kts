@@ -1,20 +1,9 @@
 import java.util.Properties
 
-buildscript {
-    if (file("google-services.json").isFile) {
-        repositories { google() }
-        dependencies { classpath("com.google.gms:google-services:4.4.4") }
-    }
-}
-
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-}
-
-if (file("google-services.json").isFile) {
-    apply(plugin = "com.google.gms.google-services")
 }
 
 val releaseSigningProperties = Properties()
