@@ -315,9 +315,16 @@ function normalizeText(value: string) {
 
 export default function Home() {
   const { cart, setCart, favorites, setFavorites } = useStorefront();
-  const [catalogProducts, setCatalogProducts] = useState<Product[]>(products);
-  const [catalogCategories, setCatalogCategories] = useState<CategoryItem[]>(categories);
-  const [catalogSource, setCatalogSource] = useState<"demo" | "api">("demo");
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>(() =>
+    process.env.NODE_ENV === "production" ? [] : products,
+  );
+  const [catalogCategories, setCatalogCategories] = useState<CategoryItem[]>(() =>
+    process.env.NODE_ENV === "production" ? [categories[0]] : categories,
+  );
+  const [catalogSource, setCatalogSource] = useState<"loading" | "demo" | "api" | "error">(() =>
+    process.env.NODE_ENV === "production" ? "loading" : "demo",
+  );
+  const [catalogReloadKey, setCatalogReloadKey] = useState(0);
   const [storefrontConfig, setStorefrontConfig] = useState<StorefrontConfig>({ theme: "rose", sections: [], banners: [] });
   const [bannerIndex, setBannerIndex] = useState(0);
   const [query, setQuery] = useState("");
@@ -339,6 +346,7 @@ export default function Home() {
     const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000/api/v1").replace(/\/$/, "");
 
     async function loadCatalog() {
+      if (process.env.NODE_ENV === "production") setCatalogSource("loading");
       try {
         const [productResponse, categoryResponse] = await Promise.all([
           fetch(`${apiBase}/products?page=1&pageSize=48`, { signal: controller.signal, cache: "no-store" }),
@@ -413,13 +421,22 @@ export default function Home() {
           // Keep the local homepage defaults if the public store configuration is unavailable.
         }
       } catch {
-        // Keep the local sample catalog usable when the API or database is offline.
+        if (controller.signal.aborted) return;
+        if (process.env.NODE_ENV === "production") {
+          setCatalogProducts([]);
+          setCatalogCategories([categories[0]]);
+          setCatalogSource("error");
+        } else {
+          setCatalogProducts(products);
+          setCatalogCategories(categories);
+          setCatalogSource("demo");
+        }
       }
     }
 
     void loadCatalog();
     return () => controller.abort();
-  }, []);
+  }, [catalogReloadKey]);
 
   useEffect(() => {
     if (storefrontConfig.banners.length < 2) return;
@@ -774,7 +791,18 @@ export default function Home() {
             </p>
           )}
 
-          {visibleProducts.length > 0 ? (
+          {catalogSource === "loading" ? (
+            <div className="empty-state" role="status" aria-busy="true">
+              <strong>در حال دریافت محصولات…</strong>
+              <span>کمی صبر کن، فهرست فروشگاه را می‌گیریم.</span>
+            </div>
+          ) : catalogSource === "error" ? (
+            <div className="empty-state" role="alert">
+              <strong>محصولات بارگذاری نشدند</strong>
+              <span>اتصال فروشگاه را بررسی کن و دوباره تلاش کن.</span>
+              <button onClick={() => setCatalogReloadKey((key) => key + 1)}>تلاش دوباره</button>
+            </div>
+          ) : visibleProducts.length > 0 ? (
             <div className="product-grid">
               {visibleProducts.map((product) => (
                 <article className="product-card" key={product.id}>
@@ -820,11 +848,16 @@ export default function Home() {
                 </article>
               ))}
             </div>
+          ) : catalogSource === "api" && catalogProducts.length === 0 ? (
+            <div className="empty-state">
+              <strong>هنوز محصولی ثبت نشده</strong>
+              <span>محصولات بعد از ثبت در فروشگاه اینجا نمایش داده می‌شوند.</span>
+            </div>
           ) : (
             <div className="empty-state"><Search size={28} /><strong>چیزی پیدا نکردیم</strong><span>یه عبارت دیگه رو امتحان کن یا فیلترها رو بردار.</span><button onClick={() => { setQuery(""); setActiveCategory("همه محصولات"); setFavoritesOnly(false); }}>نمایش همه محصولات</button></div>
           )}
 
-          <div className="load-more-wrap"><span>{money(visibleProducts.length)} محصول از {money(catalogProducts.length)}</span><Link className="outline-button" href="/products">دیدن همه محصولات <ArrowLeft size={17} /></Link></div>
+          <div className="load-more-wrap"><span>{catalogSource === "loading" ? "در حال دریافت فهرست محصولات…" : catalogSource === "error" ? "فهرست محصولات در دسترس نیست" : `${money(visibleProducts.length)} محصول از ${money(catalogProducts.length)}`}</span><Link className="outline-button" href="/products">دیدن همه محصولات <ArrowLeft size={17} /></Link></div>
         </section>}
 
         {sectionIsActive("story") && <section className="story-banner" aria-label="پیشنهاد پانیذ" style={{ order: sectionOrder("story", 3) }}>
