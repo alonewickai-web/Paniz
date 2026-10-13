@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -63,64 +65,7 @@ class DashboardScreen extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'سلام، روزت بخیر',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.headlineSmall?.copyWith(
-                                          fontWeight: FontWeight.w900,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 5),
-                                      Text(
-                                        shamsiDate(DateTime.now()),
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.bodyMedium?.copyWith(
-                                          color: context.paniz.muted,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 11,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: context.paniz.primarySoft,
-                                    borderRadius: BorderRadius.circular(30),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.cloud_done_outlined,
-                                        color: context.paniz.primary,
-                                        size: 16,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        'متصل',
-                                        style: TextStyle(
-                                          color: context.paniz.primary,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
+                            const _DashboardClock(),
                             const SizedBox(height: 18),
                             if (data['financialAccess'] == true)
                               _SalesHero(
@@ -242,7 +187,12 @@ class DashboardScreen extends ConsumerWidget {
                               else
                                 ...lowStock
                                     .take(4)
-                                    .map((item) => _StockRow(item: item, onTap: onInventory)),
+                                    .map(
+                                      (item) => _StockRow(
+                                        item: item,
+                                        onTap: onInventory,
+                                      ),
+                                    ),
                             ],
                             if (admin?.can('orders.view') == true) ...[
                               const SizedBox(height: 22),
@@ -264,7 +214,12 @@ class DashboardScreen extends ConsumerWidget {
                               else
                                 ...recentOrders
                                     .take(5)
-                                    .map((order) => _OrderRow(order: order, onTap: onOrders)),
+                                    .map(
+                                      (order) => _OrderRow(
+                                        order: order,
+                                        onTap: onOrders,
+                                      ),
+                                    ),
                             ],
                             if (onActivity != null) ...[
                               const SizedBox(height: 22),
@@ -303,6 +258,78 @@ class DashboardScreen extends ConsumerWidget {
         (total, entry) =>
             total + (entry.value is num ? (entry.value as num).toInt() : 0),
       );
+}
+
+class _DashboardClock extends StatefulWidget {
+  const _DashboardClock();
+
+  @override
+  State<_DashboardClock> createState() => _DashboardClockState();
+}
+
+class _DashboardClockState extends State<_DashboardClock> {
+  DateTime _now = DateTime.now();
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final time =
+        '${persianNumber(_now.hour.toString().padLeft(2, '0'))}:${persianNumber(_now.minute.toString().padLeft(2, '0'))}';
+    return Container(
+      alignment: AlignmentDirectional.centerStart,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: context.paniz.primarySoft,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.access_time_rounded,
+            size: 19,
+            color: context.paniz.primary,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            time,
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            width: 1,
+            height: 20,
+            color: context.paniz.primary.withValues(alpha: .25),
+          ),
+          const SizedBox(width: 12),
+          Icon(
+            Icons.calendar_month_outlined,
+            size: 18,
+            color: context.paniz.primary,
+          ),
+          const SizedBox(width: 7),
+          Text(
+            shamsiDate(_now),
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SalesHero extends StatelessWidget {
@@ -451,58 +478,61 @@ class _MetricTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(
     clipBehavior: Clip.antiAlias,
-    child: InkWell(onTap: onTap, child: Padding(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: tint,
-                  borderRadius: BorderRadius.circular(13),
+    child: InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: tint,
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Icon(icon, color: context.paniz.primary, size: 20),
                 ),
-                child: Icon(icon, color: context.paniz.primary, size: 20),
-              ),
-              const Spacer(),
-              Flexible(
-                child: Text(
-                  title,
-                  textAlign: TextAlign.end,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: context.paniz.muted,
-                    height: 1.3,
+                const Spacer(),
+                Flexible(
+                  child: Text(
+                    title,
+                    textAlign: TextAlign.end,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: context.paniz.muted,
+                      height: 1.3,
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w900,
-              fontFeatures: const [FontFeature.tabularFigures()],
+              ],
             ),
-          ),
-          Text(
-            detail,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: context.paniz.muted),
-          ),
-        ],
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w900,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            Text(
+              detail,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: context.paniz.muted),
+            ),
+          ],
+        ),
       ),
-    )),
+    ),
   );
 }
 

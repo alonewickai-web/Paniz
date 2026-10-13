@@ -262,6 +262,7 @@ model Product {
   seoDescription    String?          @map("seo_description") @db.VarChar(500)
   status            String           @default("draft") @db.VarChar(24)
   publishedAt       DateTime?        @map("published_at") @db.DateTime(3)
+  rubikaPostedAt    DateTime?        @map("rubika_posted_at") @db.DateTime(3)
   deletedAt         DateTime?        @map("deleted_at") @db.DateTime(3)
   createdAt         DateTime         @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt         DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
@@ -300,6 +301,7 @@ model ProductVariant {
   sku                      String                    @unique(map: "uq_product_variants_sku") @db.VarChar(80)
   colorName                String                    @default("بدون رنگ") @map("color_name") @db.VarChar(80)
   colorHex                 String?                   @map("color_hex") @db.Char(7)
+  colorSortOrder           Int                       @default(0) @map("color_sort_order")
   sizeLabel                String                    @default("فری سایز") @map("size_label") @db.VarChar(32)
   priceToman               BigInt                    @map("price_toman") @db.UnsignedBigInt
   compareAtPriceToman      BigInt?                   @map("compare_at_price_toman") @db.UnsignedBigInt

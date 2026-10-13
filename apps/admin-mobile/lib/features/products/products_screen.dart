@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -99,7 +100,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
       if (mounted) {
         showAppMessage(
           context,
-          '«$productName» همراه تصویر در صف تأیید انتشار روبیکا قرار گرفت.',
+          '«$productName» همراه تصویر مستقیم برای انتشار روبیکا فرستاده شد.',
         );
       }
     } catch (error) {
@@ -155,12 +156,60 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     );
     if (result == null || !mounted) return;
     try {
+      final changes = Map<String, dynamic>.from(result);
+      final requestedStock = changes.remove('stockQuantity') as int?;
       await ref
           .read(adminApiProvider)
-          .updateVariant('${variant['id']}', result);
+          .updateVariant('${variant['id']}', changes);
+      final currentStock =
+          int.tryParse('${variant['stockQuantity'] ?? 0}') ?? 0;
+      final stockDelta =
+          requestedStock == null ? 0 : requestedStock - currentStock;
+      if (stockDelta != 0) {
+        await ref
+            .read(adminApiProvider)
+            .adjustInventory(
+              '${variant['id']}',
+              stockDelta,
+              'اصلاح موجودی از فرم ویرایش تنوع',
+            );
+      }
       ref.invalidate(productsProvider);
       ref.invalidate(dashboardProvider);
       if (mounted) showAppMessage(context, 'مشخصات تنوع ذخیره شد.');
+    } catch (error) {
+      if (mounted)
+        showAppMessage(context, AdminApi.friendlyError(error), error: true);
+    }
+  }
+
+  Future<void> _reorderProductColors(JsonMap product) async {
+    final rawVariants = product['variants'];
+    if (rawVariants is! List) return;
+    final seen = <String>{};
+    final colors = <JsonMap>[];
+    for (final raw in rawVariants.whereType<Map>()) {
+      final variant = Map<String, dynamic>.from(raw);
+      final key = normalizeProductColorText('${variant['colorName'] ?? ''}');
+      if (key.isNotEmpty && seen.add(key)) colors.add(variant);
+    }
+    if (colors.length < 2) {
+      showAppMessage(context, 'برای مرتب‌سازی، دست‌کم دو رنگ لازم است.');
+      return;
+    }
+    final ordered = await showDialog<List<JsonMap>>(
+      context: context,
+      builder: (_) => _ReorderProductColorsDialog(colors: colors),
+    );
+    if (ordered == null || !mounted) return;
+    try {
+      for (final entry in ordered.indexed) {
+        await ref.read(adminApiProvider).updateVariant('${entry.$2['id']}', {
+          'colorSortOrder': entry.$1,
+        });
+      }
+      ref.invalidate(productsProvider);
+      if (mounted) showAppMessage(context, 'ترتیب رنگ‌ها ذخیره شد.');
     } catch (error) {
       if (mounted)
         showAppMessage(context, AdminApi.friendlyError(error), error: true);
@@ -424,6 +473,8 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                                 (variant) =>
                                     _adjustVariantInventory(product, variant),
                             onAddVariant: () => _addVariant(product),
+                            onReorderColors:
+                                () => _reorderProductColors(product),
                             onAddImage: () => _addImage(product),
                             onEditImage: (image) => _editImage(product, image),
                             onDeleteImage:
@@ -472,6 +523,7 @@ class _ProductCard extends ConsumerWidget {
     required this.onEditVariant,
     required this.onAdjustVariant,
     required this.onAddVariant,
+    required this.onReorderColors,
     required this.onAddImage,
     required this.onEditImage,
     required this.onDeleteImage,
@@ -487,6 +539,7 @@ class _ProductCard extends ConsumerWidget {
   final ValueChanged<JsonMap> onEditVariant;
   final ValueChanged<JsonMap> onAdjustVariant;
   final VoidCallback onAddVariant;
+  final VoidCallback onReorderColors;
   final VoidCallback onAddImage;
   final ValueChanged<JsonMap> onEditImage;
   final ValueChanged<JsonMap> onDeleteImage;
@@ -512,6 +565,15 @@ class _ProductCard extends ConsumerWidget {
                 .toList()
             : const <JsonMap>[];
     final status = '${product['status'] ?? ''}';
+    final colorCount =
+        variants
+            .map(
+              (variant) =>
+                  normalizeProductColorText('${variant['colorName'] ?? ''}'),
+            )
+            .where((name) => name.isNotEmpty)
+            .toSet()
+            .length;
     final imagePath = images
         .map((image) => '${image['imagePath'] ?? ''}'.trim())
         .firstWhere((path) => path.isNotEmpty, orElse: () => '');
@@ -598,6 +660,15 @@ class _ProductCard extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 6),
+          if (colorCount > 1)
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton.icon(
+                onPressed: can('products.edit') ? onReorderColors : null,
+                icon: const Icon(Icons.swap_vert_rounded, size: 18),
+                label: const Text('مرتب‌سازی رنگ‌ها'),
+              ),
+            ),
           Row(
             children: [
               Expanded(
@@ -610,15 +681,12 @@ class _ProductCard extends ConsumerWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed:
-                      !can('products.edit') || images.length >= 4
-                          ? null
-                          : onAddImage,
+                  onPressed: can('products.edit') ? onAddImage : null,
                   icon: const Icon(
                     Icons.add_photo_alternate_outlined,
                     size: 18,
                   ),
-                  label: Text('افزودن تصویر ${persianNumber(images.length)}/۴'),
+                  label: const Text('افزودن تصویر'),
                 ),
               ),
               IconButton(
@@ -632,7 +700,7 @@ class _ProductCard extends ConsumerWidget {
           Align(
             alignment: AlignmentDirectional.centerStart,
             child: Text(
-              'گالری تصاویر (${persianNumber(images.length)}/۴)',
+              'گالری تصاویر (${persianNumber(images.length)})',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
@@ -641,19 +709,11 @@ class _ProductCard extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final indexedImage in images.indexed)
-                _ProductImageTile(
-                  index: indexedImage.$1,
-                  image: indexedImage.$2,
-                  onEdit: () => onEditImage(indexedImage.$2),
-                  onDelete: () => onDeleteImage(indexedImage.$2),
-                  onMakePrimary: () => onMakePrimaryImage(indexedImage.$2),
-                ),
-            ],
+          _ProductImageCarousel(
+            images: images,
+            onEdit: onEditImage,
+            onDelete: onDeleteImage,
+            onMakePrimary: onMakePrimaryImage,
           ),
           const SizedBox(height: 8),
           ...variants.map(
@@ -740,120 +800,217 @@ class _ProductCard extends ConsumerWidget {
   }
 }
 
-class _ProductImageTile extends StatelessWidget {
-  const _ProductImageTile({
-    required this.index,
-    required this.image,
+class _ReorderProductColorsDialog extends StatefulWidget {
+  const _ReorderProductColorsDialog({required this.colors});
+  final List<JsonMap> colors;
+
+  @override
+  State<_ReorderProductColorsDialog> createState() =>
+      _ReorderProductColorsDialogState();
+}
+
+class _ReorderProductColorsDialogState
+    extends State<_ReorderProductColorsDialog> {
+  late final List<JsonMap> _colors = List<JsonMap>.from(widget.colors);
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('ترتیب نمایش رنگ‌ها'),
+    content: SizedBox(
+      width: 380,
+      height: math.min(440, 76.0 * _colors.length),
+      child: ReorderableListView.builder(
+        itemCount: _colors.length,
+        onReorderItem:
+            (oldIndex, newIndex) => setState(() {
+              final item = _colors.removeAt(oldIndex);
+              _colors.insert(newIndex, item);
+            }),
+        itemBuilder: (context, index) {
+          final color = _colors[index];
+          return ListTile(
+            key: ValueKey('${color['colorName']}'),
+            leading: CircleAvatar(
+              backgroundColor: _productColorFromHex(
+                color['colorHex'],
+                Theme.of(context).colorScheme.surfaceContainerHighest,
+              ),
+            ),
+            title: Text('${color['colorName'] ?? ''}'),
+            subtitle: Text('ردیف ${persianNumber(index + 1)}'),
+            trailing: ReorderableDragStartListener(
+              index: index,
+              child: const Icon(Icons.drag_handle_rounded),
+            ),
+          );
+        },
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('لغو'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, _colors),
+        child: const Text('ذخیرهٔ ترتیب'),
+      ),
+    ],
+  );
+}
+
+class _ProductImageCarousel extends StatefulWidget {
+  const _ProductImageCarousel({
+    required this.images,
     required this.onEdit,
     required this.onDelete,
     required this.onMakePrimary,
   });
-  final int index;
-  final JsonMap image;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-  final VoidCallback onMakePrimary;
+  final List<JsonMap> images;
+  final ValueChanged<JsonMap> onEdit;
+  final ValueChanged<JsonMap> onDelete;
+  final ValueChanged<JsonMap> onMakePrimary;
+
+  @override
+  State<_ProductImageCarousel> createState() => _ProductImageCarouselState();
+}
+
+class _ProductImageCarouselState extends State<_ProductImageCarousel> {
+  int _page = 0;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final primary = image['isPrimary'] == true;
-    final colorName = '${image['colorName'] ?? ''}'.trim();
+    final images = widget.images;
+    if (images.isEmpty) {
+      return const SizedBox(
+        height: 150,
+        child: Center(child: Text('هنوز تصویری ثبت نشده است')),
+      );
+    }
+    if (_page >= images.length) _page = images.length - 1;
+    final image = images[_page];
     final bytes = int.tryParse('${image['fileSizeBytes'] ?? 0}') ?? 0;
-    final sizeLabel =
-        bytes <= 0
-            ? 'حجم فایل: نامشخص'
-            : bytes < 1024 * 1024
-            ? 'حجم فایل: ${persianNumber((bytes / 1024).ceil())} کیلوبایت'
-            : 'حجم فایل: ${persianNumber((bytes / (1024 * 1024)).toStringAsFixed(1))} مگابایت';
-    return SizedBox(
-      width: 148,
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: colors.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: primary ? colors.primary : colors.outlineVariant,
-            width: primary ? 1.5 : 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: SizedBox(
-                height: 112,
-                child: AdminNetworkImage(
-                  imagePath: '${image['imagePath'] ?? ''}',
-                  fit: BoxFit.contain,
-                  cacheWidth: 360,
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              primary
-                  ? 'تصویر اصلی · اولین عکس'
-                  : 'تصویر ${persianNumber(index + 1)}',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: primary ? colors.primary : colors.onSurface,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            Text(
-              sizeLabel,
-              style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            Text(
-              'رنگ: ${colorName.isEmpty ? 'همهٔ رنگ‌ها' : colorName}',
-              style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            if (!primary)
-              TextButton.icon(
-                onPressed: onMakePrimary,
-                icon: const Icon(Icons.vertical_align_top_rounded, size: 15),
-                label: const Text(
-                  'تصویر اصلی کن',
-                  style: TextStyle(fontSize: 10),
-                ),
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(0, 34),
-                ),
-              ),
-            if (primary) const SizedBox(height: 34),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+    final colorName = '${image['colorName'] ?? ''}'.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: 190,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Stack(
+              fit: StackFit.expand,
               children: [
-                IconButton(
-                  tooltip: 'ویرایش یا تعویض تصویر',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined, size: 19),
+                PageView.builder(
+                  itemCount: images.length,
+                  onPageChanged: (value) => setState(() => _page = value),
+                  itemBuilder:
+                      (context, index) => Container(
+                        color:
+                            Theme.of(context).colorScheme.surfaceContainerLow,
+                        child: AdminNetworkImage(
+                          imagePath: '${images[index]['imagePath'] ?? ''}',
+                          fit: BoxFit.contain,
+                        ),
+                      ),
                 ),
-                IconButton(
-                  tooltip: 'حذف تصویر',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: onDelete,
-                  color: colors.error,
-                  icon: const Icon(Icons.delete_outline, size: 19),
+                PositionedDirectional(
+                  top: 8,
+                  end: 8,
+                  child: _imageBadge(
+                    context,
+                    '${persianNumber(_page + 1)} از ${persianNumber(images.length)}',
+                  ),
+                ),
+                PositionedDirectional(
+                  start: 6,
+                  top: 6,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton.filledTonal(
+                        tooltip: 'ویرایش تصویر',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => widget.onEdit(image),
+                        icon: const Icon(Icons.edit_outlined, size: 17),
+                      ),
+                      IconButton.filledTonal(
+                        tooltip: 'حذف تصویر',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => widget.onDelete(image),
+                        icon: const Icon(
+                          Icons.delete_outline_rounded,
+                          size: 17,
+                        ),
+                      ),
+                      if (image['isPrimary'] != true)
+                        IconButton.filledTonal(
+                          tooltip: 'انتخاب به‌عنوان تصویر اصلی',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => widget.onMakePrimary(image),
+                          icon: const Icon(
+                            Icons.star_outline_rounded,
+                            size: 17,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                PositionedDirectional(
+                  bottom: 8,
+                  start: 8,
+                  end: 8,
+                  child: _imageBadge(
+                    context,
+                    [
+                      if (colorName.isNotEmpty) colorName,
+                      if (bytes > 0)
+                        '${persianNumber((bytes / 1024).ceil())} کیلوبایت',
+                      if (image['isPrimary'] == true) 'تصویر اصلی',
+                    ].join(' · '),
+                  ),
                 ),
               ],
             ),
-          ],
+          ),
         ),
-      ),
+        if (images.length > 1) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 5,
+            children: [
+              for (var index = 0; index < images.length; index++)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: index == _page ? 18 : 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color:
+                        index == _page
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ],
     );
   }
+
+  Widget _imageBadge(BuildContext context, String text) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surface.withValues(alpha: .9),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Text(
+      text.isEmpty ? 'بدون برچسب' : text,
+      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+    ),
+  );
 }
 
 class _ActiveStateSwitch extends StatelessWidget {
@@ -938,8 +1095,12 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
   ProductColorOption? _selectedColor = productColorPalette.first;
   String? _categoryId;
   String _size = 'M';
+  bool _numericRange = false;
+  final _rangeStart = TextEditingController();
+  final _rangeEnd = TextEditingController();
   final List<_ProductImageDraft> _images = [_ProductImageDraft()];
   int _primaryImageIndex = 0;
+  int _previewImageIndex = 0;
   bool _imageError = false;
   int _step = 0;
   bool _submitting = false;
@@ -952,7 +1113,18 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
     ('XL', 'XL'),
     ('XXL', 'XXL'),
     ('XXXL', 'XXXL'),
+    ('34', '۳۴'),
+    ('36', '۳۶'),
+    ('38', '۳۸'),
+    ('40', '۴۰'),
+    ('42', '۴۲'),
+    ('44', '۴۴'),
+    ('46', '۴۶'),
+    ('48', '۴۸'),
+    ('50', '۵۰'),
+    ('52', '۵۲'),
     ('Free Size', 'فری‌سایز'),
+    ('__numeric_range__', 'محدودهٔ عددی'),
   ];
 
   @override
@@ -961,6 +1133,8 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
     _price.dispose();
     _cost.dispose();
     _stock.dispose();
+    _rangeStart.dispose();
+    _rangeEnd.dispose();
     super.dispose();
   }
 
@@ -1007,6 +1181,31 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
       _imageError = false;
     });
   }
+
+  String get _resolvedCreateSize =>
+      _numericRange
+          ? '${_asciiDigits(_rangeStart.text.trim())} تا ${_asciiDigits(_rangeEnd.text.trim())}'
+          : _size;
+
+  Widget _createSizeRangeField(
+    TextEditingController controller,
+    String label,
+  ) => TextFormField(
+    controller: controller,
+    keyboardType: TextInputType.number,
+    textAlign: TextAlign.center,
+    decoration: InputDecoration(labelText: label),
+    validator: (value) {
+      final number = int.tryParse(_asciiDigits(value ?? '').trim());
+      if (number == null || number < 20 || number > 80)
+        return 'عدد بین ۲۰ و ۸۰';
+      final start = int.tryParse(_asciiDigits(_rangeStart.text.trim()));
+      final end = int.tryParse(_asciiDigits(_rangeEnd.text.trim()));
+      if (start != null && end != null && start > end)
+        return 'عدد آغاز باید کوچک‌تر باشد';
+      return null;
+    },
+  );
 
   Future<void> _manageCategories() async {
     final result = await showDialog<Object?>(
@@ -1183,7 +1382,8 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: DropdownButtonFormField<String>(
-                              initialValue: _size,
+                              initialValue:
+                                  _numericRange ? '__numeric_range__' : _size,
                               decoration: const InputDecoration(
                                 labelText: 'سایز',
                               ),
@@ -1198,12 +1398,36 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
                                       .toList(),
                               onChanged: (value) {
                                 if (value != null)
-                                  setState(() => _size = value);
+                                  setState(() {
+                                    _numericRange =
+                                        value == '__numeric_range__';
+                                    if (!_numericRange) _size = value;
+                                  });
                               },
                             ),
                           ),
                         ],
                       ),
+                      if (_numericRange) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _createSizeRangeField(
+                                _rangeStart,
+                                'از سایز',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _createSizeRangeField(
+                                _rangeEnd,
+                                'تا سایز',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 10),
                       Row(
                         children: [
@@ -1243,7 +1467,9 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
                         ),
                       ),
                       ListTile(
-                        title: Text('${_selectedColor?.name ?? ''} · $_size'),
+                        title: Text(
+                          '${_selectedColor?.name ?? ''} · $_resolvedCreateSize',
+                        ),
                         subtitle: Text('موجودی: ${persianNumber(_stock.text)}'),
                         trailing: Text(
                           toman(
@@ -1420,7 +1646,7 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
                               {
                                 'colorName': _selectedColor!.name,
                                 'colorHex': _selectedColor!.hex,
-                                'sizeLabel': _size,
+                                'sizeLabel': _resolvedCreateSize,
                                 'priceToman': price,
                                 'stockQuantity': stock,
                               },
@@ -1468,18 +1694,124 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
           children: [
             Expanded(
               child: Text(
-                'تصاویر محصول (حداکثر ۴ عکس)',
+                'تصاویر محصول',
                 style: Theme.of(
                   context,
                 ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
               ),
             ),
             Text(
-              '${persianNumber(_images.where((image) => image.imagePath?.isNotEmpty == true).length)}/۴',
+              persianNumber(
+                _images
+                    .where((image) => image.imagePath?.isNotEmpty == true)
+                    .length,
+              ),
               style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
             ),
           ],
         ),
+        if (_images.any((image) => image.imagePath?.isNotEmpty == true)) ...[
+          const SizedBox(height: 8),
+          Builder(
+            builder: (context) {
+              final readyImages =
+                  _images
+                      .asMap()
+                      .entries
+                      .where(
+                        (entry) => entry.value.imagePath?.isNotEmpty == true,
+                      )
+                      .toList();
+              if (_previewImageIndex >= readyImages.length) {
+                _previewImageIndex = readyImages.length - 1;
+              }
+              final active = readyImages[_previewImageIndex].value;
+              final bytes = active.fileSizeBytes ?? 0;
+              final color = active.colorName ?? 'همهٔ رنگ‌ها';
+              return Column(
+                children: [
+                  SizedBox(
+                    height: 165,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(15),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          PageView.builder(
+                            itemCount: readyImages.length,
+                            onPageChanged:
+                                (index) =>
+                                    setState(() => _previewImageIndex = index),
+                            itemBuilder:
+                                (context, index) => Container(
+                                  color: colors.surfaceContainerLow,
+                                  child: AdminNetworkImage(
+                                    imagePath:
+                                        readyImages[index].value.imagePath!,
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                          ),
+                          PositionedDirectional(
+                            top: 8,
+                            end: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colors.surface.withValues(alpha: .92),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${persianNumber(_previewImageIndex + 1)} از ${persianNumber(readyImages.length)}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ),
+                          PositionedDirectional(
+                            bottom: 8,
+                            start: 8,
+                            end: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colors.surface.withValues(alpha: .92),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '$color${bytes > 0 ? ' · ${persianNumber((bytes / 1024).ceil())} کیلوبایت' : ''}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'برای جابه‌جایی عکس‌ها به چپ و راست بکشید',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
         const SizedBox(height: 8),
         for (var index = 0; index < _images.length; index++) ...[
           Container(
@@ -1591,13 +1923,12 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
             'حداقل یک تصویر لازم است.',
             style: TextStyle(color: colors.error, fontSize: 12),
           ),
-        if (_images.length < 4)
-          OutlinedButton.icon(
-            onPressed:
-                () => setState(() => _images.add(const _ProductImageDraft())),
-            icon: const Icon(Icons.add_photo_alternate_outlined),
-            label: const Text('افزودن تصویر'),
-          ),
+        OutlinedButton.icon(
+          onPressed:
+              () => setState(() => _images.add(const _ProductImageDraft())),
+          icon: const Icon(Icons.add_photo_alternate_outlined),
+          label: const Text('افزودن تصویر'),
+        ),
       ],
     );
   }
@@ -2163,6 +2494,16 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
     widget.variant,
   );
   late String _size = '${widget.variant['sizeLabel'] ?? 'Free Size'}';
+  late bool _numericRange = _sizeRangePattern.hasMatch(_asciiDigits(_size));
+  late final _rangeStart = TextEditingController(
+    text: _sizeRangePattern.firstMatch(_asciiDigits(_size))?.group(1) ?? '',
+  );
+  late final _rangeEnd = TextEditingController(
+    text: _sizeRangePattern.firstMatch(_asciiDigits(_size))?.group(2) ?? '',
+  );
+  late final _stockQuantity = TextEditingController(
+    text: '${widget.variant['stockQuantity'] ?? 0}',
+  );
   late bool _active = widget.variant['isActive'] == true;
 
   static const _sizes = <(String, String)>[
@@ -2173,7 +2514,18 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
     ('XL', 'XL'),
     ('XXL', 'XXL'),
     ('XXXL', 'XXXL'),
+    ('34', '۳۴'),
+    ('36', '۳۶'),
+    ('38', '۳۸'),
+    ('40', '۴۰'),
+    ('42', '۴۲'),
+    ('44', '۴۴'),
+    ('46', '۴۶'),
+    ('48', '۴۸'),
+    ('50', '۵۰'),
+    ('52', '۵۲'),
     ('Free Size', 'فری‌سایز'),
+    ('__numeric_range__', 'محدودهٔ عددی'),
   ];
 
   @override
@@ -2181,15 +2533,19 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
     _price.dispose();
     _compare.dispose();
     _threshold.dispose();
+    _rangeStart.dispose();
+    _rangeEnd.dispose();
+    _stockQuantity.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final sizeOptions = List<(String, String)>.from(_sizes);
-    if (!sizeOptions.any((option) => option.$1 == _size)) {
+    if (!_numericRange && !sizeOptions.any((option) => option.$1 == _size)) {
       sizeOptions.add((_size, _size));
     }
+    final selectedSize = _numericRange ? '__numeric_range__' : _size;
     return AlertDialog(
       title: const Text('ویرایش تنوع محصول'),
       content: SizedBox(
@@ -2233,7 +2589,7 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        initialValue: _size,
+                        initialValue: selectedSize,
                         decoration: const InputDecoration(labelText: 'سایز'),
                         items:
                             sizeOptions
@@ -2245,12 +2601,26 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
                                 )
                                 .toList(),
                         onChanged: (value) {
-                          if (value != null) setState(() => _size = value);
+                          if (value != null)
+                            setState(() {
+                              _numericRange = value == '__numeric_range__';
+                              if (!_numericRange) _size = value;
+                            });
                         },
                       ),
                     ),
                   ],
                 ),
+                if (_numericRange) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(child: _rangeField(_rangeStart, 'از سایز')),
+                      const SizedBox(width: 8),
+                      Expanded(child: _rangeField(_rangeEnd, 'تا سایز')),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 10),
                 _field(
                   _price,
@@ -2297,6 +2667,35 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
                         : null;
                   },
                 ),
+                const SizedBox(height: 8),
+                _field(
+                  _stockQuantity,
+                  'موجودی کل این رنگ و سایز',
+                  numeric: true,
+                  validator: (value) {
+                    final amount = int.tryParse(_asciiDigits(value ?? ''));
+                    final reserved =
+                        int.tryParse(
+                          '${widget.variant['reservedQuantity'] ?? 0}',
+                        ) ??
+                        0;
+                    return amount == null ||
+                            amount < reserved ||
+                            amount > 1000000
+                        ? 'عدد باید بین موجودی رزروشده و یک میلیون باشد'
+                        : null;
+                  },
+                ),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    'رزرو شده: ${persianNumber(widget.variant['reservedQuantity'] ?? 0)} عدد',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 6),
                 _ActiveStateSwitch(
                   title: 'فعال و قابل خرید',
@@ -2326,18 +2725,43 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
     if (!_form.currentState!.validate()) return;
     final color = _selectedColor;
     if (color == null) return;
+    final size =
+        _numericRange
+            ? '${_asciiDigits(_rangeStart.text.trim())} تا ${_asciiDigits(_rangeEnd.text.trim())}'
+            : _size;
     final price = _asciiDigits(_price.text).replaceAll(',', '');
     final compare = _asciiDigits(_compare.text).replaceAll(',', '').trim();
     Navigator.pop(context, <String, dynamic>{
       'colorName': color.name,
       'colorHex': color.hex,
-      'sizeLabel': _size,
+      'sizeLabel': size,
       'priceToman': price,
       'compareAtPriceToman': compare.isEmpty ? null : compare,
       'lowStockThreshold': int.parse(_asciiDigits(_threshold.text)),
+      'stockQuantity': int.parse(_asciiDigits(_stockQuantity.text)),
       'isActive': _active,
     });
   }
+
+  Widget _rangeField(TextEditingController controller, String label) =>
+      TextFormField(
+        controller: controller,
+        keyboardType: TextInputType.number,
+        textAlign: TextAlign.center,
+        decoration: InputDecoration(labelText: label),
+        validator: (value) {
+          final current = int.tryParse(_asciiDigits(value ?? '').trim());
+          if (current == null || current < 20 || current > 80) {
+            return 'عدد بین ۲۰ و ۸۰';
+          }
+          final start = int.tryParse(_asciiDigits(_rangeStart.text.trim()));
+          final end = int.tryParse(_asciiDigits(_rangeEnd.text.trim()));
+          if (start != null && end != null && start > end) {
+            return 'عدد آغاز باید کوچک‌تر باشد';
+          }
+          return null;
+        },
+      );
 }
 
 ProductColorOption _initialVariantColor(JsonMap variant) {
@@ -2365,6 +2789,8 @@ String _formatMoney(Object? value) {
   final raw = _asciiDigits('$value').replaceAll(RegExp(r'[^0-9]'), '');
   return raw.replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
 }
+
+final _sizeRangePattern = RegExp(r'^\s*(\d{2,3})\s*(?:-|تا)\s*(\d{2,3})\s*$');
 
 class _AdjustVariantInventoryDialog extends StatefulWidget {
   const _AdjustVariantInventoryDialog({
@@ -2550,6 +2976,9 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
   final _stock = TextEditingController(text: '0');
   ProductColorOption? _selectedColor;
   String _size = 'M';
+  bool _numericRange = false;
+  final _rangeStart = TextEditingController();
+  final _rangeEnd = TextEditingController();
   static const _sizes = <(String, String)>[
     ('XS', 'XS'),
     ('S', 'S'),
@@ -2558,13 +2987,26 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
     ('XL', 'XL'),
     ('XXL', 'XXL'),
     ('XXXL', 'XXXL'),
+    ('34', '۳۴'),
+    ('36', '۳۶'),
+    ('38', '۳۸'),
+    ('40', '۴۰'),
+    ('42', '۴۲'),
+    ('44', '۴۴'),
+    ('46', '۴۶'),
+    ('48', '۴۸'),
+    ('50', '۵۰'),
+    ('52', '۵۲'),
     ('Free Size', 'فری‌سایز'),
+    ('__numeric_range__', 'محدودهٔ عددی'),
   ];
 
   @override
   void dispose() {
     _price.dispose();
     _stock.dispose();
+    _rangeStart.dispose();
+    _rangeEnd.dispose();
     super.dispose();
   }
 
@@ -2602,7 +3044,7 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    initialValue: _size,
+                    initialValue: _numericRange ? '__numeric_range__' : _size,
                     decoration: const InputDecoration(labelText: 'سایز'),
                     items:
                         _sizes
@@ -2614,12 +3056,28 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
                             )
                             .toList(),
                     onChanged: (value) {
-                      if (value != null) setState(() => _size = value);
+                      if (value != null)
+                        setState(() {
+                          _numericRange = value == '__numeric_range__';
+                          if (!_numericRange) _size = value;
+                        });
                     },
                   ),
                 ),
               ],
             ),
+            if (_numericRange) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _addVariantRangeField(_rangeStart, 'از سایز'),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: _addVariantRangeField(_rangeEnd, 'تا سایز')),
+                ],
+              ),
+            ],
             const SizedBox(height: 10),
             Row(
               children: [
@@ -2665,7 +3123,10 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
           Navigator.pop(context, {
             'colorName': _selectedColor!.name,
             'colorHex': _selectedColor!.hex,
-            'sizeLabel': _size,
+            'sizeLabel':
+                _numericRange
+                    ? '${_asciiDigits(_rangeStart.text.trim())} تا ${_asciiDigits(_rangeEnd.text.trim())}'
+                    : _size,
             'priceToman': price,
             'stockQuantity': stock,
           });
@@ -2673,6 +3134,26 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
         child: const Text('افزودن تنوع'),
       ),
     ],
+  );
+
+  Widget _addVariantRangeField(
+    TextEditingController controller,
+    String label,
+  ) => TextFormField(
+    controller: controller,
+    keyboardType: TextInputType.number,
+    textAlign: TextAlign.center,
+    decoration: InputDecoration(labelText: label),
+    validator: (value) {
+      final number = int.tryParse(_asciiDigits(value ?? '').trim());
+      if (number == null || number < 20 || number > 80)
+        return 'عدد بین ۲۰ و ۸۰';
+      final start = int.tryParse(_asciiDigits(_rangeStart.text.trim()));
+      final end = int.tryParse(_asciiDigits(_rangeEnd.text.trim()));
+      if (start != null && end != null && start > end)
+        return 'عدد آغاز باید کوچک‌تر باشد';
+      return null;
+    },
   );
 }
 

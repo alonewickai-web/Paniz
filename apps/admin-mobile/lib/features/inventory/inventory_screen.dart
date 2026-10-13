@@ -15,11 +15,14 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   bool _onlyUnderThree = false;
   String _categoryId = 'all';
   String _stockState = 'all';
+  bool _searchExpanded = false;
   final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -176,13 +179,59 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             children: [
-              Text(
-                'مدیریت موجودی',
-                style: TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w900,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
+              Row(
+                children: [
+                  if (!_searchExpanded)
+                    Expanded(
+                      child: Text(
+                        'مدیریت موجودی',
+                        style: TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w900,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: TapRegion(
+                        onTapOutside: (_) {
+                          _searchFocus.unfocus();
+                          setState(() => _searchExpanded = false);
+                        },
+                        child: TextField(
+                          controller: _searchController,
+                          focusNode: _searchFocus,
+                          autofocus: true,
+                          onChanged: (_) => setState(() {}),
+                          decoration: InputDecoration(
+                            hintText: 'جست‌وجو در محصولات',
+                            prefixIcon: const Icon(Icons.search_rounded),
+                            suffixIcon: IconButton(
+                              tooltip: 'بستن جست‌وجو',
+                              onPressed: () {
+                                _searchController.clear();
+                                _searchFocus.unfocus();
+                                setState(() => _searchExpanded = false);
+                              },
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (!_searchExpanded)
+                    IconButton(
+                      tooltip: 'جست‌وجو در محصولات',
+                      onPressed: () {
+                        setState(() => _searchExpanded = true);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) _searchFocus.requestFocus();
+                        });
+                      },
+                      icon: const Icon(Icons.search_rounded),
+                    ),
+                ],
               ),
               const SizedBox(height: 4),
               Text(
@@ -192,26 +241,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              TextField(
-                controller: _searchController,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  hintText: 'جست‌وجوی کالا، رنگ، سایز یا کد محصول',
-                  suffixIcon:
-                      query.isEmpty
-                          ? null
-                          : IconButton(
-                            tooltip: 'پاک‌کردن جست‌وجو',
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {});
-                            },
-                            icon: const Icon(Icons.close_rounded),
-                          ),
-                ),
-              ),
-              const SizedBox(height: 10),
               DropdownButtonFormField<String>(
                 initialValue:
                     _categoryId == 'all' || categories.containsKey(_categoryId)

@@ -54,11 +54,14 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   private socialTimer?: NodeJS.Timeout;
   private smsTimer?: NodeJS.Timeout;
   private rubikaTimer?: NodeJS.Timeout;
+  private rubikaProductTimer?: NodeJS.Timeout;
   private backupTimer?: NodeJS.Timeout;
   private socialBusy = false;
   private socialRunRequested = false;
   private smsBusy = false;
   private rubikaBusy = false;
+  private rubikaProductBusy = false;
+  private readonly pendingRubikaProductIds = new Map<string, bigint | undefined>();
   private backupBusy = false;
 
   constructor(
@@ -81,6 +84,8 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     }
     this.rubikaTimer = setInterval(() => void this.processQueuedRubika(), 15_000);
     this.rubikaTimer.unref();
+    this.rubikaProductTimer = setInterval(() => void this.publishOldestAvailableProduct(), 150 * 60_000);
+    this.rubikaProductTimer.unref();
     this.backupTimer = setInterval(() => void this.ensureDailyBackup(), 60 * 60_000);
     this.backupTimer.unref();
     setTimeout(() => void this.publishDuePosts(), 5_000).unref();
@@ -93,6 +98,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     if (this.socialTimer) clearInterval(this.socialTimer);
     if (this.smsTimer) clearInterval(this.smsTimer);
     if (this.rubikaTimer) clearInterval(this.rubikaTimer);
+    if (this.rubikaProductTimer) clearInterval(this.rubikaProductTimer);
     if (this.backupTimer) clearInterval(this.backupTimer);
   }
 
@@ -471,7 +477,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     const productTitle = typeof input.productTitle === "string" ? input.productTitle.trim() : "";
     if (productTitle.length > 220) throw badInput("عنوان محصول باید حداکثر ۲۲۰ نویسه باشد.");
     const caption = productId
-      ? await this.appendSocialProductDetails(rawCaption, productId, productTitle)
+      ? await this.appendSocialProductDetails(rawCaption, productId, productTitle, channels.includes("rubika"))
       : rawCaption;
     if (!caption) throw badInput("متن تبلیغ بنویس یا برای انتشار روبیکا یک محصول انتخاب کن.");
     if (caption.length > 2200) throw badInput("کپشن نهایی با اطلاعات محصول نباید بیشتر از ۲۲۰۰ نویسه باشد.");
@@ -483,10 +489,141 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     if (!publishAt) throw badInput("publishAt is invalid.");
     const post = await this.prisma.socialPost.create({ data: {
       caption, imageUrl, channels: channels as Prisma.InputJsonArray, publishAt,
-      status: "awaiting_approval", createdByAdminId: admin.id,
+      status: "queued", createdByAdminId: admin.id,
     } });
-    await this.audit(admin, "social_post.awaiting_approval", "social_post", post.id, { channels, publishAt: publishAt.toISOString() });
+    await this.audit(admin, "social_post.queued", "social_post", post.id, { channels, publishAt: publishAt.toISOString() });
+    if (publishAt <= new Date()) void this.publishDuePosts();
     return { data: { id: post.id.toString(), status: post.status, publishAt: post.publishAt.toISOString() } };
+  }
+
+  async publishProductToRubika(productId: string, createdByAdminId?: bigint): Promise<void> {
+    if (this.rubikaProductBusy) {
+      this.pendingRubikaProductIds.set(productId, createdByAdminId);
+      return;
+    }
+    this.rubikaProductBusy = true;
+    try {
+      await this.publishProductToRubikaNow(productId, createdByAdminId);
+    } finally {
+      this.rubikaProductBusy = false;
+      const next = this.pendingRubikaProductIds.entries().next().value as [string, bigint | undefined] | undefined;
+      if (next) {
+        this.pendingRubikaProductIds.delete(next[0]);
+        setImmediate(() => void this.publishProductToRubika(next[0], next[1]).catch((error) => {
+          this.logger.warn(`Queued Rubika product post failed: ${error instanceof Error ? error.message : "unknown error"}`);
+        }));
+      }
+    }
+  }
+
+  private async publishOldestAvailableProduct(): Promise<void> {
+    if (this.rubikaProductBusy) return;
+    const candidates = await this.prisma.product.findMany({
+      where: {
+        status: "published", publishedAt: { lte: new Date() }, deletedAt: null,
+        category: { is: { isActive: true } },
+        variants: { some: { isActive: true } },
+      },
+      orderBy: [{ rubikaPostedAt: "asc" }, { createdAt: "asc" }],
+      take: 250,
+      select: {
+        id: true,
+        variants: { where: { isActive: true }, select: { stockQuantity: true, reservedQuantity: true } },
+      },
+    });
+    const oldest = candidates.find((product) => product.variants.some((variant) => variant.stockQuantity > variant.reservedQuantity));
+    if (!oldest) return;
+    const owner = await this.prisma.adminUser.findFirst({
+      where: { isActive: true, role: "owner" }, orderBy: { id: "asc" }, select: { id: true },
+    }) ?? await this.prisma.adminUser.findFirst({
+      where: { isActive: true }, orderBy: { id: "asc" }, select: { id: true },
+    });
+    if (!owner) {
+      this.logger.warn("Rubika product post skipped because there is no active admin to own the post record.");
+      return;
+    }
+    try {
+      await this.publishProductToRubika(oldest.id.toString(), owner.id);
+    } catch (error) {
+      this.logger.warn(`Scheduled Rubika product post failed: ${error instanceof Error ? error.message : "unknown error"}`);
+    }
+  }
+
+  private async publishProductToRubikaNow(productId: string, createdByAdminId?: bigint): Promise<void> {
+    const id = parseId(productId, "productId");
+    const product = await this.prisma.product.findFirst({
+      where: {
+        id, status: "published", publishedAt: { lte: new Date() }, deletedAt: null,
+        category: { is: { isActive: true } },
+      },
+      include: {
+        images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }], take: 1 },
+        variants: {
+          where: { isActive: true },
+          orderBy: [{ colorSortOrder: "asc" }, { colorName: "asc" }, { sizeLabel: "asc" }],
+          select: { sku: true, colorName: true, sizeLabel: true, stockQuantity: true, reservedQuantity: true },
+        },
+      },
+    });
+    if (!product || !product.variants.some((variant) => variant.stockQuantity > variant.reservedQuantity)) {
+      throw new Error("محصول منتشرشده و دارای موجودی پیدا نشد.");
+    }
+    const chatId = this.config.get<string>("RUBIKA_CHANNEL_ID", "").trim();
+    if (!chatId) throw new Error("شناسهٔ کانال روبیکا تنظیم نشده است.");
+    const channelUrl = this.config.get<string>("RUBIKA_CHANNEL_URL", "").trim();
+    if (!/^https:\/\/rubika\.ir\/[A-Za-z0-9_]+\/?$/i.test(channelUrl)) {
+      throw new Error("لینک عمومی کانال باید در RUBIKA_CHANNEL_URL تنظیم شود.");
+    }
+    const siteUrl = this.publicWebBaseUrl();
+    const purchaseUrl = new URL(`/products/${encodeURIComponent(product.slug)}`, siteUrl).toString();
+    const availableVariants = product.variants.filter((variant) => variant.stockQuantity > variant.reservedQuantity);
+    const colors = [...new Set(availableVariants.map((variant) => variant.colorName.trim()).filter(Boolean))];
+    const sizes = [...new Set(availableVariants.map((variant) => variant.sizeLabel.trim()).filter(Boolean))];
+    const date = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+      timeZone: "Asia/Tehran", year: "numeric", month: "long", day: "numeric",
+    }).format(new Date());
+    const caption = [
+      `✨ ${product.name}`,
+      `کد کالا: ${availableVariants[0]?.sku ?? "—"}`,
+      `رنگ‌ها: ${colors.join("، ") || "—"}`,
+      `سایزها: ${sizes.join("، ") || "—"}`,
+      `مشاهده و خرید: ${purchaseUrl}`,
+      "",
+      "New ❤️",
+      date,
+      channelUrl,
+    ].join("\n");
+    const imageUrl = product.images[0]?.imagePath
+      ? new URL(product.images[0].imagePath, siteUrl).toString()
+      : null;
+    const adminId = createdByAdminId ?? (await this.prisma.adminUser.findFirst({
+      where: { isActive: true, role: "owner" }, orderBy: { id: "asc" }, select: { id: true },
+    }))?.id;
+    if (!adminId) throw new Error("مدیر فعالی برای ثبت سابقهٔ انتشار روبیکا وجود ندارد.");
+    const post = await this.prisma.socialPost.create({
+      data: {
+        caption,
+        imageUrl,
+        channels: ["rubika"],
+        status: "publishing",
+        publishAt: new Date(),
+        createdByAdminId: adminId,
+      },
+    });
+    try {
+      const result = await this.publishRubika(caption, imageUrl);
+      await this.prisma.$transaction([
+        this.prisma.product.update({ where: { id }, data: { rubikaPostedAt: new Date() } }),
+        this.prisma.socialPost.update({ where: { id: post.id }, data: {
+          status: "published", channelResults: { rubika: result } as Prisma.InputJsonObject, publishedAt: new Date(), lastError: null,
+        } }),
+      ]);
+    } catch (error) {
+      await this.prisma.socialPost.update({ where: { id: post.id }, data: {
+        status: "failed", lastError: (error instanceof Error ? error.message : "Rubika post failed.").slice(0, 1000),
+      } });
+      throw error;
+    }
   }
 
   async approveSocialPost(admin: AuthenticatedAdmin, rawId: string) {
@@ -556,7 +693,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
       backupTool: process.platform === "win32" ? "external mysqldump required" : "mysqldump",
       integrations: {
         smsIr: Boolean(this.config.get("SMSIR_API_KEY") && this.config.get("SMSIR_LINE_NUMBER")),
-        rubika: Boolean(this.config.get("RUBIKA_BOT_TOKEN") && this.config.get("RUBIKA_CHANNEL_ID")),
+        rubika: Boolean(this.config.get("RUBIKA_BOT_TOKEN") && this.config.get("RUBIKA_CHANNEL_ID") && this.config.get("RUBIKA_CHANNEL_URL")),
         rubikaBotMessaging: rubikaStatus.configured,
         rubikaWebhook: rubikaStatus.webhookConfigured,
         instagram: Boolean(this.config.get("INSTAGRAM_USER_ID") && this.config.get("INSTAGRAM_ACCESS_TOKEN") && this.config.get("INSTAGRAM_GRAPH_API_VERSION")),
@@ -672,7 +809,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     return { ok: true, media: "text", provider: safeProviderResult(result) };
   }
 
-  private async appendSocialProductDetails(caption: string, productId: bigint, titleOverride: string) {
+  private async appendSocialProductDetails(caption: string, productId: bigint, titleOverride: string, includeRubikaFooter = false) {
     const product = await this.prisma.product.findFirst({
       where: {
         id: productId,
@@ -696,6 +833,16 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
       `تنوع سایزی محصول: ${details.sizes.length ? details.sizes.join("، ") : "—"}`,
       `لینک خرید محصول: ${details.purchaseUrl}`,
     ];
+    if (includeRubikaFooter) {
+      const channelUrl = this.config.get<string>("RUBIKA_CHANNEL_URL", "").trim();
+      if (!/^https:\/\/rubika\.ir\/[A-Za-z0-9_]+\/?$/i.test(channelUrl)) {
+        throw new ServiceUnavailableException({ code: "RUBIKA_CHANNEL_URL_MISSING", message: "لینک عمومی کانال روبیکا در تنظیمات سرور ثبت نشده است." });
+      }
+      const date = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+        timeZone: "Asia/Tehran", year: "numeric", month: "long", day: "numeric",
+      }).format(new Date());
+      productLines.push("", "New ❤️", date, channelUrl);
+    }
     return [caption, ...(caption ? [""] : []), ...productLines].join("\n");
   }
 

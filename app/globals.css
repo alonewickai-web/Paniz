@@ -708,7 +708,7 @@ html[data-theme="dark"] .store-suggestions { background: var(--surface); border-
   .mobile-bottom-nav { position: fixed; z-index: 40; right: 0; bottom: 0; left: 0; min-height: calc(61px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(5, 1fr); padding: 7px 7px calc(7px + env(safe-area-inset-bottom)); border-top: 1px solid #eee7e4; background: rgba(255, 255, 255, .96); backdrop-filter: blur(18px); }
   .bottom-nav-item { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0; border: 0; background: transparent; color: #918991; font-size: 8px; }
   .bottom-nav-item.active { color: var(--rose); }
-  .bottom-nav-item svg { width: 19px; height: 19px; }
+  .bottom-nav-item svg { width: 24px; height: 24px; transform: translateY(2px); }
   .bottom-cart i { position: absolute; top: 1px; right: calc(50% - 21px); min-width: 14px; height: 14px; display: grid; place-items: center; padding-inline: 2px; border-radius: 10px; background: var(--rose); color: white; font-size: 8px; font-style: normal; }
   .modal-backdrop { align-items: end; padding: 0; }
   .product-modal { width: 100%; max-height: min(91dvh, 760px); grid-template-columns: 1fr; grid-template-rows: minmax(195px, 32dvh) 1fr; overflow-y: auto; border-radius: 20px 20px 0 0; }

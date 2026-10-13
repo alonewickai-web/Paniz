@@ -154,19 +154,25 @@ class PanizTheme {
       primary: palette.primary,
       onPrimary: isDark ? const Color(0xFF082C28) : Colors.white,
       primaryContainer: palette.primarySoft,
-      onPrimaryContainer: isDark ? const Color(0xFFD7F4EE) : const Color(0xFF07564E),
+      onPrimaryContainer:
+          isDark ? const Color(0xFFD7F4EE) : const Color(0xFF07564E),
       secondary: isDark ? const Color(0xFFF0AFC0) : const Color(0xFFB64565),
       onSecondary: isDark ? const Color(0xFF3D1422) : Colors.white,
-      secondaryContainer: isDark ? const Color(0xFF492B35) : const Color(0xFFFBE8ED),
-      onSecondaryContainer: isDark ? const Color(0xFFFFD9E2) : const Color(0xFF70283E),
+      secondaryContainer:
+          isDark ? const Color(0xFF492B35) : const Color(0xFFFBE8ED),
+      onSecondaryContainer:
+          isDark ? const Color(0xFFFFD9E2) : const Color(0xFF70283E),
       tertiary: isDark ? const Color(0xFFF2B66D) : const Color(0xFF9A5B00),
       onTertiary: isDark ? const Color(0xFF392100) : Colors.white,
       surface: palette.surface,
       onSurface: palette.ink,
       surfaceContainerLowest: palette.surface,
-      surfaceContainerLow: isDark ? const Color(0xFF1D2926) : const Color(0xFFFCFDFD),
-      surfaceContainer: isDark ? const Color(0xFF202C29) : const Color(0xFFF0F3F4),
-      surfaceContainerHigh: isDark ? const Color(0xFF273531) : const Color(0xFFE9EEF0),
+      surfaceContainerLow:
+          isDark ? const Color(0xFF1D2926) : const Color(0xFFFCFDFD),
+      surfaceContainer:
+          isDark ? const Color(0xFF202C29) : const Color(0xFFF0F3F4),
+      surfaceContainerHigh:
+          isDark ? const Color(0xFF273531) : const Color(0xFFE9EEF0),
       outline: palette.muted,
       outlineVariant: palette.line,
       error: palette.error,
@@ -202,7 +208,11 @@ class PanizTheme {
         shape: shape,
         margin: EdgeInsets.zero,
       ),
-      dividerTheme: DividerThemeData(color: palette.line, thickness: 1, space: 1),
+      dividerTheme: DividerThemeData(
+        color: palette.line,
+        thickness: 1,
+        space: 1,
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: isDark ? palette.surfaceRaised : palette.surface,
@@ -224,7 +234,10 @@ class PanizTheme {
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: palette.error),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
       ),
       navigationBarTheme: NavigationBarThemeData(
         height: 74,
@@ -233,14 +246,27 @@ class PanizTheme {
         elevation: 8,
         indicatorColor: palette.primarySoft,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
-          color: states.contains(WidgetState.selected) ? palette.primary : palette.muted,
-          fontSize: 11,
-          fontWeight: states.contains(WidgetState.selected) ? FontWeight.w800 : FontWeight.w500,
-        )),
-        iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
-          color: states.contains(WidgetState.selected) ? palette.primary : palette.muted,
-        )),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => TextStyle(
+            color:
+                states.contains(WidgetState.selected)
+                    ? palette.primary
+                    : palette.muted,
+            fontSize: 11,
+            fontWeight:
+                states.contains(WidgetState.selected)
+                    ? FontWeight.w800
+                    : FontWeight.w500,
+          ),
+        ),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color:
+                states.contains(WidgetState.selected)
+                    ? palette.primary
+                    : palette.muted,
+          ),
+        ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -248,7 +274,9 @@ class PanizTheme {
           foregroundColor: scheme.onPrimary,
           minimumSize: const Size(48, 50),
           padding: const EdgeInsets.symmetric(horizontal: 18),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
           textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
         ),
       ),
@@ -257,7 +285,9 @@ class PanizTheme {
           foregroundColor: palette.primary,
           minimumSize: const Size(48, 48),
           side: BorderSide(color: palette.primary.withValues(alpha: .5)),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
@@ -269,8 +299,16 @@ class PanizTheme {
         ),
       ),
       switchTheme: SwitchThemeData(
-        thumbColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? palette.primary : null),
-        trackColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? palette.primarySoft : null),
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) =>
+              states.contains(WidgetState.selected) ? palette.primary : null,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) =>
+              states.contains(WidgetState.selected)
+                  ? palette.primarySoft
+                  : null,
+        ),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: palette.surfaceRaised,
@@ -287,24 +325,39 @@ class PanizTheme {
       drawerTheme: DrawerThemeData(
         backgroundColor: palette.canvas,
         surfaceTintColor: Colors.transparent,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadiusDirectional.horizontal(start: Radius.circular(24))),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadiusDirectional.horizontal(
+            start: Radius.circular(24),
+          ),
+        ),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: isDark ? const Color(0xFF29413B) : const Color(0xFF164E45),
-        contentTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        backgroundColor:
+            isDark ? const Color(0xFF29413B) : const Color(0xFF164E45),
+        contentTextStyle: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
-      progressIndicatorTheme: ProgressIndicatorThemeData(color: palette.primary),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: palette.primary,
+      ),
       listTileTheme: ListTileThemeData(
         iconColor: palette.muted,
         textColor: palette.ink,
         selectedColor: palette.primary,
-        selectedTileColor: palette.primarySoft.withValues(alpha: isDark ? .32 : .8),
+        selectedTileColor: palette.primarySoft.withValues(
+          alpha: isDark ? .32 : .8,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         minVerticalPadding: 8,
       ),
-      textTheme: Typography.material2021(platform: TargetPlatform.android).black.apply(
+      textTheme: Typography.material2021(
+        platform: TargetPlatform.android,
+      ).black.apply(
+        fontSizeFactor: 1.05,
         bodyColor: palette.ink,
         displayColor: palette.ink,
       ),

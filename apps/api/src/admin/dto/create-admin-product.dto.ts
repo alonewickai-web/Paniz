@@ -132,7 +132,7 @@ export class CreateAdminProductDto {
 
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(4)
+  @ArrayMaxSize(1000)
   @ValidateNested({ each: true })
   @Type(() => AdminProductImageDto)
   images!: AdminProductImageDto[];

@@ -12,7 +12,7 @@ const publicProductRelations = {
   },
   variants: {
     where: { isActive: true },
-    orderBy: [{ priceToman: "asc" }],
+    orderBy: [{ colorSortOrder: "asc" }, { colorName: "asc" }, { sizeLabel: "asc" }],
   },
 } satisfies Prisma.ProductInclude;
 
@@ -201,7 +201,10 @@ export class CatalogService {
       });
     }
 
-    const cheapestVariant = product.variants[0];
+    const cheapestVariant = product.variants.reduce((cheapest, variant) =>
+      cheapest === null || variant.priceToman < cheapest.priceToman ? variant : cheapest,
+      null as (typeof product.variants)[number] | null,
+    );
     return {
       data: {
         ...this.toProductSummary(product),
@@ -233,7 +236,10 @@ export class CatalogService {
   }
 
   private toProductSummary(product: PublicProduct) {
-    const cheapestVariant = product.variants[0];
+    const cheapestVariant = product.variants.reduce((cheapest, variant) =>
+      cheapest === null || variant.priceToman < cheapest.priceToman ? variant : cheapest,
+      null as (typeof product.variants)[number] | null,
+    );
     return {
       id: product.id.toString(),
       name: product.name,

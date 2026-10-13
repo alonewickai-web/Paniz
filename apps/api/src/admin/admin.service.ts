@@ -6,6 +6,7 @@ import {
   HttpException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
@@ -23,6 +24,7 @@ import { UpdateAdminVariantDto } from "./dto/update-admin-variant.dto";
 import { UpdateAdminOrderDto } from "./dto/update-admin-order.dto";
 import { productColorKey, resolveProductColorHex, resolveProductColorName } from "../catalog/product-color";
 import { WebPushService } from "../push/web-push.service";
+import { AdminToolsService } from "./admin-tools.service";
 
 const statusTransitions: Record<string, readonly string[]> = {
   pending_payment: ["cancelled"],
@@ -36,7 +38,13 @@ const IRAN_UTC_OFFSET_MINUTES = 210;
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService, private readonly push: WebPushService) {}
+  private readonly logger = new Logger(AdminService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly push: WebPushService,
+    private readonly tools: AdminToolsService,
+  ) {}
 
   async dashboard(admin: AuthenticatedAdmin) {
 
@@ -219,7 +227,7 @@ export class AdminService {
         include: {
           category: { select: { id: true, name: true, slug: true } },
           images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] },
-          variants: { orderBy: [{ colorName: "asc" }, { sizeLabel: "asc" }] },
+          variants: { orderBy: [{ colorSortOrder: "asc" }, { colorName: "asc" }, { sizeLabel: "asc" }] },
         },
       }),
     ]);
@@ -241,6 +249,7 @@ export class AdminService {
         category: product.category ? { id: product.category.id.toString(), name: product.category.name, slug: product.category.slug } : null,
         images: product.images.map((image) => ({ id: image.id.toString(), imagePath: image.imagePath, altText: image.altText, colorName: image.colorName, fileSizeBytes: image.fileSizeBytes, isPrimary: image.isPrimary, sortOrder: image.sortOrder })),
         variants: product.variants.map((variant) => ({
+          colorSortOrder: variant.colorSortOrder,
           id: variant.id.toString(),
           sku: variant.sku,
           colorName: variant.colorName,
@@ -264,7 +273,6 @@ export class AdminService {
     requireAdminPermission(admin, "products.create");
     if (input.status === "published") requireAdminPermission(admin, "products.publish");
     const categoryId = parseId(input.categoryId, "شناسهٔ دسته‌بندی");
-    if (input.images.length > 4) throw new BadRequestException({ code: "PRODUCT_IMAGE_LIMIT", message: "برای هر محصول حداکثر ۴ تصویر ثبت می‌شود." });
     const primaryIndex = Math.max(0, input.images.findIndex((image) => image.isPrimary));
     validateVariants(input.variants);
 
@@ -351,6 +359,9 @@ export class AdminService {
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
       if (input.status === "published") {
         await this.push.notifyMarketingCustomers("محصول تازه در پانیذ", `محصول «${input.name.trim()}» به فروشگاه اضافه شد.`, `/products/${created.data.slug}`);
+        void this.tools.publishProductToRubika(created.data.id, admin.id).catch((error) => {
+          this.logger.warn(`Immediate Rubika product post failed: ${error instanceof Error ? error.message : "unknown error"}`);
+        });
       }
       return created;
     } catch (error) {
@@ -422,6 +433,9 @@ export class AdminService {
       });
       if (input.status === "published" && before.status !== "published") {
         await this.push.notifyMarketingCustomers("محصول تازه در پانیذ", `محصول «${updated.name}» به فروشگاه اضافه شد.`, `/products/${updated.slug}`);
+        void this.tools.publishProductToRubika(updated.id.toString(), admin.id).catch((error) => {
+          this.logger.warn(`Immediate Rubika product post failed: ${error instanceof Error ? error.message : "unknown error"}`);
+        });
       }
       return { data: { id: updated.id.toString(), slug: updated.slug, status: updated.status } };
     } catch (error) {
@@ -509,9 +523,6 @@ export class AdminService {
 
     const image = await this.prisma.$transaction(async (tx) => {
       const imageCount = await tx.productImage.count({ where: { productId } });
-      if (imageCount >= 4) {
-        throw new ConflictException({ code: "PRODUCT_IMAGE_LIMIT", message: "برای هر محصول حداکثر ۴ تصویر ثبت می‌شود." });
-      }
       if (input.isPrimary || imageCount === 0) {
         await tx.productImage.updateMany({ where: { productId, isPrimary: true }, data: { isPrimary: false } });
       }
@@ -772,10 +783,17 @@ export class AdminService {
     if (input.compareAtPriceToman !== undefined) data.compareAtPriceToman = nextCompareAt;
     if (input.isActive !== undefined) data.isActive = input.isActive;
     if (input.lowStockThreshold !== undefined) data.lowStockThreshold = input.lowStockThreshold;
+    if (input.colorSortOrder !== undefined) data.colorSortOrder = input.colorSortOrder;
 
     try {
       const updated = await this.prisma.$transaction(async (tx) => {
         const variant = await tx.productVariant.update({ where: { id: variantId }, data });
+        if (input.colorSortOrder !== undefined) {
+          await tx.productVariant.updateMany({
+            where: { productId: current.productId, colorName: variant.colorName },
+            data: { colorSortOrder: input.colorSortOrder },
+          });
+        }
         await tx.adminAuditLog.create({
           data: {
             adminId: admin.id,
@@ -788,6 +806,8 @@ export class AdminService {
               sku: current.sku,
               colorBefore: current.colorName,
               colorAfter: variant.colorName,
+              colorSortOrderBefore: current.colorSortOrder,
+              colorSortOrderAfter: input.colorSortOrder ?? current.colorSortOrder,
               sizeBefore: current.sizeLabel,
               sizeAfter: variant.sizeLabel,
               priceBefore: current.priceToman.toString(),

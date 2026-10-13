@@ -37,4 +37,11 @@ export class UpdateAdminVariantDto {
   @Min(0)
   @Max(1_000_000)
   lowStockThreshold?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(1000)
+  colorSortOrder?: number;
 }
