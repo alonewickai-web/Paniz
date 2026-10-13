@@ -31,6 +31,11 @@ String statusLabel(String? status) => switch (status) {
       'cancelled' => 'لغوشده',
       'expired' => 'منقضی‌شده',
       'returned' => 'مرجوع‌شده',
+      'requested' => 'در انتظار بررسی',
+      'approved' => 'درخواست تأیید شد',
+      'received' => 'کالا دریافت شد',
+      'refunded' => 'وجه بازگردانده شد',
+      'rejected' => 'رد شده',
       'published' => 'منتشرشده',
       'draft' => 'پیش‌نویس',
       'archived' => 'بایگانی',
@@ -38,9 +43,9 @@ String statusLabel(String? status) => switch (status) {
     };
 
 Color statusColor(BuildContext context, String? status) => switch (status) {
-      'paid' || 'delivered' || 'published' => context.paniz.success,
-      'pending_payment' || 'preparing' || 'draft' => context.paniz.warning,
-      'cancelled' || 'expired' || 'returned' || 'archived' => context.paniz.error,
+      'paid' || 'delivered' || 'published' || 'received' || 'refunded' => context.paniz.success,
+      'pending_payment' || 'preparing' || 'draft' || 'requested' || 'approved' => context.paniz.warning,
+      'cancelled' || 'expired' || 'returned' || 'archived' || 'rejected' => context.paniz.error,
       _ => context.paniz.primary,
     };
 

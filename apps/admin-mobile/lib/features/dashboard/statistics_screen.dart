@@ -299,6 +299,8 @@ class _SiteVisitsSection extends StatelessWidget {
           (data['daily'] is List ? data['daily'] as List : const [])
               .whereType<Map>()
               .map((row) => Map<String, dynamic>.from(row))
+              .toList()
+              .reversed
               .toList();
       final popularPages =
           (data['popularPages'] is List
@@ -307,6 +309,8 @@ class _SiteVisitsSection extends StatelessWidget {
               .whereType<Map>()
               .map((row) => Map<String, dynamic>.from(row))
               .toList();
+      final popularProducts = (data['popularProducts'] is List ? data['popularProducts'] as List : const [])
+          .whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList();
 
       return Card(
         child: Padding(
@@ -461,10 +465,10 @@ class _SiteVisitsSection extends StatelessWidget {
                             const SizedBox(width: 7),
                             Expanded(
                               child: Text(
-                                _pageTitle('${page['path'] ?? '/'}'),
+                                '${page['title'] ?? _pageTitle('${page['path'] ?? '/'}')}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                textDirection: TextDirection.ltr,
+                                textDirection: TextDirection.rtl,
                                 textAlign: TextAlign.right,
                                 style: TextStyle(
                                   fontSize: 12,
@@ -489,6 +493,29 @@ class _SiteVisitsSection extends StatelessWidget {
                         ),
                       ),
                     ),
+              const SizedBox(height: 16),
+              Text('آمار هر محصول در ۳۰ روز', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
+              const SizedBox(height: 6),
+              if (popularProducts.isEmpty)
+                Padding(padding: const EdgeInsets.symmetric(vertical: 10), child: Text('برای محصولات هنوز بازدید یا علاقه‌مندی ثبت نشده است.', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)))
+              else
+                ...popularProducts.take(10).map((product) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Container(
+                    padding: const EdgeInsets.all(11),
+                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerLow, borderRadius: BorderRadius.circular(14)),
+                    child: Row(children: [
+                      Icon(Icons.checkroom_outlined, size: 19, color: Theme.of(context).colorScheme.primary),
+                      const SizedBox(width: 9),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('${product['name'] ?? 'محصول'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                        Text('کد ${product['code'] ?? '—'}', style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      ])),
+                      const SizedBox(width: 7),
+                      Text('${persianNumber(product['pageViews'] ?? 0)} بازدید\n${persianNumber(product['favoriteCount'] ?? 0)} علاقه · ${persianNumber(product['backInStockCount'] ?? 0)} خبرم‌کن', textAlign: TextAlign.end, style: TextStyle(fontSize: 10, height: 1.6, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    ]),
+                  ),
+                )),
               const SizedBox(height: 7),
               Text(
                 'بازدیدها با شناسهٔ ناشناس شمرده می‌شوند؛ اطلاعات شخصی یا پارامترهای آدرس ذخیره نمی‌شود.',

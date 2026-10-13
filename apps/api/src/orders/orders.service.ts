@@ -23,6 +23,7 @@ type QuotedLine = {
   colorName: string;
   sizeLabel: string;
   unitPriceToman: bigint;
+  purchaseCostToman: bigint;
   productId: bigint;
   categoryId: bigint | null;
   productName: string;
@@ -62,6 +63,15 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     );
     const coupon = couponCode?.trim() ? await this.calculateCoupon(this.prisma, couponCode, lines, subtotalToman) : null;
     const discountToman = coupon?.discountToman ?? 0n;
+    const shippingMethod = await this.prisma.shippingMethod.findFirst({
+      where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+      select: { id: true, name: true, baseCostToman: true, freeOverToman: true },
+    });
+    const payableProductsToman = subtotalToman - discountToman;
+    const shippingToman = shippingMethod
+      ? shippingMethod.freeOverToman !== null && payableProductsToman >= shippingMethod.freeOverToman
+        ? 0n : shippingMethod.baseCostToman
+      : null;
 
     return {
       data: {
@@ -79,9 +89,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         subtotalToman: toSafeNumber(subtotalToman),
         discountToman: toSafeNumber(discountToman),
         couponCode: coupon?.code ?? null,
-        shippingToman: null,
-        totalToman: null,
-        shippingConfigured: false,
+        shippingToman: shippingToman === null ? null : toSafeNumber(shippingToman),
+        shippingLabel: shippingMethod?.name ?? null,
+        shippingConfigured: shippingMethod !== null,
+        totalToman: shippingToman === null ? null : toSafeNumber(payableProductsToman + shippingToman),
         paymentConfigured: Boolean(process.env.PAYMENT_PROVIDER && process.env.PAYMENT_SECRET),
       },
     };
@@ -121,6 +132,14 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           ? await this.calculateCoupon(tx, input.couponCode, lines, subtotalToman, customerId)
           : null;
         const discountToman = coupon?.discountToman ?? 0n;
+        const shippingMethod = await tx.shippingMethod.findFirst({
+          where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+          select: { id: true, baseCostToman: true, freeOverToman: true },
+        });
+        if (!shippingMethod) throw new BadRequestException({ code: "SHIPPING_NOT_CONFIGURED", message: "هزینهٔ ارسال هنوز توسط فروشگاه تنظیم نشده است." });
+        const payableProductsToman = subtotalToman - discountToman;
+        const shippingToman = shippingMethod.freeOverToman !== null && payableProductsToman >= shippingMethod.freeOverToman
+          ? 0n : shippingMethod.baseCostToman;
 
         for (const line of lines) {
           const reserved = await tx.$executeRaw`
@@ -148,10 +167,11 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
             reservationExpiresAt: expiresAt,
             customerId,
             addressId: address.id,
+            shippingMethodId: shippingMethod.id,
             subtotalToman,
             discountToman,
-            shippingToman: 0n,
-            totalToman: subtotalToman - discountToman,
+            shippingToman,
+            totalToman: payableProductsToman + shippingToman,
             couponCodeSnapshot: coupon?.code ?? null,
             recipientNameSnapshot: address.recipientName,
             recipientPhoneSnapshot: address.recipientPhone,
@@ -161,7 +181,11 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
               street: address.street,
               alley: address.alley,
               plaqueNumber: address.plaqueNumber,
+              floor: address.floor,
               unit: address.unit,
+              backupPhone: address.backupPhone,
+              latitude: address.latitude,
+              longitude: address.longitude,
               deliveryDetails: address.deliveryDetails,
               addressLine: address.addressLine,
               postalCode: address.postalCode,
@@ -176,6 +200,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                 colorNameSnapshot: line.colorName,
                 sizeLabelSnapshot: line.sizeLabel,
                 unitPriceToman: line.unitPriceToman,
+                purchaseCostToman: line.purchaseCostToman,
                 quantity: line.quantity,
                 lineTotalToman: line.unitPriceToman * BigInt(line.quantity),
               })),
@@ -320,7 +345,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
             },
           },
         },
-      include: { product: { select: { id: true, name: true, categoryId: true } } },
+        include: { product: { select: { id: true, name: true, categoryId: true, purchaseCostToman: true } } },
     });
 
     if (variants.length !== requested.size) {
@@ -349,6 +374,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         productId: variant.product.id,
         categoryId: variant.product.categoryId,
         productName: variant.product.name,
+        purchaseCostToman: variant.product.purchaseCostToman,
       };
     });
   }
@@ -466,6 +492,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     status: string;
     paymentStatus: string;
     totalToman: bigint;
+    shippingToman: bigint;
+    shippingMethodId?: bigint | null;
     reservationExpiresAt: Date | null;
   }) {
     return {
@@ -474,8 +502,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         status: order.status,
         paymentStatus: order.paymentStatus,
         totalToman: toSafeNumber(order.totalToman),
+        shippingToman: toSafeNumber(order.shippingToman),
+        shippingConfigured: order.shippingMethodId !== null && order.shippingMethodId !== undefined,
         reservationExpiresAt: order.reservationExpiresAt?.toISOString() ?? null,
-        shippingConfigured: false,
         paymentConfigured: Boolean(process.env.PAYMENT_PROVIDER && process.env.PAYMENT_SECRET),
       },
     };

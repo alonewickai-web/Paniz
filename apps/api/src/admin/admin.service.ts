@@ -22,6 +22,7 @@ import { UpdateAdminProductImageDto } from "./dto/update-admin-product-image.dto
 import { UpdateAdminVariantDto } from "./dto/update-admin-variant.dto";
 import { UpdateAdminOrderDto } from "./dto/update-admin-order.dto";
 import { productColorKey, resolveProductColorHex, resolveProductColorName } from "../catalog/product-color";
+import { WebPushService } from "../push/web-push.service";
 
 const statusTransitions: Record<string, readonly string[]> = {
   pending_payment: ["cancelled"],
@@ -35,7 +36,7 @@ const IRAN_UTC_OFFSET_MINUTES = 210;
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly push: WebPushService) {}
 
   async dashboard(admin: AuthenticatedAdmin) {
 
@@ -192,7 +193,7 @@ export class AdminService {
     };
   }
 
-  async listProducts(query: ListAdminProductsQuery, exactId?: bigint) {
+  async listProducts(query: ListAdminProductsQuery, exactId?: bigint, admin?: AuthenticatedAdmin) {
     const where: Prisma.ProductWhereInput = {
       ...(exactId ? { id: exactId } : {}),
       ...(query.status === "archived"
@@ -233,6 +234,7 @@ export class AdminService {
         description: product.description,
         material: product.material,
         careInstructions: product.careInstructions,
+        purchaseCostToman: admin && hasAdminPermission(admin, "reports.financial") ? toSafeNumber(product.purchaseCostToman) : null,
         sizeGuide: product.sizeGuide,
         seoTitle: product.seoTitle,
         seoDescription: product.seoDescription,
@@ -267,7 +269,7 @@ export class AdminService {
     validateVariants(input.variants);
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const created = await this.prisma.$transaction(async (tx) => {
         const category = await tx.category.findFirst({ where: { id: categoryId, isActive: true } });
         if (!category) throw new NotFoundException({ code: "CATEGORY_NOT_FOUND", message: "دسته‌بندی فعال پیدا نشد" });
         const product = await tx.product.create({
@@ -279,6 +281,7 @@ export class AdminService {
             description: input.description?.trim() || null,
             material: input.material?.trim() || null,
             careInstructions: input.careInstructions?.trim() || null,
+            purchaseCostToman: BigInt(input.purchaseCostToman ?? "0"),
             status: input.status,
             publishedAt: input.status === "published" ? new Date() : null,
             images: {
@@ -345,6 +348,10 @@ export class AdminService {
         });
         return { data: { id: product.id.toString(), slug: updatedProduct.slug, status: updatedProduct.status, sku: variants[0]?.sku ?? productCode } };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      if (input.status === "published") {
+        await this.push.notifyMarketingCustomers("محصول تازه در پانیذ", `محصول «${input.name.trim()}» به فروشگاه اضافه شد.`, `/products/${created.data.slug}`);
+      }
+      return created;
     } catch (error) {
       if (error instanceof HttpException) throw error;
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -383,6 +390,10 @@ export class AdminService {
     if (input.description !== undefined) data.description = input.description.trim() || null;
     if (input.material !== undefined) data.material = input.material.trim() || null;
     if (input.careInstructions !== undefined) data.careInstructions = input.careInstructions.trim() || null;
+    if (input.purchaseCostToman !== undefined) {
+      requireAdminPermission(admin, "reports.financial");
+      data.purchaseCostToman = BigInt(input.purchaseCostToman);
+    }
     if (input.seoTitle !== undefined) data.seoTitle = input.seoTitle.trim() || null;
     if (input.seoDescription !== undefined) data.seoDescription = input.seoDescription.trim() || null;
     if (input.sizeGuide !== undefined) {
@@ -408,6 +419,9 @@ export class AdminService {
         });
         return product;
       });
+      if (input.status === "published" && before.status !== "published") {
+        await this.push.notifyMarketingCustomers("محصول تازه در پانیذ", `محصول «${updated.name}» به فروشگاه اضافه شد.`, `/products/${updated.slug}`);
+      }
       return { data: { id: updated.id.toString(), slug: updated.slug, status: updated.status } };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -632,7 +646,7 @@ export class AdminService {
     }
     const variantId = parseId(rawVariantId, "شناسهٔ تنوع کالا");
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const variant = await tx.productVariant.findUnique({
         where: { id: variantId },
         include: { product: { select: { name: true } } },
@@ -688,9 +702,15 @@ export class AdminService {
           stockQuantity: updated.stockQuantity,
           reservedQuantity: updated.reservedQuantity,
           availableQuantity: Math.max(0, updated.stockQuantity - updated.reservedQuantity),
+          productName: variant.product.name,
         },
       };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    if (input.delta > 0 && result.data.availableQuantity > 0) {
+      await this.push.notifyVariantSubscribers(variantId, result.data.productName);
+    }
+    const { productName: _productName, ...publicData } = result.data;
+    return { data: publicData };
   }
 
   async updateVariant(admin: AuthenticatedAdmin, rawVariantId: string, input: UpdateAdminVariantDto) {
@@ -802,7 +822,7 @@ export class AdminService {
     if (input.status === "cancelled") requireAdminPermission(admin, "orders.cancel");
     if (input.status === "returned") requireAdminPermission(admin, "orders.refund");
     const orderId = parseId(rawOrderId, "شناسهٔ سفارش");
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: orderId },
         include: { items: { select: { variantId: true, quantity: true } } },
@@ -890,13 +910,23 @@ export class AdminService {
           },
         },
       });
-      return { data: { orderNumber: order.orderNumber, status: input.status } };
+      return { customerId: order.customerId, orderNumber: order.orderNumber, status: input.status, trackingCode: input.status === "shipped" ? input.trackingCode!.trim() : null };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    if (result.customerId !== null) {
+      const statusText: Record<string, string> = {
+        confirmed: "سفارش تأیید شد", preparing: "سفارش در حال آماده‌سازی است",
+        shipped: "سفارش به پست تحویل شد", delivered: "سفارش تحویل داده شد",
+        cancelled: "سفارش لغو شد", returned: "سفارش مرجوع شد",
+      };
+      const tracking = result.trackingCode ? ` کد رهگیری: ${result.trackingCode}` : "";
+      await this.push.notifyCustomer(result.customerId, statusText[result.status] ?? "وضعیت سفارش تغییر کرد", `سفارش ${result.orderNumber}${tracking}`, "/account#orders");
+    }
+    return { data: { orderNumber: result.orderNumber, status: result.status } };
   }
 
   async productDetail(admin: AuthenticatedAdmin, idText: string) {
     requireAdminPermission(admin, "products.view");
-    const result = await this.listProducts({ page: 1, pageSize: 1 } as ListAdminProductsQuery, parseId(idText, "شناسهٔ محصول"));
+    const result = await this.listProducts({ page: 1, pageSize: 1 } as ListAdminProductsQuery, parseId(idText, "شناسهٔ محصول"), admin);
     if (!result.data.length) throw new NotFoundException({ code: "PRODUCT_NOT_FOUND", message: "محصول پیدا نشد یا بایگانی شده است." });
     return { data: result.data[0] };
   }

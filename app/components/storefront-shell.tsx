@@ -10,8 +10,11 @@ import { ProductSearchAutocomplete } from "./product-search-autocomplete";
 
 export function StorefrontHeader() {
   const { cart, favorites } = useStorefront();
+  const pathname = usePathname();
   const count = cart.reduce((total, line) => total + line.quantity, 0);
   const [categoryLinks, setCategoryLinks] = useState<{ name: string; slug: string }[]>([]);
+  const [logoPath, setLogoPath] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -26,13 +29,31 @@ export function StorefrontHeader() {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    const updateCategory = () => setActiveCategory(new URLSearchParams(window.location.search).get("category") ?? "");
+    updateCategory();
+    window.addEventListener("popstate", updateCategory);
+    return () => window.removeEventListener("popstate", updateCategory);
+  }, [pathname]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch(`${apiBaseUrl()}/storefront/config`, { cache: "no-store", signal: controller.signal })
+      .then((response) => response.ok ? response.json() as Promise<{ data?: { logoPath?: string | null } }> : null)
+      .then((payload) => { if (!controller.signal.aborted && payload?.data) setLogoPath(payload.data.logoPath || null); })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+
+  const logoUrl = logoPath ? new URL(logoPath, new URL(apiBaseUrl()).origin).toString() : null;
+
   return (
     <>
       <div className="announcement-bar">انتخاب‌های دوست‌داشتنی برای روزهای پیشِ رو</div>
       <header className="site-header">
         <div className="header-main page-shell">
           <Link className="brand" href="/" aria-label="صفحهٔ اصلی پانیذ">
-            <span className="brand-mark">پ</span><span className="brand-word">پانیذ</span>
+            {logoUrl ? <img className="brand-image" src={logoUrl} alt="" /> : <span className="brand-mark">پ</span>}<span className="brand-word">پانیذ</span>
           </Link>
           <ProductSearchAutocomplete id="store-search" wrapperClassName="header-search-autocomplete" />
           <div className="header-actions">
@@ -44,15 +65,15 @@ export function StorefrontHeader() {
           </div>
         </div>
         <nav className="desktop-nav page-shell" aria-label="ناوبری اصلی">
-          <Link className="nav-link" href="/">خانه</Link>
-          <Link className="nav-link" href="/products">همهٔ محصولات</Link>
+          <Link className={`nav-link${pathname === "/" ? " active" : ""}`} href="/">خانه</Link>
+          <Link className={`nav-link${pathname.startsWith("/products") && !activeCategory ? " active" : ""}`} href="/products" onClick={() => setActiveCategory("")}>همهٔ محصولات</Link>
           {(categoryLinks.length ? categoryLinks : [
             { name: "لباس راحتی", slug: "loungewear" },
             { name: "ست ورزشی", slug: "sportswear" },
             { name: "مانتو", slug: "coats" },
             { name: "تیشرت و بلوز", slug: "tops" },
-          ]).slice(0, 5).map((category) => <Link className="nav-link" href={`/products?category=${encodeURIComponent(category.slug)}`} key={category.slug}>{category.name}</Link>)}
-          <Link className="nav-link nav-help" href="/help/faq">راهنمای خرید</Link>
+          ]).slice(0, 5).map((category) => <Link className={`nav-link${pathname.startsWith("/products") && activeCategory === category.slug ? " active" : ""}`} href={`/products?category=${encodeURIComponent(category.slug)}`} onClick={() => setActiveCategory(category.slug)} key={category.slug}>{category.name}</Link>)}
+          <Link className={`nav-link nav-help${pathname.startsWith("/help") ? " active" : ""}`} href="/help/faq">راهنمای خرید</Link>
         </nav>
       </header>
     </>

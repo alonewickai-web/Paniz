@@ -69,7 +69,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       });
       await ref.read(adminApiProvider).uploadProfileAvatar(bytes, image.name);
       await ref.read(authProvider.notifier).refreshIdentity();
-      if (mounted) showAppMessage(context, 'تصویر پروفایل ذخیره شد.');
+      if (mounted) {
+        showAppMessage(context, 'تصویر پروفایل ذخیره شد.');
+        Navigator.of(context).maybePop();
+      }
     } catch (error) {
       if (mounted) setState(() => _error = AdminApi.friendlyError(error));
     } finally {
@@ -89,7 +92,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         'phone': _phone.text.trim().isEmpty ? null : _phone.text.trim(),
       });
       await ref.read(authProvider.notifier).refreshIdentity();
-      if (mounted) showAppMessage(context, 'اطلاعات حساب ذخیره شد.');
+      if (mounted) {
+        showAppMessage(context, 'اطلاعات حساب ذخیره شد.');
+        Navigator.of(context).maybePop();
+      }
     } catch (error) {
       if (mounted) setState(() => _error = AdminApi.friendlyError(error));
     } finally {

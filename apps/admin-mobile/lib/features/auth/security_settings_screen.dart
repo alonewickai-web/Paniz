@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/admin_api.dart';
 import '../../core/providers.dart';
+import '../../core/ui_helpers.dart';
 
 class SecuritySettingsScreen extends ConsumerStatefulWidget {
   const SecuritySettingsScreen({super.key, required this.admin});
@@ -165,6 +166,33 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
         title: Text('تأیید دومرحله‌ای'),
         subtitle: Text('فعالسازی TOTP هنوز به API و اپ متصل نشده است.'),
       )),
+      Card(child: ref.watch(biometricEnabledProvider).when(
+        loading: () => const ListTile(leading: Icon(Icons.fingerprint_rounded), title: Text('ورود با اثر انگشت'), trailing: SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))),
+        error: (_, __) => const ListTile(leading: Icon(Icons.fingerprint_rounded), title: Text('ورود با اثر انگشت')),
+        data: (enabled) => SwitchListTile.adaptive(
+          secondary: Icon(Icons.fingerprint_rounded, color: Theme.of(context).colorScheme.primary),
+          title: const Text('ورود با اثر انگشت'),
+          subtitle: const Text('هنگام بازشدن برنامه از هویت دستگاه استفاده می‌شود.'),
+          value: enabled,
+          onChanged: _busy ? null : (value) async {
+            setState(() { _busy = true; _error = null; });
+            try {
+              final active = await ref.read(authProvider.notifier).setBiometricsEnabled(value);
+              ref.invalidate(biometricEnabledProvider);
+              if (!value || active) {
+                if (mounted) showAppMessage(context, value ? 'ورود با اثر انگشت فعال شد.' : 'ورود با اثر انگشت غیرفعال شد.');
+              } else if (mounted) {
+                setState(() => _error = 'تأیید اثر انگشت کامل نشد.');
+              }
+            } catch (error) {
+              if (mounted) setState(() => _error = AdminApi.friendlyError(error));
+            } finally {
+              if (mounted) setState(() => _busy = false);
+            }
+          },
+        ),
+      )),
+      if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
     ],
   );
 }

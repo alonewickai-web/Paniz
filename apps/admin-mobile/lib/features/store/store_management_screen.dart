@@ -18,10 +18,24 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
   bool _saving = false;
   List<String>? _sectionOrderOverride;
 
-  static const _tabs = ['قالب سایت', 'دسته‌ها', 'بنرها', 'چیدمان'];
+  final _shippingCost = TextEditingController();
+  final _freeShippingThreshold = TextEditingController();
+  bool _shippingInitialized = false;
+  bool _alwaysFree = false;
+  bool _freeThresholdEnabled = false;
+
+  @override
+  void dispose() {
+    _shippingCost.dispose();
+    _freeShippingThreshold.dispose();
+    super.dispose();
+  }
+
+  static const _tabs = ['قالب سایت', 'دسته‌ها', 'بنرها', 'چیدمان', 'ارسال'];
 
   Future<void> _refresh() async {
     _sectionOrderOverride = null;
+    _shippingInitialized = false;
     ref.invalidate(storeConfigurationProvider);
   }
 
@@ -62,6 +76,7 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
             if (_tab == 1) _categoriesPanel(data),
             if (_tab == 2) _bannersPanel(data),
             if (_tab == 3) _sectionsPanel(data),
+            if (_tab == 4) _shippingPanel(data),
           ]),
         ),
       )),
@@ -89,6 +104,17 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
     ];
     final current = '${data['theme'] ?? 'rose'}';
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      sectionTitle('نشان فروشگاه'),
+      const Padding(padding: EdgeInsets.only(top: 4, bottom: 10), child: Text('تصویر نشان در سربرگ سایت و کنار منوی برنامهٔ مدیریت نمایش داده می‌شود.', style: TextStyle(color: Color(0xFF74686C), fontSize: 12))),
+      AdminImagePickerField(
+        label: 'تصویر لوگوی پانیذ',
+        aspectRatio: 1,
+        imagePath: data['logoPath'] as String?,
+        onChanged: (path) => _run(() async {
+          await ref.read(adminApiProvider).updateStoreLogo(path);
+        }, path == null ? 'نشان فروشگاه پاک شد' : 'نشان فروشگاه ذخیره شد'),
+      ),
+      const SizedBox(height: 18),
       sectionTitle('قالب‌های آمادهٔ سایت'),
       const Padding(
         padding: EdgeInsets.only(top: 4, bottom: 14),
@@ -167,6 +193,70 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
           ));
         }).toList());
       }),
+    ]);
+  }
+
+  Widget _shippingPanel(JsonMap data) {
+    final shipping = data['shipping'] is Map
+        ? Map<String, dynamic>.from(data['shipping'] as Map)
+        : <String, dynamic>{};
+    if (!_shippingInitialized) {
+      _shippingCost.text = _digits('${shipping['baseCostToman'] ?? 0}');
+      _freeShippingThreshold.text = _digits('${shipping['freeOverToman'] ?? ''}');
+      _alwaysFree = shipping['baseCostToman'] == 0 && shipping['id'] != null;
+      _freeThresholdEnabled = shipping['freeOverToman'] != null;
+      _shippingInitialized = true;
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      sectionTitle('هزینهٔ ارسال و پست'),
+      const Padding(padding: EdgeInsets.only(top: 4, bottom: 12), child: Text('مبلغ ارسال در فاکتور مشتری نشان داده می‌شود. اگر ارسال رایگان باشد نیز این موضوع در فاکتور به‌روشنی نوشته می‌شود.', style: TextStyle(color: Color(0xFF74686C), fontSize: 12, height: 1.6))),
+      Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        TextField(
+          controller: _shippingCost,
+          enabled: !_alwaysFree,
+          keyboardType: TextInputType.number,
+          textDirection: TextDirection.ltr,
+          decoration: const InputDecoration(labelText: 'هزینهٔ پست', suffixText: 'تومان', helperText: 'مبلغ با جداکنندهٔ سه‌رقمی نمایش داده می‌شود.'),
+          onChanged: (value) {
+            final formatted = _groupDigits(value);
+            if (formatted != value) {
+              _shippingCost.value = TextEditingValue(text: formatted, selection: TextSelection.collapsed(offset: formatted.length));
+            }
+          },
+        ),
+        SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, title: const Text('ارسال همهٔ سفارش‌ها رایگان باشد'), value: _alwaysFree, onChanged: (value) => setState(() => _alwaysFree = value)),
+        SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, title: const Text('ارسال بالای یک مبلغ رایگان شود'), value: _freeThresholdEnabled, onChanged: (value) => setState(() => _freeThresholdEnabled = value)),
+        if (_freeThresholdEnabled && !_alwaysFree) ...[
+          const SizedBox(height: 6),
+          TextField(
+            controller: _freeShippingThreshold,
+            keyboardType: TextInputType.number,
+            textDirection: TextDirection.ltr,
+            decoration: const InputDecoration(labelText: 'حداقل مبلغ سبد برای ارسال رایگان', suffixText: 'تومان'),
+            onChanged: (value) {
+              final formatted = _groupDigits(value);
+              if (formatted != value) _freeShippingThreshold.value = TextEditingValue(text: formatted, selection: TextSelection.collapsed(offset: formatted.length));
+            },
+          ),
+        ],
+        const SizedBox(height: 14),
+        FilledButton.icon(
+          onPressed: _saving ? null : () => _run(() async {
+            final cost = _digits(_shippingCost.text);
+            final threshold = _digits(_freeShippingThreshold.text);
+            if (!_alwaysFree && cost.isEmpty) throw const AdminApiException('هزینهٔ پست را وارد کن.');
+            if (_freeThresholdEnabled && !_alwaysFree && threshold.isEmpty) throw const AdminApiException('حد خرید برای ارسال رایگان را وارد کن.');
+            await ref.read(adminApiProvider).updateShippingSettings({
+              'name': 'ارسال پستی', 'baseCostToman': cost.isEmpty ? '0' : cost,
+              'alwaysFree': _alwaysFree, 'freeShippingEnabled': _freeThresholdEnabled && !_alwaysFree,
+              if (_freeThresholdEnabled && !_alwaysFree) 'freeOverToman': threshold,
+            });
+            _shippingInitialized = false;
+          }, 'تنظیمات ارسال ذخیره شد'),
+          icon: const Icon(Icons.save_outlined),
+          label: const Text('ذخیرهٔ هزینهٔ ارسال'),
+        ),
+      ]))),
     ]);
   }
 
@@ -1264,3 +1354,22 @@ Widget _textField(
 List<JsonMap> _maps(Object? value) => value is List ? value.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList() : const [];
 int _integer(Object? value) => value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 String? _optionalPath(Object? value) { final path = '$value'.trim(); return path.isEmpty || path == 'null' ? null : path; }
+String _digits(String value) {
+  const persian = '۰۱۲۳۴۵۶۷۸۹';
+  const arabic = '٠١٢٣٤٥٦٧٨٩';
+  return value.replaceAllMapped(RegExp('[۰-۹٠-٩]'), (match) {
+    final digit = match[0]!;
+    final index = persian.indexOf(digit);
+    return '${index >= 0 ? index : arabic.indexOf(digit)}';
+  }).replaceAll(RegExp(r'[^0-9]'), '');
+}
+String _groupDigits(String value) {
+  final digits = _digits(value);
+  if (digits.isEmpty) return '';
+  final grouped = StringBuffer();
+  for (var index = 0; index < digits.length; index++) {
+    if (index > 0 && (digits.length - index) % 3 == 0) grouped.write(',');
+    grouped.write(digits[index]);
+  }
+  return grouped.toString();
+}

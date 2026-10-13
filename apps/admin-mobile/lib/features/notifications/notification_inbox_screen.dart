@@ -11,10 +11,6 @@ class NotificationInboxScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final admin = ref.watch(authProvider).value;
-    if (admin?.role != 'owner') {
-      return const Center(child: Text('این بخش فقط برای سوپرادمین در دسترس است.'));
-    }
     final notifications = ref.watch(adminNotificationsProvider);
     return notifications.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -110,6 +106,7 @@ class _NotificationTile extends ConsumerWidget {
     'new_order' => Icons.receipt_long_outlined,
     'rubika_message' => Icons.forum_outlined,
     'customer_message' => Icons.mark_unread_chat_alt_outlined,
+    'app_update' => Icons.system_update_alt_rounded,
     _ => Icons.notifications_none_rounded,
   };
 

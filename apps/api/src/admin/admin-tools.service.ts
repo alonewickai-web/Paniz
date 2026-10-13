@@ -21,6 +21,7 @@ import { AuthenticatedAdmin } from "../admin-auth/admin-session.guard";
 import { PrismaService } from "../database/prisma.service";
 import { RubikaBotService } from "../integrations/rubika/rubika.service";
 import { uploadRoot } from "../uploads/upload-storage";
+import { WebPushService } from "../push/web-push.service";
 
 const execFile = promisify(execFileCallback);
 const MAX_AUDIENCE = 20_000;
@@ -64,6 +65,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly rubika: RubikaBotService,
+    private readonly push: WebPushService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -164,10 +166,15 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
       startsAt, endsAt, isActive: input.isActive !== false,
     };
     try {
+      const previous = idText === null ? null : await this.prisma.coupon.findUnique({ where: { id: parseId(idText, "coupon id") }, select: { isActive: true } });
       const coupon = idText === null
         ? await this.prisma.coupon.create({ data })
         : await this.prisma.coupon.update({ where: { id: parseId(idText, "coupon id") }, data });
       await this.audit(admin, idText ? "coupon.updated" : "coupon.created", "coupon", coupon.id, { code });
+      if (coupon.isActive && (!previous || !previous.isActive)) {
+        const value = discountType === "percent" ? `${discountValue}%` : `${discountValue.toLocaleString("fa-IR")} تومان`;
+        await this.push.notifyMarketingCustomers("تخفیف تازه در پانیذ", `کد ${coupon.code} · ${value} تخفیف`, "/products");
+      }
       return { data: toCoupon(coupon) };
     } catch (error) {
       if (isUniqueError(error)) throw new ConflictException({ code: "COUPON_CODE_EXISTS", message: "That coupon code already exists." });

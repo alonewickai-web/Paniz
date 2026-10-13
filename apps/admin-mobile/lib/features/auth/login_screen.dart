@@ -110,6 +110,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         const SizedBox(height: 14),
                         Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error), textAlign: TextAlign.center),
                       ],
+                      if (ref.watch(biometricEnabledProvider).asData?.value == true) ...[
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: _busy ? null : () async {
+                            setState(() { _busy = true; _error = null; });
+                            try {
+                              final unlocked = await ref.read(authProvider.notifier).unlockWithBiometrics();
+                              if (!unlocked && mounted) setState(() => _error = 'ورود با اثر انگشت انجام نشد. با نام کاربری و گذرواژه وارد شو.');
+                            } catch (error) {
+                              if (mounted) setState(() => _error = AdminApi.friendlyError(error));
+                            } finally {
+                              if (mounted) setState(() => _busy = false);
+                            }
+                          },
+                          icon: const Icon(Icons.fingerprint_rounded),
+                          label: const Text('ورود با اثر انگشت'),
+                        ),
+                      ],
                       const SizedBox(height: 20),
                       FilledButton.icon(
                         onPressed: _busy ? null : _submit,

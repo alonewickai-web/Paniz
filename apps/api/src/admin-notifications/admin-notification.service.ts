@@ -1,10 +1,10 @@
-import { ForbiddenException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../database/prisma.service";
 import { AuthenticatedAdmin } from "../admin-auth/admin-session.guard";
 
 export type AdminNotificationInput = {
-  type: "new_order" | "rubika_message" | "customer_message";
+  type: "new_order" | "rubika_message" | "customer_message" | "app_update" | "admin_message";
   title: string;
   body: string;
   entityType?: string;
@@ -45,8 +45,28 @@ export class AdminNotificationService {
     await this.prisma.$transaction((tx) => this.createForOwners(tx, input));
   }
 
+  async notifyAdmins(input: AdminNotificationInput) {
+    await this.prisma.$transaction(async (tx) => {
+      const admins = await tx.adminUser.findMany({ where: { isActive: true }, select: { id: true } });
+      if (!admins.length) return;
+      await tx.adminNotification.createMany({ data: admins.map((admin) => ({
+        adminId: admin.id, type: input.type, title: input.title, body: input.body.slice(0, 500),
+        entityType: input.entityType ?? null, entityId: input.entityId ?? null, externalRef: input.externalRef?.slice(0, 128) ?? null,
+        dedupeKey: input.dedupeKey ? `${input.dedupeKey}:admin:${admin.id}`.slice(0, 160) : null,
+      })), skipDuplicates: true });
+    });
+  }
+
+  async notifyAdmin(adminId: bigint, input: AdminNotificationInput) {
+    await this.prisma.adminNotification.create({ data: {
+      adminId, type: input.type, title: input.title, body: input.body.slice(0, 500),
+      entityType: input.entityType ?? null, entityId: input.entityId ?? null,
+      externalRef: input.externalRef?.slice(0, 128) ?? null,
+      dedupeKey: input.dedupeKey ? `${input.dedupeKey}:admin:${adminId}`.slice(0, 160) : null,
+    } });
+  }
+
   async list(admin: AuthenticatedAdmin, pageValue?: string, pageSizeValue?: string) {
-    this.requireOwner(admin);
     const page = boundedInteger(pageValue, 1, 1_000_000, 1);
     const pageSize = boundedInteger(pageSizeValue, 1, 50, 30);
     const where = { adminId: admin.id };
@@ -68,7 +88,6 @@ export class AdminNotificationService {
   }
 
   async markRead(admin: AuthenticatedAdmin, value: string) {
-    this.requireOwner(admin);
     const id = parseId(value);
     const result = await this.prisma.adminNotification.updateMany({
       where: { id, adminId: admin.id, readAt: null },
@@ -78,7 +97,6 @@ export class AdminNotificationService {
   }
 
   async markAllRead(admin: AuthenticatedAdmin) {
-    this.requireOwner(admin);
     const result = await this.prisma.adminNotification.updateMany({
       where: { adminId: admin.id, readAt: null },
       data: { readAt: new Date() },
@@ -86,14 +104,6 @@ export class AdminNotificationService {
     return { data: { updated: result.count } };
   }
 
-  private requireOwner(admin: AuthenticatedAdmin) {
-    if (admin.role !== "owner") {
-      throw new ForbiddenException({
-        code: "SUPER_ADMIN_REQUIRED",
-        message: "اعلان‌های سیستمی فقط برای سوپرادمین در دسترس است.",
-      });
-    }
-  }
 }
 
 function boundedInteger(value: string | undefined, min: number, max: number, fallback: number) {
@@ -104,7 +114,7 @@ function boundedInteger(value: string | undefined, min: number, max: number, fal
 
 function parseId(value: string): bigint {
   if (!/^\d{1,20}$/.test(value) || BigInt(value) < 1n) {
-    throw new ForbiddenException({ code: "NOTIFICATION_NOT_FOUND", message: "اعلان پیدا نشد." });
+    throw new BadRequestException({ code: "NOTIFICATION_NOT_FOUND", message: "اعلان پیدا نشد." });
   }
   return BigInt(value);
 }

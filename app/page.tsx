@@ -347,6 +347,7 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const galleryTouchStart = useRef<{ x: number; y: number } | null>(null);
+  const bannerPointerStart = useRef<number | null>(null);
   const bannerIndexRef = useRef(0);
   const galleryIndexRef = useRef(0);
 
@@ -608,6 +609,24 @@ export default function Home() {
     moveSelectedGallery(dx < 0 ? 1 : -1);
   }
 
+  function showBanner(index: number) {
+    const banners = storefrontConfig.banners;
+    if (banners.length < 2) return;
+    const currentIndex = bannerIndexRef.current % banners.length;
+    const nextIndex = (index + banners.length) % banners.length;
+    if (nextIndex === currentIndex) return;
+    setOutgoingBanner(banners[currentIndex]);
+    bannerIndexRef.current = nextIndex;
+    setBannerIndex(nextIndex);
+  }
+
+  function finishBannerSwipe(clientX: number) {
+    const start = bannerPointerStart.current;
+    bannerPointerStart.current = null;
+    if (start === null || Math.abs(clientX - start) < 44) return;
+    showBanner(bannerIndexRef.current + (clientX < start ? 1 : -1));
+  }
+
   function addToCart(product: Product, size: string, color: string) {
     const variant = product.variants?.find((item) => item.color.name === color && item.size === size);
     if (product.available === false || (product.variants && (!variant || variant.availableQuantity < 1))) {
@@ -769,7 +788,7 @@ export default function Home() {
               <span className="hero-proof-stars" aria-label="۵ ستاره"><Star /><Star /><Star /><Star /><Star /></span>
             </div>
           </div>
-          <div className="hero-visual">
+          <div className="hero-visual" aria-label={storefrontConfig.banners.length > 1 ? `بنر ${new Intl.NumberFormat("fa-IR").format(bannerIndex + 1)} از ${new Intl.NumberFormat("fa-IR").format(storefrontConfig.banners.length)}` : "بنر فروشگاه"} onPointerDown={(event) => { bannerPointerStart.current = event.clientX; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerUp={(event) => finishBannerSwipe(event.clientX)} onPointerCancel={() => { bannerPointerStart.current = null; }}>
             <div className="hero-image-wrap">
               <PageFlipImage
                 src={activeBanner?.imagePath || "/images/paniz-sage.webp"}
@@ -781,6 +800,10 @@ export default function Home() {
                 className="hero-image"
               />
             </div>
+            {storefrontConfig.banners.length > 1 && <div className="hero-pagination" aria-label="صفحه‌های بنر">
+              <span aria-live="polite">{new Intl.NumberFormat("fa-IR").format((bannerIndex % storefrontConfig.banners.length) + 1)} / {new Intl.NumberFormat("fa-IR").format(storefrontConfig.banners.length)}</span>
+              <div>{storefrontConfig.banners.map((banner, index) => <button key={banner.id} type="button" aria-label={`رفتن به بنر ${new Intl.NumberFormat("fa-IR").format(index + 1)}`} aria-current={index === bannerIndex % storefrontConfig.banners.length ? "true" : undefined} className={index === bannerIndex % storefrontConfig.banners.length ? "is-active" : ""} onClick={() => showBanner(index)} />)}</div>
+            </div>}
             <div className="hero-sticker"><span>{activeBanner?.stickerLabel || "حس خوب"}</span><strong>{activeBanner?.stickerText || <>از همین‌جا<br />شروع می‌شه</>}</strong><Sparkles size={18} /></div>
             <div className="hero-tag"><span className="tag-line" /><span>برای روزهای خودت</span></div>
             <div className="hero-orbit" aria-hidden="true" />

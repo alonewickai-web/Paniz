@@ -17,7 +17,7 @@ import { VerifyPhoneCodeDto } from "./dto/verify-phone-code.dto";
 import { CustomerSmsService } from "./sms.service";
 
 const CODE_TTL_MINUTES = 5;
-const RESEND_DELAY_SECONDS = 60;
+const RESEND_DELAY_SECONDS = 180;
 const MAX_DAILY_CODES = 10;
 const MAX_CODE_ATTEMPTS = 5;
 const CUSTOMER_SESSION_DAYS = 30;
@@ -36,7 +36,7 @@ export class CustomerAuthService {
     const phone = normalizeIranPhone(input.phone);
     const now = new Date();
     const recent = await this.prisma.otpRequest.findFirst({
-      where: { phone, createdAt: { gt: new Date(now.getTime() - RESEND_DELAY_SECONDS * 1000) } },
+      where: { phone, status: { not: "failed" }, createdAt: { gt: new Date(now.getTime() - RESEND_DELAY_SECONDS * 1000) } },
       orderBy: { createdAt: "desc" },
     });
     if (recent) {
@@ -77,11 +77,15 @@ export class CustomerAuthService {
       throw error;
     }
 
+    const sentAt = new Date();
+    await this.prisma.otpRequest.update({ where: { id: request.id }, data: { createdAt: sentAt } });
+
     return {
       data: {
         phone,
         expiresAt: expiresAt.toISOString(),
         retryAfterSeconds: RESEND_DELAY_SECONDS,
+        sentAt: sentAt.toISOString(),
         ...(delivery.developmentCode ? { developmentCode: delivery.developmentCode } : {}),
       },
     };

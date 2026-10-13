@@ -10,12 +10,16 @@
   },
   "dependencies": {
     "@fontsource/vazirmatn": "latest",
+    "jalaali-js": "^2.0.1",
+    "leaflet": "^1.9.4",
     "lucide-react": "latest",
     "next": "latest",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "react-leaflet": "^5.0.0"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.22",
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",

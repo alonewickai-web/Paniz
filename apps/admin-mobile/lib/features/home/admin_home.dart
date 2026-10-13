@@ -5,18 +5,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/admin_api.dart';
 import '../../core/admin_avatar.dart';
+import '../../core/admin_network_image.dart';
 import '../auth/profile_screen.dart';
 import '../staff/staff_management_screen.dart';
 import '../activity/audit_log_screen.dart';
 import '../../core/paniz_theme.dart';
 import '../../core/providers.dart';
 import '../notifications/notification_inbox_screen.dart';
+import '../chat/admin_chat_screen.dart';
+import '../support/admin_support_screen.dart';
 import '../updates/app_update_screen.dart';
 import '../../core/theme_toggle.dart';
 import '../../core/ui_helpers.dart';
 import '../auth/security_settings_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../dashboard/statistics_screen.dart';
+import '../dashboard/financial_report_screen.dart';
 import '../inventory/inventory_screen.dart';
 import '../orders/orders_screen.dart';
 import '../products/products_screen.dart';
@@ -94,24 +98,22 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
   @override
   Widget build(BuildContext context) {
     final dashboard = ref.watch(dashboardProvider);
+    final storeBranding = ref.watch(publicStoreConfigurationProvider).asData?.value;
+    final storeLogoPath = storeBranding?['logoPath'] as String?;
     final newOrders = dashboard.maybeWhen(
       data: _newOrderCount,
       orElse: () => 0,
     );
-    final notifications =
-        widget.admin.role == 'owner'
-            ? ref.watch(adminNotificationsProvider)
-            : null;
+    final notifications = ref.watch(adminNotificationsProvider);
     final unreadNotifications =
-        notifications?.maybeWhen(
+        notifications.maybeWhen(
           data:
               (value) =>
                   value['unreadCount'] is num
                       ? (value['unreadCount'] as num).toInt()
                       : 0,
           orElse: () => 0,
-        ) ??
-        0;
+        );
     final connectionLabel = dashboard.when(
       data: (_) => 'اتصال برقرار است',
       loading: () => 'در حال بررسی اتصال',
@@ -137,17 +139,14 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
         titleSpacing: 0,
         title: Row(
           children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: context.paniz.primarySoft,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                Icons.checkroom_rounded,
-                color: context.paniz.primary,
-                size: 19,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: AdminNetworkImage(
+                imagePath: storeLogoPath,
+                width: 36,
+                height: 36,
+                fit: BoxFit.cover,
+                placeholderColor: context.paniz.primarySoft,
               ),
             ),
             const SizedBox(width: 10),
@@ -180,20 +179,13 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
           IconButton(
             tooltip: 'سفارش‌های نیازمند رسیدگی',
             onPressed:
-                () =>
-                    widget.admin.role == 'owner'
-                        ? _pushTool('اعلان‌ها', const NotificationInboxScreen())
-                        : setState(() => _index = 2),
+                () => _pushTool('اعلان‌ها', const NotificationInboxScreen()),
             icon: Badge(
               isLabelVisible:
-                  widget.admin.role == 'owner'
-                      ? unreadNotifications > 0
-                      : newOrders > 0,
+                  unreadNotifications > 0 || (widget.admin.role != 'owner' && newOrders > 0),
               label: Text(
                 persianNumber(
-                  widget.admin.role == 'owner'
-                      ? unreadNotifications
-                      : newOrders,
+                  unreadNotifications > 0 ? unreadNotifications : (widget.admin.role != 'owner' ? newOrders : 0),
                 ),
               ),
               backgroundColor: context.paniz.error,
@@ -301,6 +293,9 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
                 widget.admin.can('staff.activity')
                     ? () => _pushTool('گزارش فعالیت‌ها', const AuditLogScreen())
                     : null,
+            onCustomers: widget.admin.can('customers.view')
+                ? () => _pushTool('مدیریت مشتریان', const CustomerManagementScreen())
+                : null,
           ),
           widget.admin.can('products.view')
               ? const ProductsScreen()
@@ -583,6 +578,26 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
                         'گزارش فعالیت‌ها',
                         const AuditLogScreen(),
                       ),
+                ),
+                _drawerTile(
+                  'گزارش مالی',
+                  Icons.account_balance_wallet_outlined,
+                  permission: 'reports.financial',
+                  detail: 'فروش، بهای خرید و سود به ریال',
+                  onTap: () => _pushToolFromDrawer('گزارش مالی', const FinancialReportScreen()),
+                ),
+                _drawerTile(
+                  'گفت‌وگوی مدیران',
+                  Icons.forum_outlined,
+                  detail: 'پیام مستقیم و اعلان گروهی',
+                  onTap: () => _pushToolFromDrawer('گفت‌وگوی مدیران', const AdminChatScreen()),
+                ),
+                _drawerTile(
+                  'پشتیبانی و مرجوعی',
+                  Icons.support_agent_rounded,
+                  permission: 'customers.view',
+                  detail: 'پاسخ به مشتری و رسید بازپرداخت',
+                  onTap: () => _pushToolFromDrawer('پشتیبانی مشتریان', const AdminSupportScreen()),
                 ),
                 _drawerHeading('حساب و ظاهر برنامه'),
                 _drawerTile(

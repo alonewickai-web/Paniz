@@ -5,6 +5,7 @@ import { normalizeIranPhone } from "./dto/phone.dto";
 import { UpdateCustomerProfileDto } from "./dto/update-customer-profile.dto";
 import { SaveCustomerAddressDto } from "./dto/save-customer-address.dto";
 import { RubikaBotService } from "../integrations/rubika/rubika.service";
+import { isValidJalaaliDate, toJalaali } from "jalaali-js";
 
 @Injectable()
 export class CustomerService {
@@ -20,6 +21,7 @@ export class CustomerService {
         id: customer.id.toString(),
         phone: customer.phone,
         fullName: customer.fullName,
+        birthDateJalali: customer.birthDateJalali,
         email: customer.email,
         phoneVerifiedAt: customer.phoneVerifiedAt?.toISOString() ?? null,
         marketingOptIn: customer.marketingOptIn,
@@ -31,10 +33,18 @@ export class CustomerService {
   }
 
   async updateProfile(request: CustomerRequest, input: UpdateCustomerProfileDto) {
+    if (input.birthDateJalali) {
+      const [year, month, day] = input.birthDateJalali.split("-").map(Number);
+      const current = toJalaali(new Date());
+      if (!isValidJalaaliDate(year, month, day) || year > current.jy || (year === current.jy && (month > current.jm || (month === current.jm && day > current.jd)))) {
+        throw new BadRequestException({ code: "CUSTOMER_BIRTH_DATE_INVALID", message: "تاریخ تولد شمسی معتبر نیست." });
+      }
+    }
     const customer = await this.prisma.customer.update({
       where: { id: request.customer!.id },
       data: {
         fullName: input.fullName.trim(),
+        birthDateJalali: input.birthDateJalali || null,
         email: input.email?.trim() || null,
         ...(input.marketingOptIn === undefined ? {} : {
           marketingOptIn: input.marketingOptIn,
@@ -47,7 +57,7 @@ export class CustomerService {
       },
     });
     return { data: {
-      id: customer.id.toString(), phone: customer.phone, fullName: customer.fullName, email: customer.email,
+      id: customer.id.toString(), phone: customer.phone, fullName: customer.fullName, birthDateJalali: customer.birthDateJalali, email: customer.email,
       marketingOptIn: customer.marketingOptIn, rubikaMarketingOptIn: customer.rubikaMarketingOptIn,
       rubikaLinked: Boolean(customer.rubikaChatId),
     } };
@@ -141,10 +151,15 @@ export class CustomerService {
         orderNumber: true,
         status: true,
         paymentStatus: true,
+        subtotalToman: true,
+        discountToman: true,
+        shippingToman: true,
         totalToman: true,
         placedAt: true,
         reservationExpiresAt: true,
-        items: { select: { productNameSnapshot: true, colorNameSnapshot: true, sizeLabelSnapshot: true, quantity: true } },
+        items: { select: { productNameSnapshot: true, colorNameSnapshot: true, sizeLabelSnapshot: true, quantity: true, unitPriceToman: true, lineTotalToman: true } },
+        statusHistory: { where: { visibleToCustomer: true }, orderBy: { createdAt: "asc" }, select: { newStatus: true, note: true, createdAt: true } },
+        shipments: { orderBy: { createdAt: "desc" }, take: 1, select: { trackingCode: true } },
       },
     });
     return {
@@ -152,10 +167,19 @@ export class CustomerService {
         orderNumber: order.orderNumber,
         status: order.status,
         paymentStatus: order.paymentStatus,
+        subtotalToman: toSafeNumber(order.subtotalToman),
+        discountToman: toSafeNumber(order.discountToman),
+        shippingToman: toSafeNumber(order.shippingToman),
         totalToman: toSafeNumber(order.totalToman),
         placedAt: order.placedAt.toISOString(),
         reservationExpiresAt: order.reservationExpiresAt?.toISOString() ?? null,
-        items: order.items.map((item) => ({ name: item.productNameSnapshot, color: item.colorNameSnapshot, size: item.sizeLabelSnapshot, quantity: item.quantity })),
+        items: order.items.map((item) => ({
+          name: item.productNameSnapshot, color: item.colorNameSnapshot, size: item.sizeLabelSnapshot,
+          quantity: item.quantity, unitPriceToman: toSafeNumber(item.unitPriceToman), lineTotalToman: toSafeNumber(item.lineTotalToman),
+        })),
+        timeline: order.statusHistory.map((entry) => ({ status: entry.newStatus, note: entry.note, at: entry.createdAt.toISOString() })),
+        trackingCode: order.shipments[0]?.trackingCode ?? null,
+        paymentConfigured: Boolean(process.env.PAYMENT_PROVIDER && process.env.PAYMENT_SECRET),
       })),
     };
   }
@@ -165,12 +189,15 @@ function addressData(customerId: bigint, input: SaveCustomerAddressDto, isDefaul
   const street = input.street.trim();
   const alley = input.alley?.trim() || null;
   const plaqueNumber = input.plaqueNumber.trim();
+  const floor = input.floor?.trim() || null;
   const unit = input.unit?.trim() || null;
+  const backupPhone = input.backupPhone?.trim() || null;
   const deliveryDetails = input.deliveryDetails?.trim() || null;
   const addressLine = [
     street,
     alley ? `کوچه ${alley}` : null,
     `پلاک ${plaqueNumber}`,
+    floor ? `طبقه ${floor}` : null,
     unit ? `واحد ${unit}` : null,
     deliveryDetails,
   ].filter(Boolean).join("، ");
@@ -187,7 +214,11 @@ function addressData(customerId: bigint, input: SaveCustomerAddressDto, isDefaul
     street,
     alley,
     plaqueNumber,
+    floor,
     unit,
+    backupPhone,
+    latitude: input.latitude,
+    longitude: input.longitude,
     deliveryDetails,
     addressLine,
     postalCode: input.postalCode,
@@ -197,7 +228,8 @@ function addressData(customerId: bigint, input: SaveCustomerAddressDto, isDefaul
 
 function toPublicAddress(address: {
   id: bigint; title: string | null; recipientName: string; recipientPhone: string; province: string; city: string;
-  street: string | null; alley: string | null; plaqueNumber: string | null; unit: string | null;
+  street: string | null; alley: string | null; plaqueNumber: string | null; floor: string | null; unit: string | null;
+  backupPhone: string | null; latitude: number | null; longitude: number | null;
   deliveryDetails: string | null; addressLine: string; postalCode: string; isDefault: boolean;
 }) {
   return {
@@ -210,7 +242,11 @@ function toPublicAddress(address: {
     street: address.street,
     alley: address.alley,
     plaqueNumber: address.plaqueNumber,
+    floor: address.floor,
     unit: address.unit,
+    backupPhone: address.backupPhone,
+    latitude: address.latitude,
+    longitude: address.longitude,
     deliveryDetails: address.deliveryDetails,
     addressLine: address.addressLine,
     postalCode: address.postalCode,

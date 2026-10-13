@@ -117,6 +117,11 @@ export class CreateAdminProductDto {
   @MaxLength(8_000)
   careInstructions?: string;
 
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{1,15}$/)
+  purchaseCostToman?: string;
+
   @IsIn(["draft", "published"])
   status: "draft" | "published" = "draft";
 

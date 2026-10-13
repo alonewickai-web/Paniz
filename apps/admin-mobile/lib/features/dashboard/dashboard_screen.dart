@@ -16,6 +16,7 @@ class DashboardScreen extends ConsumerWidget {
     this.onSms,
     this.onRubika,
     this.onActivity,
+    this.onCustomers,
   });
   final VoidCallback? onProducts;
   final VoidCallback? onOrders;
@@ -23,6 +24,7 @@ class DashboardScreen extends ConsumerWidget {
   final VoidCallback? onSms;
   final VoidCallback? onRubika;
   final VoidCallback? onActivity;
+  final VoidCallback? onCustomers;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -151,6 +153,7 @@ class DashboardScreen extends ConsumerWidget {
                                     tint: context.paniz.lilac.withValues(
                                       alpha: .34,
                                     ),
+                                    onTap: onProducts,
                                   ),
                                 if (admin?.can('orders.view') == true)
                                   _MetricTile(
@@ -161,6 +164,7 @@ class DashboardScreen extends ConsumerWidget {
                                     tint: context.paniz.peach.withValues(
                                       alpha: .32,
                                     ),
+                                    onTap: onOrders,
                                   ),
                                 if (data['lowStockCount'] != null)
                                   _MetricTile(
@@ -173,6 +177,7 @@ class DashboardScreen extends ConsumerWidget {
                                     tint: context.paniz.coral.withValues(
                                       alpha: .3,
                                     ),
+                                    onTap: onInventory,
                                   ),
                                 if (data['customerCount'] != null)
                                   _MetricTile(
@@ -183,6 +188,7 @@ class DashboardScreen extends ConsumerWidget {
                                     tint: context.paniz.mint.withValues(
                                       alpha: .34,
                                     ),
+                                    onTap: onCustomers,
                                   ),
                               ],
                             ),
@@ -236,7 +242,7 @@ class DashboardScreen extends ConsumerWidget {
                               else
                                 ...lowStock
                                     .take(4)
-                                    .map((item) => _StockRow(item: item)),
+                                    .map((item) => _StockRow(item: item, onTap: onInventory)),
                             ],
                             if (admin?.can('orders.view') == true) ...[
                               const SizedBox(height: 22),
@@ -258,7 +264,7 @@ class DashboardScreen extends ConsumerWidget {
                               else
                                 ...recentOrders
                                     .take(5)
-                                    .map((order) => _OrderRow(order: order)),
+                                    .map((order) => _OrderRow(order: order, onTap: onOrders)),
                             ],
                             if (onActivity != null) ...[
                               const SizedBox(height: 22),
@@ -433,16 +439,19 @@ class _MetricTile extends StatelessWidget {
     required this.detail,
     required this.icon,
     required this.tint,
+    this.onTap,
   });
   final String title;
   final String value;
   final String detail;
   final IconData icon;
   final Color tint;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) => Card(
-    child: Padding(
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(onTap: onTap, child: Padding(
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -493,7 +502,7 @@ class _MetricTile extends StatelessWidget {
           ),
         ],
       ),
-    ),
+    )),
   );
 }
 
@@ -627,8 +636,9 @@ class _QuickAction extends StatelessWidget {
 }
 
 class _StockRow extends StatelessWidget {
-  const _StockRow({required this.item});
+  const _StockRow({required this.item, this.onTap});
   final JsonMap item;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -662,14 +672,16 @@ class _StockRow extends StatelessWidget {
             fontSize: 12,
           ),
         ),
+        onTap: onTap,
       ),
     ),
   );
 }
 
 class _OrderRow extends StatelessWidget {
-  const _OrderRow({required this.order});
+  const _OrderRow({required this.order, this.onTap});
   final JsonMap order;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -705,6 +717,7 @@ class _OrderRow extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
+        onTap: onTap,
       ),
     ),
   );

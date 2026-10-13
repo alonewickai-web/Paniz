@@ -11,11 +11,16 @@ import { AdminManagementController } from "./admin-management.controller";
 import { AdminManagementService } from "./admin-management.service";
 import { AdminAppReleaseController } from "./admin-app-release.controller";
 import { AdminAppReleaseService } from "./admin-app-release.service";
+import { SupportModule } from "../support/support.module";
+import { WebPushModule } from "../push/web-push.module";
+import { AdminNotificationsModule } from "../admin-notifications/admin-notifications.module";
+import { AdminChatController } from "./admin-chat.controller";
+import { AdminChatService } from "./admin-chat.service";
 
 @Module({
-  imports: [AdminAuthModule, RubikaModule],
-  controllers: [AdminController, StoreManagementController, AdminToolsController, AdminManagementController, AdminAppReleaseController],
-  providers: [AdminService, StoreManagementService, AdminToolsService, AdminManagementService, AdminAppReleaseService],
+  imports: [AdminAuthModule, RubikaModule, SupportModule, WebPushModule, AdminNotificationsModule],
+  controllers: [AdminController, StoreManagementController, AdminToolsController, AdminManagementController, AdminAppReleaseController, AdminChatController],
+  providers: [AdminService, StoreManagementService, AdminToolsService, AdminManagementService, AdminAppReleaseService, AdminChatService],
   exports: [StoreManagementService],
 })
 export class AdminModule {}

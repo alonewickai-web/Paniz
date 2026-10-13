@@ -1,22 +1,35 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ArrowLeft, Check, MapPin, Plus, ShieldCheck } from "lucide-react";
 import { StorefrontShell } from "../components/storefront-shell";
 import { apiBaseUrl, formatToman } from "../lib/catalog";
 import { CustomerApiError, customerApi, type CustomerAddress, type CustomerProfile } from "../lib/customer-api";
 import { useStorefront } from "../lib/storefront-state";
+import iranGeography from "../data/iran-geography.json";
 
-type Quote = { items: { variantId: string; productName: string; color: string; size: string; quantity: number; unitPriceToman: number; lineTotalToman: number }[]; subtotalToman: number; discountToman: number; couponCode: string | null; shippingToman: number | null; totalToman: number | null; shippingConfigured: boolean; paymentConfigured: boolean };
-type CreatedOrder = { orderNumber: string; status: string; paymentStatus: string; totalToman: number; reservationExpiresAt: string | null; shippingConfigured: boolean; paymentConfigured: boolean };
+const AddressLocationPicker = dynamic(
+  () => import("../components/address-location-picker").then((module) => module.AddressLocationPicker),
+  { ssr: false, loading: () => <div className="address-map-loading" aria-label="در حال آماده‌سازی نقشه" /> },
+);
+
+type Quote = { items: { variantId: string; productName: string; color: string; size: string; quantity: number; unitPriceToman: number; lineTotalToman: number }[]; subtotalToman: number; discountToman: number; couponCode: string | null; shippingToman: number | null; shippingLabel: string | null; totalToman: number | null; shippingConfigured: boolean; paymentConfigured: boolean };
+type CreatedOrder = { orderNumber: string; status: string; paymentStatus: string; totalToman: number; shippingToman: number; reservationExpiresAt: string | null; shippingConfigured: boolean; paymentConfigured: boolean };
 type AddressForm = {
   title: string; recipientName: string; recipientPhone: string; province: string; city: string;
-  street: string; alley: string; plaqueNumber: string; unit: string; deliveryDetails: string; postalCode: string; isDefault: boolean;
+  street: string; alley: string; plaqueNumber: string; floor: string; unit: string; backupPhone: string;
+  latitude: number | null; longitude: number | null; deliveryDetails: string; postalCode: string; isDefault: boolean;
 };
 
-const provinces = ["آذربایجان شرقی", "آذربایجان غربی", "اردبیل", "اصفهان", "البرز", "ایلام", "بوشهر", "تهران", "چهارمحال و بختیاری", "خراسان جنوبی", "خراسان رضوی", "خراسان شمالی", "خوزستان", "زنجان", "سمنان", "سیستان و بلوچستان", "فارس", "قزوین", "قم", "کردستان", "کرمان", "کرمانشاه", "کهگیلویه و بویراحمد", "گلستان", "گیلان", "لرستان", "مازندران", "مرکزی", "هرمزگان", "همدان", "یزد"];
-const emptyAddress = (phone = "", recipientName = ""): AddressForm => ({ title: "خانه", recipientName, recipientPhone: phone, province: "", city: "", street: "", alley: "", plaqueNumber: "", unit: "", deliveryDetails: "", postalCode: "", isDefault: false });
+const provinces = iranGeography.provinces;
+const cities = iranGeography.cities;
+function cityLocation(province: string, city: string) {
+  const provinceId = provinces.find((item) => item.name === province)?.id;
+  return cities.find((item) => item.provinceId === provinceId && item.name === city) ?? null;
+}
+const emptyAddress = (phone = "", recipientName = ""): AddressForm => ({ title: "خانه", recipientName, recipientPhone: phone, province: "", city: "", street: "", alley: "", plaqueNumber: "", floor: "", unit: "", backupPhone: "", latitude: null, longitude: null, deliveryDetails: "", postalCode: "", isDefault: false });
 
 export default function CheckoutPage() {
   const { cart, setCart, ready } = useStorefront();
@@ -89,9 +102,10 @@ export default function CheckoutPage() {
   async function saveAddress(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSavingAddress(true); setAddressError("");
     try {
+      if (addressForm.latitude === null || addressForm.longitude === null) throw new Error("موقعیت دقیق نشانی را روی نقشه انتخاب کن.");
       const address = await customerApi<CustomerAddress>("/customer/addresses", {
         method: "POST",
-        body: JSON.stringify({ ...addressForm, postalCode: asciiDigits(addressForm.postalCode) }),
+        body: JSON.stringify({ ...addressForm, postalCode: asciiDigits(addressForm.postalCode), backupPhone: addressForm.backupPhone.trim() || undefined }),
       });
       setAddresses((current) => [address, ...current.filter((item) => item.id !== address.id).map((item) => address.isDefault ? { ...item, isDefault: false } : item)]);
       setSelectedAddressId(address.id);
@@ -154,13 +168,16 @@ export default function CheckoutPage() {
                         <label className="store-field"><span>عنوان نشانی</span><input maxLength={80} value={addressForm.title} onChange={(event) => setAddressForm((form) => ({ ...form, title: event.target.value }))} /></label>
                         <label className="store-field"><span>نام گیرنده</span><input autoComplete="name" required minLength={2} maxLength={160} value={addressForm.recipientName} onChange={(event) => setAddressForm((form) => ({ ...form, recipientName: event.target.value }))} /></label>
                         <label className="store-field"><span>موبایل گیرنده</span><input dir="ltr" type="tel" inputMode="tel" autoComplete="tel" required pattern="(?:\+98|0098|0)?9[0-9۰-۹٠-٩]{9}" value={addressForm.recipientPhone} onChange={(event) => setAddressForm((form) => ({ ...form, recipientPhone: event.target.value }))} /></label>
-                        <label className="store-field"><span>استان</span><select required value={addressForm.province} onChange={(event) => setAddressForm((form) => ({ ...form, province: event.target.value }))}><option value="">انتخاب استان</option>{provinces.map((province) => <option key={province}>{province}</option>)}</select></label>
-                        <label className="store-field"><span>شهر</span><input autoComplete="address-level2" required minLength={2} maxLength={100} value={addressForm.city} onChange={(event) => setAddressForm((form) => ({ ...form, city: event.target.value }))} /></label>
+                        <label className="store-field"><span>استان</span><select required value={addressForm.province} onChange={(event) => setAddressForm((form) => ({ ...form, province: event.target.value, city: "", latitude: null, longitude: null }))}><option value="">انتخاب استان</option>{provinces.map((province) => <option key={province.id} value={province.name}>{province.name}</option>)}</select></label>
+                        <label className="store-field"><span>شهر</span><select autoComplete="address-level2" required disabled={!addressForm.province} value={addressForm.city} onChange={(event) => setAddressForm((form) => ({ ...form, city: event.target.value, latitude: null, longitude: null }))}><option value="">انتخاب شهر</option>{cities.filter((item) => item.provinceId === provinces.find((province) => province.name === addressForm.province)?.id).map((city) => <option key={city.id} value={city.name}>{city.name}</option>)}</select></label>
                         <label className="store-field"><span>خیابان اصلی</span><input autoComplete="address-line1" required minLength={2} maxLength={200} value={addressForm.street} onChange={(event) => setAddressForm((form) => ({ ...form, street: event.target.value }))} /></label>
                         <label className="store-field"><span>کوچه / خیابان فرعی <small>(در صورت وجود)</small></span><input maxLength={200} value={addressForm.alley} onChange={(event) => setAddressForm((form) => ({ ...form, alley: event.target.value }))} /></label>
                         <label className="store-field"><span>پلاک</span><input required maxLength={40} value={addressForm.plaqueNumber} onChange={(event) => setAddressForm((form) => ({ ...form, plaqueNumber: event.target.value }))} /></label>
+                        <label className="store-field"><span>طبقه</span><input maxLength={40} value={addressForm.floor} onChange={(event) => setAddressForm((form) => ({ ...form, floor: event.target.value }))} /></label>
                         <label className="store-field"><span>واحد <small>(اختیاری)</small></span><input maxLength={40} value={addressForm.unit} onChange={(event) => setAddressForm((form) => ({ ...form, unit: event.target.value }))} /></label>
+                        <label className="store-field"><span>شمارهٔ تماس جایگزین <small>(اختیاری)</small></span><input dir="ltr" type="tel" inputMode="tel" pattern="(?:\+98|0098|0)?9[0-9۰-۹٠-٩]{9}" value={addressForm.backupPhone} onChange={(event) => setAddressForm((form) => ({ ...form, backupPhone: event.target.value }))} /></label>
                         <label className="store-field"><span>کدپستی ۱۰ رقمی</span><input dir="ltr" inputMode="numeric" autoComplete="postal-code" required pattern="[0-9۰-۹٠-٩]{10}" maxLength={10} value={addressForm.postalCode} onChange={(event) => setAddressForm((form) => ({ ...form, postalCode: event.target.value }))} /></label>
+                        <div className="store-form-wide"><label className="store-field"><span>موقعیت روی نقشه</span></label><AddressLocationPicker latitude={addressForm.latitude} longitude={addressForm.longitude} onChange={(latitude, longitude) => setAddressForm((form) => ({ ...form, latitude, longitude }))} fallbackLatitude={cityLocation(addressForm.province, addressForm.city)?.lat} fallbackLongitude={cityLocation(addressForm.province, addressForm.city)?.lon} /></div>
                         <label className="store-field store-form-wide"><span>توضیحات تکمیلی برای پیک <small>(اختیاری)</small></span><textarea maxLength={300} rows={2} placeholder="مثلاً زنگ طبقهٔ دوم سمت راست" value={addressForm.deliveryDetails} onChange={(event) => setAddressForm((form) => ({ ...form, deliveryDetails: event.target.value }))} /></label>
                         <label className="customer-default-check"><input type="checkbox" checked={addressForm.isDefault} onChange={(event) => setAddressForm((form) => ({ ...form, isDefault: event.target.checked }))} /><span>به‌عنوان نشانی پیش‌فرض ذخیره شود</span></label>
                       </div>
@@ -186,9 +203,9 @@ export default function CheckoutPage() {
                   <button className="outline-button" type="submit" disabled={!couponDraft.trim() || loadingQuote}>اعمال کد</button>
                   {appliedCoupon && <button className="customer-text-button" type="button" onClick={() => { setAppliedCoupon(""); setCouponDraft(""); setQuoteError(""); }}>حذف کد</button>}
                 </form>
-                <div><span>جمع کالاها</span><strong>{formatToman(quote?.subtotalToman ?? 0)}</strong></div><div><span>هزینهٔ ارسال</span><strong className="store-pending-value">بعد از تأیید</strong></div>
+                <div><span>جمع کالاها</span><strong>{formatToman(quote?.subtotalToman ?? 0)}</strong></div><div><span>{quote?.shippingLabel || "هزینهٔ ارسال"}</span><strong>{quote?.shippingConfigured ? quote.shippingToman === 0 ? "رایگان" : formatToman(quote.shippingToman ?? 0) : "تنظیم نشده"}</strong></div>
                 {Boolean(quote?.discountToman) && <div><span>تخفیف {quote?.couponCode}</span><strong>- {formatToman(quote?.discountToman ?? 0)}</strong></div>}
-                <div className="store-summary-total"><span>مبلغ نهایی</span><strong>پس از تعیین ارسال</strong></div>
+                <div className="store-summary-total"><span>مبلغ نهایی</span><strong>{quote?.totalToman === null || quote?.totalToman === undefined ? "پس از تنظیم ارسال" : formatToman(quote.totalToman)}</strong></div>
                 {loadingQuote && <small className="store-loading-note">در حال بررسی قیمت و موجودی…</small>}
                 <Link className="store-back-link" href="/cart">بازگشت و ویرایش سبد</Link>
               </aside>

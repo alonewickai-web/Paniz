@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/services.dart';
 
 import 'admin_api.dart';
 
@@ -17,11 +18,50 @@ final authProvider = AsyncNotifierProvider<AuthController, AdminIdentity?>(
 );
 
 class AuthController extends AsyncNotifier<AdminIdentity?> {
+  static const _storage = FlutterSecureStorage();
+  static const _biometricKey = 'paniz.admin.biometric-unlock';
+  static const _biometricChannel = MethodChannel('paniz/admin-biometric');
+
+  Future<bool> _authenticateWithBiometrics() async {
+    try {
+      return await _biometricChannel.invokeMethod<bool>('authenticate') ?? false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
   @override
   Future<AdminIdentity?> build() async {
     final api = ref.read(adminApiProvider);
+    if (await _storage.read(key: _biometricKey) == 'true' &&
+        await api.hasSavedSession()) {
+      final unlocked = await _authenticateWithBiometrics();
+      if (!unlocked) return null;
+    }
     final admin = await api.restoreSession();
     return admin;
+  }
+
+  Future<bool> unlockWithBiometrics() async {
+    final unlocked = await _authenticateWithBiometrics();
+    if (!unlocked) return false;
+    final admin = await ref.read(adminApiProvider).restoreSession();
+    state = AsyncData(admin);
+    return admin != null;
+  }
+
+  Future<bool> setBiometricsEnabled(bool enabled) async {
+    if (!enabled) {
+      await _storage.write(key: _biometricKey, value: 'false');
+      return false;
+    }
+    final available = await _biometricChannel.invokeMethod<bool>('isAvailable') ?? false;
+    if (!available) {
+      throw const AdminApiException('روی این دستگاه اثر انگشت یا زیست‌سنجی فعالی پیدا نشد.');
+    }
+    final confirmed = await _authenticateWithBiometrics();
+    if (confirmed) await _storage.write(key: _biometricKey, value: 'true');
+    return confirmed;
   }
 
   Future<void> login(String username, String password) async {
@@ -48,6 +88,11 @@ class AuthController extends AsyncNotifier<AdminIdentity?> {
   }
 
 }
+
+final biometricEnabledProvider = FutureProvider<bool>((ref) async {
+  const storage = FlutterSecureStorage();
+  return await storage.read(key: 'paniz.admin.biometric-unlock') == 'true';
+});
 
 final themeModeProvider =
     AsyncNotifierProvider<AdminThemeController, ThemeMode>(
@@ -85,8 +130,14 @@ final dashboardProvider = FutureProvider.autoDispose<JsonMap>(
 final siteVisitAnalyticsProvider = FutureProvider.autoDispose<JsonMap>(
   (ref) => ref.watch(adminApiProvider).siteVisitAnalytics(),
 );
+final financeReportProvider = FutureProvider.autoDispose.family<JsonMap, String>(
+  (ref, range) => ref.watch(adminApiProvider).financeReport(range),
+);
 final storeConfigurationProvider = FutureProvider.autoDispose<JsonMap>(
   (ref) => ref.watch(adminApiProvider).storeConfiguration(),
+);
+final publicStoreConfigurationProvider = FutureProvider.autoDispose<JsonMap>(
+  (ref) => ref.watch(adminApiProvider).publicStoreConfiguration(),
 );
 final productsProvider = FutureProvider.autoDispose<List<JsonMap>>(
   (ref) => ref.watch(adminApiProvider).products(),

@@ -7,10 +7,11 @@ import { PrismaService } from "../database/prisma.service";
 import { AuthenticatedAdmin } from "../admin-auth/admin-session.guard";
 import { requireAdminPermission } from "../admin-auth/admin-permissions";
 import { PublishAdminAppDto } from "./dto/publish-admin-app.dto";
+import { AdminNotificationService } from "../admin-notifications/admin-notification.service";
 
 @Injectable()
 export class AdminAppReleaseService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly notifications: AdminNotificationService) {}
 
   async latest() {
     const release = await this.prisma.adminAppRelease.findFirst({ where: { isCurrent: true }, orderBy: { versionCode: "desc" } });
@@ -48,6 +49,11 @@ export class AdminAppReleaseService {
         } });
         return created;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      await this.notifications.notifyAdmins({
+        type: "app_update", title: "نسخهٔ تازهٔ برنامهٔ مدیریت آماده است",
+        body: `نسخهٔ ${release.versionName} منتشر شد. برای دریافت به بخش «بروزرسانی» بروید.`,
+        entityType: "app_release", entityId: release.id, dedupeKey: `admin-app-release:${release.id}`,
+      });
       return { data: serializeRelease(release) };
     } catch (error) {
       await unlink(file.path).catch(() => {});

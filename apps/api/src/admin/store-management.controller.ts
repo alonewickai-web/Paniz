@@ -8,6 +8,8 @@ import { SaveAdminCategoryDto } from "./dto/save-admin-category.dto";
 import { ReorderHomepageSectionsDto } from "./dto/reorder-homepage-sections.dto";
 import { UpdateHomepageSectionDto } from "./dto/update-homepage-section.dto";
 import { UpdateStoreThemeDto } from "./dto/update-store-theme.dto";
+import { SaveShippingSettingsDto } from "./dto/save-shipping-settings.dto";
+import { UpdateStoreLogoDto } from "./dto/update-store-logo.dto";
 
 @ApiTags("مدیریت محتوای فروشگاه")
 @ApiBearerAuth("admin-session")
@@ -29,6 +31,20 @@ export class StoreManagementController {
   @RequireAdminPermission("store.content")
   updateTheme(@Req() request: AdminRequest, @Body() body: UpdateStoreThemeDto) {
     return this.store.saveTheme(request.admin!, body);
+  }
+
+  @Patch("store/shipping")
+  @ApiOperation({ summary: "تنظیم هزینهٔ ارسال و حد خرید برای ارسال رایگان" })
+  @RequireAdminPermission("store.content")
+  updateShipping(@Req() request: AdminRequest, @Body() body: SaveShippingSettingsDto) {
+    return this.store.saveShippingSettings(request.admin!, body);
+  }
+
+  @Patch("store/logo")
+  @ApiOperation({ summary: "تنظیم تصویر نشان فروشگاه" })
+  @RequireAdminPermission("store.content")
+  updateLogo(@Req() request: AdminRequest, @Body() body: UpdateStoreLogoDto) {
+    return this.store.saveLogo(request.admin!, body);
   }
 
   @Patch("homepage-sections/reorder")

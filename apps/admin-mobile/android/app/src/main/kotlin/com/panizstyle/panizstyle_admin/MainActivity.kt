@@ -6,16 +6,20 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
     private var pickerResult: MethodChannel.Result? = null
+    private var biometricResult: MethodChannel.Result? = null
     private val apkPickerRequest = 8401
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -91,6 +95,51 @@ class MainActivity : FlutterActivity() {
                     }
                 } catch (error: Exception) { result.error("UPDATE_ERROR", error.message, null) }
             }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "paniz/admin-biometric")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "isAvailable" -> result.success(
+                        BiometricManager.from(this).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS,
+                    )
+                    "authenticate" -> authenticateBiometric(result)
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    private fun authenticateBiometric(result: MethodChannel.Result) {
+        if (biometricResult != null) {
+            result.error("BIOMETRIC_BUSY", "درخواست تأیید دیگری در حال انجام است.", null)
+            return
+        }
+        if (BiometricManager.from(this).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) != BiometricManager.BIOMETRIC_SUCCESS) {
+            result.success(false)
+            return
+        }
+        biometricResult = result
+        val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(authResult: BiometricPrompt.AuthenticationResult) {
+                biometricResult?.success(true)
+                biometricResult = null
+            }
+
+            override fun onAuthenticationFailed() {
+                // Keep the system prompt open so the user can retry.
+            }
+
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                biometricResult?.success(false)
+                biometricResult = null
+            }
+        })
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("ورود به PANIZ Admin")
+            .setSubtitle("برای ادامه، اثر انگشتت را تأیید کن")
+            .setNegativeButtonText("لغو")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            .build()
+        prompt.authenticate(promptInfo)
     }
 
     @Deprecated("Android compatibility callback")

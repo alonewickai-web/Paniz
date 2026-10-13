@@ -72,8 +72,8 @@ export class AdminController {
   @ApiQuery({ name: "status", required: false, enum: ["draft", "published", "archived"] })
   @ApiQuery({ name: "q", required: false, type: String })
   @RequireAdminPermission("products.view")
-  listProducts(@Query() query: ListAdminProductsQuery) {
-    return this.admin.listProducts(query);
+  listProducts(@Req() request: AdminRequest, @Query() query: ListAdminProductsQuery) {
+    return this.admin.listProducts(query, undefined, request.admin!);
   }
 
   @Get("product-categories")

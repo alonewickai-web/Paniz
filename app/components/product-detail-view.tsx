@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Heart, Minus, Plus, Share2, ShieldCheck, ShoppingBag, Truck } from "lucide-react";
+import { Bell, Check, Heart, Minus, Plus, Share2, ShieldCheck, ShoppingBag, Truck } from "lucide-react";
 import { StoreProductCard } from "./store-product-card";
 import { apiBaseUrl, formatToman, type StoreProduct, type StoreProductDetail } from "../lib/catalog";
 import { useStorefront } from "../lib/storefront-state";
 import { PageFlipImage, type FlipImage } from "./page-flip-image";
+import { CustomerApiError, customerApi } from "../lib/customer-api";
+import { requestStorePush } from "../lib/customer-push";
 
 export function ProductDetailView({ product }: { product: StoreProductDetail }) {
   const { cart, setCart, favorites, setFavorites } = useStorefront();
@@ -23,6 +25,8 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
   const [galleryFocused, setGalleryFocused] = useState(false);
   const [notice, setNotice] = useState("");
   const [isSharing, setIsSharing] = useState(false);
+  const [subscribingStock, setSubscribingStock] = useState(false);
+  const [stockSubscribed, setStockSubscribed] = useState(false);
   const [related, setRelated] = useState<StoreProduct[]>([]);
   const [relatedLoaded, setRelatedLoaded] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -125,6 +129,23 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
     setNotice("به سبد خرید اضافه شد.");
   }
 
+  async function notifyWhenAvailable() {
+    if (!variant || subscribingStock) return;
+    setSubscribingStock(true);
+    try {
+      await requestStorePush();
+      await customerApi(`/customer/back-in-stock/${variant.id}`, { method: "POST" });
+      setStockSubscribed(true);
+      setNotice("ثبت شد؛ وقتی این رنگ و سایز موجود شود بهت خبر می‌دهیم.");
+    } catch (reason) {
+      if (reason instanceof CustomerApiError && reason.status === 401) {
+        window.location.assign(`/account?next=${encodeURIComponent(window.location.pathname)}`);
+        return;
+      }
+      setNotice(reason instanceof Error ? reason.message : "ثبت درخواست اعلان انجام نشد.");
+    } finally { setSubscribingStock(false); }
+  }
+
   async function shareProduct() {
     setIsSharing(true);
     try {
@@ -199,15 +220,16 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
 
             <fieldset className="store-choice-group"><legend>رنگ <span>{color}</span></legend><div className="store-color-choices">{product.colors.map((item) => {
               const colorAvailable = product.variants.some((entry) => entry.color.name === item.name && entry.availableQuantity > 0);
-              return <button key={item.name} type="button" disabled={!colorAvailable} className={`${color === item.name ? "active" : ""} ${!colorAvailable ? "unavailable" : ""}`} onClick={() => { setColor(item.name); const firstSize = product.variants.find((entry) => entry.color.name === item.name && entry.availableQuantity > 0)?.size ?? ""; setSize(firstSize); setQuantity(1); }} aria-label={`${item.name}${colorAvailable ? "" : "، ناموجود"}`} aria-pressed={color === item.name}><i style={{ background: item.value }} />{item.name}</button>;
+              return <button key={item.name} type="button" className={`${color === item.name ? "active" : ""} ${!colorAvailable ? "unavailable" : ""}`} onClick={() => { setColor(item.name); const firstSize = product.variants.find((entry) => entry.color.name === item.name && entry.availableQuantity > 0)?.size ?? product.variants.find((entry) => entry.color.name === item.name)?.size ?? ""; setSize(firstSize); setQuantity(1); setStockSubscribed(false); }} aria-label={`${item.name}${colorAvailable ? "" : "، ناموجود"}`} aria-pressed={color === item.name}><i style={{ background: item.value }} />{item.name}</button>;
             })}</div></fieldset>
 
             <fieldset className="store-choice-group"><legend>سایز <span>{size || "انتخاب کن"}</span></legend><div className="store-size-choices">{product.sizes.map((item) => {
               const itemAvailable = product.variants.some((entry) => entry.color.name === color && entry.size === item && entry.availableQuantity > 0);
-              return <button key={item} type="button" disabled={!itemAvailable} className={size === item ? "active" : ""} onClick={() => { setSize(item); setQuantity(1); }} aria-pressed={size === item}>{item}</button>;
+              return <button key={item} type="button" className={`${size === item ? "active" : ""} ${!itemAvailable ? "unavailable" : ""}`} onClick={() => { setSize(item); setQuantity(1); setStockSubscribed(false); }} aria-label={`سایز ${item}${itemAvailable ? "" : "، ناموجود"}`} aria-pressed={size === item}>{item}</button>;
             })}</div>{sizeGuideRows.length > 0 && <div className="store-size-guide"><strong>راهنمای سایز</strong><div className="store-table-scroll"><table><thead><tr>{Object.keys(sizeGuideRows[0]).map((key) => <th key={key}>{key}</th>)}</tr></thead><tbody>{sizeGuideRows.map((row, index) => <tr key={index}>{Object.values(row).map((value, cell) => <td key={cell}>{String(value)}</td>)}</tr>)}</tbody></table></div></div>}</fieldset>
 
             <div className="store-buy-controls"><div className="store-quantity" aria-label="تعداد"><button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))} disabled={quantity <= 1} aria-label="کم‌کردن تعداد"><Minus size={16} /></button><span>{new Intl.NumberFormat("fa-IR").format(quantity)}</span><button type="button" onClick={() => setQuantity((value) => Math.min(Math.max(1, stock), value + 1))} disabled={!stock || quantity >= stock} aria-label="زیادکردن تعداد"><Plus size={16} /></button></div><button className="button-primary store-add-button" type="button" onClick={addToCart} disabled={!variant || !stock}><ShoppingBag size={19} /> افزودن به سبد خرید</button></div>
+            {variant && stock === 0 && <button className={`store-back-in-stock-button ${stockSubscribed ? "is-subscribed" : ""}`} type="button" onClick={() => void notifyWhenAvailable()} disabled={subscribingStock || stockSubscribed}><Bell className={subscribingStock || stockSubscribed ? "" : "stock-notify-bell"} size={18} />{stockSubscribed ? "برای موجودشدن این انتخاب خبرت می‌کنیم" : subscribingStock ? "در حال ثبت درخواست…" : "موجود شد خبرم کن"}</button>}
             <div className="store-product-actions"><button type="button" onClick={toggleFavorite} aria-pressed={favorite}><Heart size={17} fill={favorite ? "currentColor" : "none"} />{favorite ? "ذخیره شد" : "افزودن به علاقه‌مندی‌ها"}</button><button type="button" onClick={shareProduct} disabled={isSharing}><Share2 size={17} />اشتراک محصول</button></div>
             {notice && <p className="store-inline-notice" role="status"><Check size={16} />{notice}</p>}
             <div className="store-service-notes"><div><Truck size={18} /><span><strong>هزینه و زمان ارسال</strong><small>پس از واردکردن نشانی در تسویه‌حساب مشخص می‌شود.</small></span></div><div><ShieldCheck size={18} /><span><strong>انتخاب مطمئن</strong><small>موجودی رنگ و سایز پیش از ثبت سفارش دوباره بررسی می‌شود.</small></span></div></div>

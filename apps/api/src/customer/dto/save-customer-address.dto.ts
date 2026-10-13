@@ -1,5 +1,5 @@
 import { Transform, Type } from "class-transformer";
-import { IsBoolean, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
+import { IsBoolean, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from "class-validator";
 import { normalizeIranPhone } from "./phone.dto";
 
 function normalizePostalCode(value: unknown): unknown {
@@ -56,7 +56,30 @@ export class SaveCustomerAddressDto {
   @IsOptional()
   @IsString()
   @MaxLength(40)
+  floor?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
   unit?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => typeof value === "string" && value.trim() ? normalizeIranPhone(value) : value)
+  @IsString()
+  @Matches(/^\+989\d{9}$/)
+  backupPhone?: string;
+
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(-90)
+  @Max(90)
+  latitude!: number;
+
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(-180)
+  @Max(180)
+  longitude!: number;
 
   @IsOptional()
   @IsString()

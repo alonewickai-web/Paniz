@@ -7,31 +7,34 @@ datasource db {
 }
 
 model AdminUser {
-  id                    BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
-  fullName              String               @map("full_name") @db.VarChar(160)
-  username              String               @unique(map: "uq_admin_users_username") @db.VarChar(80)
-  phone                 String?              @unique(map: "uq_admin_users_phone") @db.VarChar(24)
-  avatarPath            String?              @map("avatar_path") @db.VarChar(512)
-  passwordHash          String               @map("password_hash") @db.VarChar(255)
-  role                  String               @default("owner") @db.VarChar(32)
-  isActive              Boolean              @default(true) @map("is_active")
-  mustChangePassword    Boolean              @default(false) @map("must_change_password")
-  lastLoginAt           DateTime?            @map("last_login_at") @db.DateTime(3)
-  createdAt             DateTime             @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt             DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+  id                    BigInt                   @id @default(autoincrement()) @db.UnsignedBigInt
+  fullName              String                   @map("full_name") @db.VarChar(160)
+  username              String                   @unique(map: "uq_admin_users_username") @db.VarChar(80)
+  phone                 String?                  @unique(map: "uq_admin_users_phone") @db.VarChar(24)
+  avatarPath            String?                  @map("avatar_path") @db.VarChar(512)
+  passwordHash          String                   @map("password_hash") @db.VarChar(255)
+  role                  String                   @default("owner") @db.VarChar(32)
+  isActive              Boolean                  @default(true) @map("is_active")
+  mustChangePassword    Boolean                  @default(false) @map("must_change_password")
+  lastLoginAt           DateTime?                @map("last_login_at") @db.DateTime(3)
+  createdAt             DateTime                 @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt             DateTime                 @updatedAt @map("updated_at") @db.DateTime(3)
   inventoryMovements    InventoryMovement[]
   orderStatusChanges    OrderStatusHistory[]
   updatedHomepageConfig HomepageSection[]
   updatedStoreSettings  StoreSetting[]
   auditLogs             AdminAuditLog[]
   sessions              AdminSession[]
-  permissions           AdminUserPermission[] @relation("AdminPermissionOwner")
-  permissionsGranted    AdminUserPermission[] @relation("AdminPermissionGrantor")
+  permissions           AdminUserPermission[]    @relation("AdminPermissionOwner")
+  permissionsGranted    AdminUserPermission[]    @relation("AdminPermissionGrantor")
   smsCampaigns          SmsCampaign[]
   socialPosts           SocialPost[]
   appReleases           AdminAppRelease[]
   notifications         AdminNotification[]
   pushDevices           AdminPushDevice[]
+  supportMessages       CustomerSupportMessage[] @relation("SupportMessageAdmin")
+  chatMessagesSent      AdminChatMessage[]       @relation("AdminChatSender")
+  chatMessagesReceived  AdminChatMessage[]       @relation("AdminChatRecipient")
 
   @@index([role, isActive], map: "ix_admin_users_role_active")
   @@map("admin_users")
@@ -55,12 +58,12 @@ model AdminAppRelease {
 }
 
 model AdminUserPermission {
-  adminId          BigInt    @map("admin_id") @db.UnsignedBigInt
-  permissionKey    String    @map("permission_key") @db.VarChar(96)
-  grantedByAdminId BigInt?   @map("granted_by_admin_id") @db.UnsignedBigInt
-  expiresAt        DateTime? @map("expires_at") @db.DateTime(3)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.DateTime(3)
-  admin            AdminUser @relation("AdminPermissionOwner", fields: [adminId], references: [id], onDelete: Cascade)
+  adminId          BigInt     @map("admin_id") @db.UnsignedBigInt
+  permissionKey    String     @map("permission_key") @db.VarChar(96)
+  grantedByAdminId BigInt?    @map("granted_by_admin_id") @db.UnsignedBigInt
+  expiresAt        DateTime?  @map("expires_at") @db.DateTime(3)
+  createdAt        DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  admin            AdminUser  @relation("AdminPermissionOwner", fields: [adminId], references: [id], onDelete: Cascade)
   grantedByAdmin   AdminUser? @relation("AdminPermissionGrantor", fields: [grantedByAdminId], references: [id], onDelete: SetNull)
 
   @@id([adminId, permissionKey])
@@ -86,6 +89,23 @@ model AdminNotification {
   @@map("admin_notifications")
 }
 
+model AdminChatMessage {
+  id               BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  senderAdminId    BigInt    @map("sender_admin_id") @db.UnsignedBigInt
+  recipientAdminId BigInt    @map("recipient_admin_id") @db.UnsignedBigInt
+  broadcastGroupId String?   @map("broadcast_group_id") @db.Char(36)
+  body             String    @db.VarChar(4000)
+  readAt           DateTime? @map("read_at") @db.DateTime(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  sender           AdminUser @relation("AdminChatSender", fields: [senderAdminId], references: [id], onDelete: Cascade)
+  recipient        AdminUser @relation("AdminChatRecipient", fields: [recipientAdminId], references: [id], onDelete: Cascade)
+
+  @@index([senderAdminId, recipientAdminId, createdAt], map: "ix_admin_chat_pair_created")
+  @@index([recipientAdminId, readAt, createdAt], map: "ix_admin_chat_unread_created")
+  @@index([broadcastGroupId], map: "ix_admin_chat_broadcast")
+  @@map("admin_chat_messages")
+}
+
 model AdminPushDevice {
   id        BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
   adminId   BigInt    @map("admin_id") @db.UnsignedBigInt
@@ -101,13 +121,13 @@ model AdminPushDevice {
 }
 
 model AdminSession {
-  id         BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
-  adminId    BigInt     @map("admin_id") @db.UnsignedBigInt
-  tokenHash  String     @unique(map: "uq_admin_sessions_token_hash") @map("token_hash") @db.Char(64)
-  expiresAt  DateTime   @map("expires_at") @db.DateTime(3)
-  revokedAt  DateTime?  @map("revoked_at") @db.DateTime(3)
-  lastUsedAt DateTime?  @map("last_used_at") @db.DateTime(3)
-  createdAt  DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  adminId    BigInt    @map("admin_id") @db.UnsignedBigInt
+  tokenHash  String    @unique(map: "uq_admin_sessions_token_hash") @map("token_hash") @db.Char(64)
+  expiresAt  DateTime  @map("expires_at") @db.DateTime(3)
+  revokedAt  DateTime? @map("revoked_at") @db.DateTime(3)
+  lastUsedAt DateTime? @map("last_used_at") @db.DateTime(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.DateTime(3)
   admin      AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
   @@index([adminId, expiresAt], map: "ix_admin_sessions_admin_expiry")
@@ -116,27 +136,33 @@ model AdminSession {
 }
 
 model Customer {
-  id                BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
-  phone             String             @unique(map: "uq_customers_phone") @db.VarChar(24)
-  fullName          String?            @map("full_name") @db.VarChar(160)
-  email             String?            @db.VarChar(254)
-  marketingOptIn     Boolean            @default(false) @map("marketing_opt_in")
-  marketingOptInAt  DateTime?          @map("marketing_opt_in_at") @db.DateTime(3)
-  rubikaChatId      String?            @unique(map: "uq_customers_rubika_chat_id") @map("rubika_chat_id") @db.VarChar(128)
-  rubikaMarketingOptIn Boolean         @default(false) @map("rubika_marketing_opt_in")
-  rubikaMarketingOptInAt DateTime?     @map("rubika_marketing_opt_in_at") @db.DateTime(3)
-  phoneVerifiedAt   DateTime?          @map("phone_verified_at") @db.DateTime(3)
-  status            String             @default("active") @db.VarChar(24)
-  createdAt         DateTime           @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt         DateTime           @updatedAt @map("updated_at") @db.DateTime(3)
-  addresses         CustomerAddress[]
-  carts             Cart[]
-  orders            Order[]
-  sessions          CustomerSession[]
-  rubikaLinkCodes   CustomerRubikaLinkCode[]
-  couponRedemptions CouponRedemption[]
-  wishlist          Wishlist?
-  reviews           Review[]
+  id                       BigInt                        @id @default(autoincrement()) @db.UnsignedBigInt
+  phone                    String                        @unique(map: "uq_customers_phone") @db.VarChar(24)
+  fullName                 String?                       @map("full_name") @db.VarChar(160)
+  birthDateJalali          String?                       @map("birth_date_jalali") @db.Char(10)
+  email                    String?                       @db.VarChar(254)
+  marketingOptIn           Boolean                       @default(false) @map("marketing_opt_in")
+  marketingOptInAt         DateTime?                     @map("marketing_opt_in_at") @db.DateTime(3)
+  rubikaChatId             String?                       @unique(map: "uq_customers_rubika_chat_id") @map("rubika_chat_id") @db.VarChar(128)
+  rubikaMarketingOptIn     Boolean                       @default(false) @map("rubika_marketing_opt_in")
+  rubikaMarketingOptInAt   DateTime?                     @map("rubika_marketing_opt_in_at") @db.DateTime(3)
+  phoneVerifiedAt          DateTime?                     @map("phone_verified_at") @db.DateTime(3)
+  status                   String                        @default("active") @db.VarChar(24)
+  createdAt                DateTime                      @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                DateTime                      @updatedAt @map("updated_at") @db.DateTime(3)
+  addresses                CustomerAddress[]
+  carts                    Cart[]
+  orders                   Order[]
+  sessions                 CustomerSession[]
+  rubikaLinkCodes          CustomerRubikaLinkCode[]
+  couponRedemptions        CouponRedemption[]
+  wishlist                 Wishlist?
+  reviews                  Review[]
+  supportTickets           CustomerSupportTicket[]
+  returnRequests           OrderReturnRequest[]
+  webPushSubscriptions     CustomerWebPushSubscription[]
+  backInStockSubscriptions BackInStockSubscription[]
+  customerSupportMessages  CustomerSupportMessage[]
 
   @@index([status, createdAt], map: "ix_customers_status_created")
   @@index([marketingOptIn, createdAt], map: "ix_customers_marketing_consent_created")
@@ -145,14 +171,14 @@ model Customer {
 }
 
 model CustomerSession {
-  id         BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
-  customerId BigInt     @map("customer_id") @db.UnsignedBigInt
-  tokenHash  String     @unique(map: "uq_customer_sessions_token_hash") @map("token_hash") @db.Char(64)
-  expiresAt  DateTime   @map("expires_at") @db.DateTime(3)
-  revokedAt  DateTime?  @map("revoked_at") @db.DateTime(3)
-  lastUsedAt DateTime?  @map("last_used_at") @db.DateTime(3)
-  createdAt  DateTime   @default(now()) @map("created_at") @db.DateTime(3)
-  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  customerId BigInt    @map("customer_id") @db.UnsignedBigInt
+  tokenHash  String    @unique(map: "uq_customer_sessions_token_hash") @map("token_hash") @db.Char(64)
+  expiresAt  DateTime  @map("expires_at") @db.DateTime(3)
+  revokedAt  DateTime? @map("revoked_at") @db.DateTime(3)
+  lastUsedAt DateTime? @map("last_used_at") @db.DateTime(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   @@index([customerId, expiresAt], map: "ix_customer_sessions_customer_expiry")
   @@index([expiresAt], map: "ix_customer_sessions_expiry")
@@ -173,25 +199,29 @@ model CustomerRubikaLinkCode {
 }
 
 model CustomerAddress {
-  id             BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
-  customerId     BigInt   @map("customer_id") @db.UnsignedBigInt
-  title          String?  @db.VarChar(80)
-  recipientName  String   @map("recipient_name") @db.VarChar(160)
-  recipientPhone String   @map("recipient_phone") @db.VarChar(24)
-  province       String   @db.VarChar(100)
-  city           String   @db.VarChar(100)
-  street         String?  @db.VarChar(200)
-  alley          String?  @db.VarChar(200)
-  plaqueNumber   String?  @map("plaque_number") @db.VarChar(40)
-  unit           String?  @db.VarChar(40)
-  deliveryDetails String? @map("delivery_details") @db.VarChar(300)
-  addressLine    String   @map("address_line") @db.VarChar(500)
-  postalCode     String   @map("postal_code") @db.Char(10)
-  isDefault      Boolean  @default(false) @map("is_default")
-  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt      DateTime @updatedAt @map("updated_at") @db.DateTime(3)
-  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  orders         Order[]
+  id              BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  customerId      BigInt   @map("customer_id") @db.UnsignedBigInt
+  title           String?  @db.VarChar(80)
+  recipientName   String   @map("recipient_name") @db.VarChar(160)
+  recipientPhone  String   @map("recipient_phone") @db.VarChar(24)
+  province        String   @db.VarChar(100)
+  city            String   @db.VarChar(100)
+  street          String?  @db.VarChar(200)
+  alley           String?  @db.VarChar(200)
+  plaqueNumber    String?  @map("plaque_number") @db.VarChar(40)
+  floor           String?  @db.VarChar(40)
+  unit            String?  @db.VarChar(40)
+  backupPhone     String?  @map("backup_phone") @db.VarChar(24)
+  latitude        Float?   @db.Double
+  longitude       Float?   @db.Double
+  deliveryDetails String?  @map("delivery_details") @db.VarChar(300)
+  addressLine     String   @map("address_line") @db.VarChar(500)
+  postalCode      String   @map("postal_code") @db.Char(10)
+  isDefault       Boolean  @default(false) @map("is_default")
+  createdAt       DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orders          Order[]
 
   @@index([customerId, isDefault], map: "ix_customer_addresses_customer_default")
   @@map("customer_addresses")
@@ -218,29 +248,30 @@ model Category {
 }
 
 model Product {
-  id               BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
-  categoryId       BigInt?          @map("category_id") @db.UnsignedBigInt
-  name             String           @db.VarChar(220)
-  slug             String           @unique(map: "uq_products_slug") @db.VarChar(240)
-  shortDescription String?          @map("short_description") @db.VarChar(500)
-  description      String?          @db.MediumText
-  material         String?          @db.VarChar(220)
-  careInstructions String?          @map("care_instructions") @db.Text
-  sizeGuide        Json?            @map("size_guide")
-  seoTitle         String?          @map("seo_title") @db.VarChar(240)
-  seoDescription   String?          @map("seo_description") @db.VarChar(500)
-  status           String           @default("draft") @db.VarChar(24)
-  publishedAt      DateTime?        @map("published_at") @db.DateTime(3)
-  deletedAt        DateTime?        @map("deleted_at") @db.DateTime(3)
-  createdAt        DateTime         @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt        DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
-  category         Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  images           ProductImage[]
-  variants         ProductVariant[]
-  couponProducts   CouponProduct[]
-  wishlistItems    WishlistItem[]
-  reviews          Review[]
-  orderItems       OrderItem[]
+  id                BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  categoryId        BigInt?          @map("category_id") @db.UnsignedBigInt
+  name              String           @db.VarChar(220)
+  slug              String           @unique(map: "uq_products_slug") @db.VarChar(240)
+  shortDescription  String?          @map("short_description") @db.VarChar(500)
+  description       String?          @db.MediumText
+  material          String?          @db.VarChar(220)
+  careInstructions  String?          @map("care_instructions") @db.Text
+  purchaseCostToman BigInt           @default(0) @map("purchase_cost_toman") @db.UnsignedBigInt
+  sizeGuide         Json?            @map("size_guide")
+  seoTitle          String?          @map("seo_title") @db.VarChar(240)
+  seoDescription    String?          @map("seo_description") @db.VarChar(500)
+  status            String           @default("draft") @db.VarChar(24)
+  publishedAt       DateTime?        @map("published_at") @db.DateTime(3)
+  deletedAt         DateTime?        @map("deleted_at") @db.DateTime(3)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
+  category          Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  images            ProductImage[]
+  variants          ProductVariant[]
+  couponProducts    CouponProduct[]
+  wishlistItems     WishlistItem[]
+  reviews           Review[]
+  orderItems        OrderItem[]
 
   @@index([categoryId, status, createdAt], map: "ix_products_category_status_created")
   @@index([status, publishedAt], map: "ix_products_status_published")
@@ -248,39 +279,40 @@ model Product {
 }
 
 model ProductImage {
-  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
-  productId BigInt   @map("product_id") @db.UnsignedBigInt
-  imagePath String   @map("image_path") @db.VarChar(500)
-  altText   String?  @map("alt_text") @db.VarChar(240)
-  fileSizeBytes Int  @default(0) @map("file_size_bytes") @db.UnsignedInt
-  sortOrder Int      @default(0) @map("sort_order")
-  isPrimary Boolean  @default(false) @map("is_primary")
-  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  productId     BigInt   @map("product_id") @db.UnsignedBigInt
+  imagePath     String   @map("image_path") @db.VarChar(500)
+  altText       String?  @map("alt_text") @db.VarChar(240)
+  fileSizeBytes Int      @default(0) @map("file_size_bytes") @db.UnsignedInt
+  sortOrder     Int      @default(0) @map("sort_order")
+  isPrimary     Boolean  @default(false) @map("is_primary")
+  createdAt     DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId, sortOrder], map: "ix_product_images_product_order")
   @@map("product_images")
 }
 
 model ProductVariant {
-  id                  BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
-  productId           BigInt              @map("product_id") @db.UnsignedBigInt
-  sku                 String              @unique(map: "uq_product_variants_sku") @db.VarChar(80)
-  colorName           String              @default("بدون رنگ") @map("color_name") @db.VarChar(80)
-  colorHex            String?             @map("color_hex") @db.Char(7)
-  sizeLabel           String              @default("فری سایز") @map("size_label") @db.VarChar(32)
-  priceToman          BigInt              @map("price_toman") @db.UnsignedBigInt
-  compareAtPriceToman BigInt?             @map("compare_at_price_toman") @db.UnsignedBigInt
-  stockQuantity       Int                 @default(0) @map("stock_quantity") @db.UnsignedInt
-  reservedQuantity    Int                 @default(0) @map("reserved_quantity") @db.UnsignedInt
-  lowStockThreshold   Int                 @default(3) @map("low_stock_threshold") @db.UnsignedInt
-  isActive            Boolean             @default(true) @map("is_active")
-  createdAt           DateTime            @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt           DateTime            @updatedAt @map("updated_at") @db.DateTime(3)
-  product             Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
-  inventoryMovements  InventoryMovement[]
-  cartItems           CartItem[]
-  orderItems          OrderItem[]
+  id                       BigInt                    @id @default(autoincrement()) @db.UnsignedBigInt
+  productId                BigInt                    @map("product_id") @db.UnsignedBigInt
+  sku                      String                    @unique(map: "uq_product_variants_sku") @db.VarChar(80)
+  colorName                String                    @default("بدون رنگ") @map("color_name") @db.VarChar(80)
+  colorHex                 String?                   @map("color_hex") @db.Char(7)
+  sizeLabel                String                    @default("فری سایز") @map("size_label") @db.VarChar(32)
+  priceToman               BigInt                    @map("price_toman") @db.UnsignedBigInt
+  compareAtPriceToman      BigInt?                   @map("compare_at_price_toman") @db.UnsignedBigInt
+  stockQuantity            Int                       @default(0) @map("stock_quantity") @db.UnsignedInt
+  reservedQuantity         Int                       @default(0) @map("reserved_quantity") @db.UnsignedInt
+  lowStockThreshold        Int                       @default(3) @map("low_stock_threshold") @db.UnsignedInt
+  isActive                 Boolean                   @default(true) @map("is_active")
+  createdAt                DateTime                  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                DateTime                  @updatedAt @map("updated_at") @db.DateTime(3)
+  product                  Product                   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventoryMovements       InventoryMovement[]
+  cartItems                CartItem[]
+  orderItems               OrderItem[]
+  backInStockSubscriptions BackInStockSubscription[]
 
   @@unique([productId, colorName, sizeLabel], map: "uq_product_variants_product_color_size")
   @@index([productId, isActive], map: "ix_product_variants_product_active")
@@ -430,6 +462,7 @@ model Order {
   payments                Payment[]
   shipments               Shipment[]
   couponRedemptions       CouponRedemption[]
+  returnRequest           OrderReturnRequest?
 
   @@index([customerId, createdAt], map: "ix_orders_customer_created")
   @@index([status, createdAt], map: "ix_orders_status_created")
@@ -450,6 +483,7 @@ model OrderItem {
   unitPriceToman      BigInt          @map("unit_price_toman") @db.UnsignedBigInt
   quantity            Int             @db.UnsignedInt
   lineTotalToman      BigInt          @map("line_total_toman") @db.UnsignedBigInt
+  purchaseCostToman   BigInt          @default(0) @map("purchase_cost_toman") @db.UnsignedBigInt
   createdAt           DateTime        @default(now()) @map("created_at") @db.DateTime(3)
   order               Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product             Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
@@ -512,6 +546,90 @@ model Shipment {
   @@index([orderId], map: "ix_shipments_order")
   @@index([trackingCode], map: "ix_shipments_tracking")
   @@map("shipments")
+}
+
+model CustomerSupportTicket {
+  id            BigInt                   @id @default(autoincrement()) @db.UnsignedBigInt
+  customerId    BigInt                   @map("customer_id") @db.UnsignedBigInt
+  subject       String                   @db.VarChar(180)
+  status        String                   @default("open") @db.VarChar(24)
+  lastMessageAt DateTime                 @default(now()) @map("last_message_at") @db.DateTime(3)
+  createdAt     DateTime                 @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt     DateTime                 @updatedAt @map("updated_at") @db.DateTime(3)
+  customer      Customer                 @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  messages      CustomerSupportMessage[]
+
+  @@index([customerId, lastMessageAt], map: "ix_support_tickets_customer_last_message")
+  @@index([status, lastMessageAt], map: "ix_support_tickets_status_last_message")
+  @@map("customer_support_tickets")
+}
+
+model CustomerSupportMessage {
+  id         BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  ticketId   BigInt                @map("ticket_id") @db.UnsignedBigInt
+  senderType String                @map("sender_type") @db.VarChar(16)
+  customerId BigInt?               @map("customer_id") @db.UnsignedBigInt
+  adminId    BigInt?               @map("admin_id") @db.UnsignedBigInt
+  body       String                @db.VarChar(4000)
+  imagePath  String?               @map("image_path") @db.VarChar(512)
+  createdAt  DateTime              @default(now()) @map("created_at") @db.DateTime(3)
+  ticket     CustomerSupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  customer   Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  admin      AdminUser?            @relation("SupportMessageAdmin", fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt], map: "ix_support_messages_ticket_created")
+  @@map("customer_support_messages")
+}
+
+model OrderReturnRequest {
+  id                BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  orderId           BigInt    @unique(map: "uq_order_return_requests_order") @map("order_id") @db.UnsignedBigInt
+  customerId        BigInt    @map("customer_id") @db.UnsignedBigInt
+  reason            String    @db.VarChar(2000)
+  iban              String    @db.VarChar(34)
+  cardNumber        String    @map("card_number") @db.Char(16)
+  status            String    @default("requested") @db.VarChar(24)
+  adminNote         String?   @map("admin_note") @db.VarChar(2000)
+  refundReceiptPath String?   @map("refund_receipt_path") @db.VarChar(512)
+  requestedAt       DateTime  @default(now()) @map("requested_at") @db.DateTime(3)
+  receivedAt        DateTime? @map("received_at") @db.DateTime(3)
+  refundedAt        DateTime? @map("refunded_at") @db.DateTime(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+  order             Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  customer          Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([status, requestedAt], map: "ix_order_returns_status_requested")
+  @@index([customerId, requestedAt], map: "ix_order_returns_customer_requested")
+  @@map("order_return_requests")
+}
+
+model CustomerWebPushSubscription {
+  id           BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  customerId   BigInt   @map("customer_id") @db.UnsignedBigInt
+  endpoint     String   @db.VarChar(2048)
+  endpointHash String   @unique(map: "uq_customer_push_endpoint_hash") @map("endpoint_hash") @db.Char(64)
+  p256dh       String   @db.VarChar(256)
+  auth         String   @db.VarChar(128)
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, updatedAt], map: "ix_customer_push_customer_updated")
+  @@map("customer_web_push_subscriptions")
+}
+
+model BackInStockSubscription {
+  customerId BigInt         @map("customer_id") @db.UnsignedBigInt
+  variantId  BigInt         @map("variant_id") @db.UnsignedBigInt
+  createdAt  DateTime       @default(now()) @map("created_at") @db.DateTime(3)
+  notifiedAt DateTime?      @map("notified_at") @db.DateTime(3)
+  customer   Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  variant    ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@id([customerId, variantId])
+  @@index([variantId, notifiedAt], map: "ix_back_in_stock_variant_notified")
+  @@map("back_in_stock_subscriptions")
 }
 
 model CouponRedemption {
@@ -588,24 +706,24 @@ model OtpRequest {
 }
 
 model Banner {
-  id             BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  title          String    @db.VarChar(180)
-  description    String?   @db.VarChar(500)
-  imagePath      String    @map("image_path") @db.VarChar(500)
-  targetUrl      String?   @map("target_url") @db.VarChar(500)
-  eyebrowText    String?   @map("eyebrow_text") @db.VarChar(120)
-  buttonLabel    String?   @map("button_label") @db.VarChar(80)
-  buttonSideText String?   @map("button_side_text") @db.VarChar(120)
-  stickerLabel   String?   @map("sticker_label") @db.VarChar(80)
-  stickerText    String?   @map("sticker_text") @db.VarChar(180)
-  backgroundColor String?  @map("background_color") @db.Char(7)
-  startsAt       DateTime? @map("starts_at") @db.DateTime(3)
-  endsAt         DateTime? @map("ends_at") @db.DateTime(3)
-  sortOrder      Int       @default(0) @map("sort_order")
-  isActive       Boolean   @default(true) @map("is_active")
-  archivedAt     DateTime? @map("archived_at") @db.DateTime(3)
-  createdAt      DateTime  @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+  id              BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  title           String    @db.VarChar(180)
+  description     String?   @db.VarChar(500)
+  imagePath       String    @map("image_path") @db.VarChar(500)
+  targetUrl       String?   @map("target_url") @db.VarChar(500)
+  eyebrowText     String?   @map("eyebrow_text") @db.VarChar(120)
+  buttonLabel     String?   @map("button_label") @db.VarChar(80)
+  buttonSideText  String?   @map("button_side_text") @db.VarChar(120)
+  stickerLabel    String?   @map("sticker_label") @db.VarChar(80)
+  stickerText     String?   @map("sticker_text") @db.VarChar(180)
+  backgroundColor String?   @map("background_color") @db.Char(7)
+  startsAt        DateTime? @map("starts_at") @db.DateTime(3)
+  endsAt          DateTime? @map("ends_at") @db.DateTime(3)
+  sortOrder       Int       @default(0) @map("sort_order")
+  isActive        Boolean   @default(true) @map("is_active")
+  archivedAt      DateTime? @map("archived_at") @db.DateTime(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
 
   @@index([isActive, startsAt, endsAt, sortOrder], map: "ix_banners_active_window_order")
   @@map("banners")
@@ -656,22 +774,22 @@ model AdminAuditLog {
 }
 
 model SmsCampaign {
-  id                BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
-  channel           String     @default("sms") @db.VarChar(16)
-  title             String     @db.VarChar(160)
-  message           String     @db.VarChar(1000)
-  targetFilters     Json       @map("target_filters")
-  recipientCount    Int        @default(0) @map("recipient_count") @db.UnsignedInt
-  sentCount         Int        @default(0) @map("sent_count") @db.UnsignedInt
-  failedCount       Int        @default(0) @map("failed_count") @db.UnsignedInt
-  status            String     @default("draft") @db.VarChar(24)
-  providerResponse  Json?      @map("provider_response")
-  createdByAdminId  BigInt     @map("created_by_admin_id") @db.UnsignedBigInt
-  startedAt         DateTime?  @map("started_at") @db.DateTime(3)
-  completedAt       DateTime?  @map("completed_at") @db.DateTime(3)
-  createdAt         DateTime   @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt         DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
-  createdByAdmin    AdminUser  @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  id               BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  channel          String    @default("sms") @db.VarChar(16)
+  title            String    @db.VarChar(160)
+  message          String    @db.VarChar(1000)
+  targetFilters    Json      @map("target_filters")
+  recipientCount   Int       @default(0) @map("recipient_count") @db.UnsignedInt
+  sentCount        Int       @default(0) @map("sent_count") @db.UnsignedInt
+  failedCount      Int       @default(0) @map("failed_count") @db.UnsignedInt
+  status           String    @default("draft") @db.VarChar(24)
+  providerResponse Json?     @map("provider_response")
+  createdByAdminId BigInt    @map("created_by_admin_id") @db.UnsignedBigInt
+  startedAt        DateTime? @map("started_at") @db.DateTime(3)
+  completedAt      DateTime? @map("completed_at") @db.DateTime(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+  createdByAdmin   AdminUser @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
 
   @@index([channel, status, createdAt], map: "ix_sms_campaigns_channel_status_created")
   @@index([createdByAdminId], map: "ix_sms_campaigns_created_by_admin")
@@ -679,19 +797,19 @@ model SmsCampaign {
 }
 
 model SocialPost {
-  id                BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
-  caption           String     @db.VarChar(2200)
-  imageUrl          String?    @map("image_url") @db.VarChar(1000)
-  channels          Json
-  status            String     @default("queued") @db.VarChar(24)
-  publishAt         DateTime   @default(now()) @map("publish_at") @db.DateTime(3)
-  channelResults    Json?      @map("channel_results")
-  lastError         String?    @map("last_error") @db.VarChar(1000)
-  createdByAdminId  BigInt     @map("created_by_admin_id") @db.UnsignedBigInt
-  publishedAt       DateTime?  @map("published_at") @db.DateTime(3)
-  createdAt         DateTime   @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt         DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
-  createdByAdmin    AdminUser  @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  id               BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  caption          String    @db.VarChar(2200)
+  imageUrl         String?   @map("image_url") @db.VarChar(1000)
+  channels         Json
+  status           String    @default("queued") @db.VarChar(24)
+  publishAt        DateTime  @default(now()) @map("publish_at") @db.DateTime(3)
+  channelResults   Json?     @map("channel_results")
+  lastError        String?   @map("last_error") @db.VarChar(1000)
+  createdByAdminId BigInt    @map("created_by_admin_id") @db.UnsignedBigInt
+  publishedAt      DateTime? @map("published_at") @db.DateTime(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+  createdByAdmin   AdminUser @relation(fields: [createdByAdminId], references: [id], onDelete: Restrict)
 
   @@index([status, publishAt], map: "ix_social_posts_status_publish")
   @@index([createdByAdminId], map: "ix_social_posts_created_by_admin")

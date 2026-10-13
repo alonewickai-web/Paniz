@@ -1,0 +1,1 @@
+Province and city name/coordinate subset adapted from tafakoritech/Provinces-and-Cities-of-Iran-Dataset (MIT License). https://github.com/tafakoritech/Provinces-and-Cities-of-Iran-Dataset

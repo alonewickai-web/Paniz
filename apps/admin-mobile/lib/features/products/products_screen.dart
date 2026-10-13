@@ -923,6 +923,7 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _price = TextEditingController();
+  final _cost = TextEditingController(text: '0');
   final _stock = TextEditingController(text: '0');
   ProductColorOption? _selectedColor = productColorPalette.first;
   String? _categoryId;
@@ -948,6 +949,7 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
   void dispose() {
     _name.dispose();
     _price.dispose();
+    _cost.dispose();
     _stock.dispose();
     super.dispose();
   }
@@ -1202,6 +1204,13 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 10),
+                      _field(
+                        _cost,
+                        'قیمت خرید هر عدد به تومان',
+                        required: true,
+                        currency: true,
+                      ),
                     ],
                     if (_step == 3) ...[
                       Text(
@@ -1222,6 +1231,11 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
                                 0,
                           ),
                         ),
+                      ),
+                      ListTile(
+                        dense: true,
+                        title: const Text('بهای خرید هر عدد'),
+                        trailing: Text(toman(int.tryParse(_asciiDigits(_cost.text).replaceAll(',', '')) ?? 0)),
                       ),
                       Wrap(
                         spacing: 8,
@@ -1356,15 +1370,17 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
                           final price = _asciiDigits(
                             _price.text.trim(),
                           ).replaceAll(',', '');
+                          final cost = _asciiDigits(_cost.text.trim()).replaceAll(',', '');
                           final stock = int.tryParse(
                             _asciiDigits(_stock.text.trim()),
                           );
-                          if (int.tryParse(price) == null || stock == null)
+                          if (int.tryParse(price) == null || int.tryParse(cost) == null || stock == null)
                             return;
                           final values = <String, dynamic>{
                             'name': _name.text.trim(),
                             'categoryId': _categoryId,
                             'status': 'draft',
+                            'purchaseCostToman': cost,
                             'images': validImages,
                             'variants': [
                               {

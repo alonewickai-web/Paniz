@@ -38,7 +38,7 @@ export class SiteAnalyticsService {
     const sevenDaysStart = new Date(todayStart.getTime() - 6 * 24 * 60 * 60_000);
     const thirtyDaysStart = new Date(todayStart.getTime() - 29 * 24 * 60 * 60_000);
 
-    const [aggregateRows, dailyRows, popularRows] = await Promise.all([
+    const [aggregateRows, dailyRows, popularRows, products] = await Promise.all([
       this.prisma.$queryRaw<RangeAggregate[]>`
         SELECT
           CAST(COALESCE(SUM(CASE WHEN created_at >= ${todayStart} THEN 1 ELSE 0 END), 0) AS UNSIGNED) AS viewsToday,
@@ -66,8 +66,17 @@ export class SiteAnalyticsService {
         WHERE created_at >= ${thirtyDaysStart}
         GROUP BY path
         ORDER BY pageViews DESC, path ASC
-        LIMIT 8
+        LIMIT 500
       `,
+      this.prisma.product.findMany({
+        where: { status: "published", deletedAt: null }, take: 500,
+        orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
+        select: {
+          id: true, name: true, slug: true,
+          variants: { where: { isActive: true }, select: { sku: true, _count: { select: { backInStockSubscriptions: true } } } },
+          _count: { select: { wishlistItems: true } },
+        },
+      }),
     ]);
 
     const aggregate = aggregateRows[0] ?? {
@@ -97,10 +106,31 @@ export class SiteAnalyticsService {
         last7Days: { pageViews: safeCount(aggregate.views7Days), uniqueVisitors: safeCount(aggregate.visitors7Days) },
         last30Days: { pageViews: safeCount(aggregate.views30Days), uniqueVisitors: safeCount(aggregate.visitors30Days) },
         daily,
-        popularPages: popularRows.map((row) => ({ path: row.path, pageViews: safeCount(row.pageViews) })),
+        popularPages: popularRows.slice(0, 8).map((row) => ({ path: row.path, title: pageTitle(row.path, products), pageViews: safeCount(row.pageViews) })),
+        popularProducts: products.map((product) => {
+          const page = popularRows.find((row) => row.path === `/products/${product.slug}`);
+          return {
+            id: product.id.toString(), name: product.name,
+            code: product.variants.map((variant) => variant.sku).find(Boolean) ?? "—",
+            pageViews: safeCount(page?.pageViews ?? 0n),
+            favoriteCount: product._count.wishlistItems,
+            backInStockCount: product.variants.reduce((sum, variant) => sum + variant._count.backInStockSubscriptions, 0),
+          };
+        }).filter((product) => product.pageViews > 0 || product.favoriteCount > 0 || product.backInStockCount > 0)
+          .sort((left, right) => right.pageViews - left.pageViews || right.favoriteCount - left.favoriteCount).slice(0, 20),
       },
     };
   }
+}
+
+function pageTitle(path: string, products: Array<{ name: string; slug: string }>): string {
+  const product = products.find((item) => path === `/products/${item.slug}`);
+  if (product) return `محصول: ${product.name}`;
+  const titles: Record<string, string> = {
+    "/": "صفحهٔ اصلی", "/products": "فهرست محصولات", "/cart": "سبد خرید",
+    "/checkout": "تسویه‌حساب", "/account": "حساب کاربری", "/favorites": "علاقه‌مندی‌ها",
+  };
+  return titles[path] ?? (path.startsWith("/help/") ? "راهنمای خرید" : path.startsWith("/policies/") ? "قوانین فروشگاه" : "سایر صفحه‌ها");
 }
 
 function safeCount(value: bigint): number {

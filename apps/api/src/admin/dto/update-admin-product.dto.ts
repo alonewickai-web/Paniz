@@ -39,6 +39,11 @@ export class UpdateAdminProductDto {
 
   @IsOptional()
   @IsString()
+  @Matches(/^\d{1,15}$/)
+  purchaseCostToman?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(240)
   seoTitle?: string;
 

@@ -8,6 +8,7 @@ import { SaveAdminCategoryDto } from "./dto/save-admin-category.dto";
 import { ReorderHomepageSectionsDto } from "./dto/reorder-homepage-sections.dto";
 import { UpdateHomepageSectionDto } from "./dto/update-homepage-section.dto";
 import { STORE_THEMES, UpdateStoreThemeDto } from "./dto/update-store-theme.dto";
+import { SaveShippingSettingsDto } from "./dto/save-shipping-settings.dto";
 
 const defaultSections = [
   { sectionKey: "hero", title: "بنر اصلی", isActive: true, sortOrder: 0 },
@@ -49,8 +50,9 @@ export class StoreManagementService {
 
   async publicConfig() {
     const now = new Date();
-    const [themeSetting, savedSections, banners] = await Promise.all([
+    const [themeSetting, logoSetting, savedSections, banners, shipping] = await Promise.all([
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.theme" }, select: { settingValue: true } }),
+      this.prisma.storeSetting.findUnique({ where: { settingKey: "store.logoPath" }, select: { settingValue: true } }),
       this.prisma.homepageSection.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
       this.prisma.banner.findMany({
         where: {
@@ -76,32 +78,70 @@ export class StoreManagementService {
           backgroundColor: true,
         },
       }),
+      this.prisma.shippingMethod.findFirst({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { name: true, baseCostToman: true, freeOverToman: true } }),
     ]);
 
     return {
       data: {
         theme: safeTheme(themeSetting?.settingValue),
+        logoPath: logoSetting?.settingValue || null,
         sections: mergeSections(savedSections),
         banners: banners.map((banner) => ({ ...banner, id: banner.id.toString() })),
+        shipping: shipping ? { name: shipping.name, baseCostToman: safeNumber(shipping.baseCostToman), freeOverToman: shipping.freeOverToman === null ? null : safeNumber(shipping.freeOverToman) } : null,
       },
     };
   }
 
   async adminConfiguration() {
-    const [themeSetting, sections, categories, banners] = await Promise.all([
+    const [themeSetting, logoSetting, sections, categories, banners, shipping] = await Promise.all([
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.theme" }, select: { settingValue: true } }),
+      this.prisma.storeSetting.findUnique({ where: { settingKey: "store.logoPath" }, select: { settingValue: true } }),
       this.prisma.homepageSection.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
       this.prisma.category.findMany({ orderBy: [{ parentId: "asc" }, { sortOrder: "asc" }, { name: "asc" }] }),
       this.prisma.banner.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
+      this.prisma.shippingMethod.findFirst({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
     ]);
     return {
       data: {
         theme: safeTheme(themeSetting?.settingValue),
+        logoPath: logoSetting?.settingValue || null,
         sections: mergeSections(sections),
         categories: categories.map((category) => ({ ...category, id: category.id.toString(), parentId: category.parentId?.toString() ?? null })),
         banners: banners.map((banner) => ({ ...banner, id: banner.id.toString(), isArchived: banner.archivedAt !== null })),
+        shipping: shipping ? { id: shipping.id.toString(), name: shipping.name, baseCostToman: safeNumber(shipping.baseCostToman), freeOverToman: shipping.freeOverToman === null ? null : safeNumber(shipping.freeOverToman), isActive: shipping.isActive } : null,
       },
     };
+  }
+
+  async saveShippingSettings(admin: AuthenticatedAdmin, input: SaveShippingSettingsDto) {
+    requireAdminPermission(admin, "store.content");
+    if (input.freeShippingEnabled && !input.alwaysFree && !input.freeOverToman) throw new BadRequestException({ code: "FREE_SHIPPING_THRESHOLD_REQUIRED", message: "حد خرید برای ارسال رایگان را وارد کن." });
+    const baseCostToman = input.alwaysFree ? 0n : BigInt(input.baseCostToman);
+    const freeOverToman = input.freeShippingEnabled && !input.alwaysFree ? BigInt(input.freeOverToman!) : null;
+    const result = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.shippingMethod.findFirst({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] });
+      const data = { name: input.name.trim() || "ارسال پستی", description: "هزینهٔ ارسال سفارش بر اساس تنظیم فروشگاه", baseCostToman, freeOverToman, isActive: true, sortOrder: 0 };
+      const saved = current
+        ? await tx.shippingMethod.update({ where: { id: current.id }, data })
+        : await tx.shippingMethod.create({ data });
+      await tx.adminAuditLog.create({ data: { adminId: admin.id, action: "shipping.settings.updated", entityType: "shipping_method", entityId: saved.id, details: { baseCostToman: baseCostToman.toString(), freeOverToman: input.freeShippingEnabled && !input.alwaysFree ? input.freeOverToman : null, alwaysFree: input.alwaysFree } } });
+      return saved;
+    });
+    return { data: { id: result.id.toString(), name: result.name, baseCostToman: safeNumber(result.baseCostToman), freeOverToman: result.freeOverToman === null ? null : safeNumber(result.freeOverToman), alwaysFree: result.baseCostToman === 0n, isActive: result.isActive } };
+  }
+
+  async saveLogo(admin: AuthenticatedAdmin, input: { logoPath?: string | null }) {
+    requireAdminPermission(admin, "store.content");
+    const logoPath = input.logoPath?.trim() || null;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.storeSetting.upsert({
+        where: { settingKey: "store.logoPath" },
+        create: { settingKey: "store.logoPath", settingValue: logoPath ?? "" },
+        update: { settingValue: logoPath ?? "" },
+      });
+      await tx.adminAuditLog.create({ data: { adminId: admin.id, action: "store.logo.updated", entityType: "store_setting", details: { logoPath } } });
+    });
+    return { data: { logoPath } };
   }
 
   async saveTheme(admin: AuthenticatedAdmin, input: UpdateStoreThemeDto) {
@@ -424,6 +464,12 @@ function validateWindow(startsAt: Date | null, endsAt: Date | null): void {
 
 function safeTheme(value: Prisma.JsonValue | undefined): StoreTheme {
   return typeof value === "string" && STORE_THEMES.includes(value as StoreTheme) ? value as StoreTheme : "rose";
+}
+
+function safeNumber(value: bigint): number {
+  const result = Number(value);
+  if (!Number.isSafeInteger(result)) throw new Error("Shipping amount exceeds JavaScript's safe integer range.");
+  return result;
 }
 
 function mergeSections(saved: Array<{ id: bigint; sectionKey: string; title: string | null; config: Prisma.JsonValue | null; isActive: boolean; sortOrder: number; updatedAt: Date }>) {
