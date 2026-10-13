@@ -239,7 +239,7 @@ export class AdminService {
         seoTitle: product.seoTitle,
         seoDescription: product.seoDescription,
         category: product.category ? { id: product.category.id.toString(), name: product.category.name, slug: product.category.slug } : null,
-        images: product.images.map((image) => ({ id: image.id.toString(), imagePath: image.imagePath, altText: image.altText, fileSizeBytes: image.fileSizeBytes, isPrimary: image.isPrimary, sortOrder: image.sortOrder })),
+        images: product.images.map((image) => ({ id: image.id.toString(), imagePath: image.imagePath, altText: image.altText, colorName: image.colorName, fileSizeBytes: image.fileSizeBytes, isPrimary: image.isPrimary, sortOrder: image.sortOrder })),
         variants: product.variants.map((variant) => ({
           id: variant.id.toString(),
           sku: variant.sku,
@@ -289,6 +289,7 @@ export class AdminService {
                 .map((image, index) => ({
                   imagePath: image.imagePath.trim(),
                   altText: image.altText?.trim() || null,
+                  colorName: image.colorName?.trim() || null,
                   fileSizeBytes: image.fileSizeBytes ?? 0,
                   sortOrder: index,
                   isPrimary: index === 0,
@@ -519,6 +520,7 @@ export class AdminService {
           productId,
           imagePath: input.imagePath.trim(),
           altText: input.altText?.trim() || null,
+          colorName: input.colorName?.trim() || null,
           fileSizeBytes: input.fileSizeBytes ?? 0,
           sortOrder: input.isPrimary ? 0 : input.sortOrder ?? imageCount,
           isPrimary: input.isPrimary || imageCount === 0,
@@ -541,7 +543,7 @@ export class AdminService {
       });
       return created;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-    return { data: { id: image.id.toString(), imagePath: image.imagePath, fileSizeBytes: image.fileSizeBytes, isPrimary: image.isPrimary } };
+    return { data: { id: image.id.toString(), imagePath: image.imagePath, colorName: image.colorName, fileSizeBytes: image.fileSizeBytes, isPrimary: image.isPrimary } };
   }
 
   async deleteProductImage(admin: AuthenticatedAdmin, rawProductId: string, rawImageId: string) {
@@ -606,6 +608,7 @@ export class AdminService {
         data: {
           ...(input.imagePath !== undefined ? { imagePath: input.imagePath.trim() } : {}),
           ...(input.altText !== undefined ? { altText: input.altText.trim() || null } : {}),
+          ...(input.colorName !== undefined ? { colorName: input.colorName?.trim() || null } : {}),
           ...(input.fileSizeBytes !== undefined ? { fileSizeBytes: input.fileSizeBytes } : {}),
           ...(input.isPrimary === true ? { sortOrder: 0 } : input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
           ...(input.isPrimary !== undefined ? { isPrimary: input.isPrimary } : {}),
@@ -617,12 +620,12 @@ export class AdminService {
           action: "product_image.updated",
           entityType: "product_image",
           entityId: image.id,
-          details: { productId: productId.toString(), imagePath: image.imagePath, altText: image.altText, fileSizeBytes: image.fileSizeBytes, isPrimary: image.isPrimary, sortOrder: image.sortOrder },
+          details: { productId: productId.toString(), imagePath: image.imagePath, altText: image.altText, colorName: image.colorName, fileSizeBytes: image.fileSizeBytes, isPrimary: image.isPrimary, sortOrder: image.sortOrder },
         },
       });
       return image;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-    return { data: { id: updated.id.toString(), imagePath: updated.imagePath, altText: updated.altText, fileSizeBytes: updated.fileSizeBytes, isPrimary: updated.isPrimary, sortOrder: updated.sortOrder } };
+    return { data: { id: updated.id.toString(), imagePath: updated.imagePath, altText: updated.altText, colorName: updated.colorName, fileSizeBytes: updated.fileSizeBytes, isPrimary: updated.isPrimary, sortOrder: updated.sortOrder } };
   }
 
   async archiveProduct(admin: AuthenticatedAdmin, rawProductId: string) {

@@ -27,6 +27,11 @@ export class AdminProductImageDto {
   altText?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  colorName?: string | null;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)

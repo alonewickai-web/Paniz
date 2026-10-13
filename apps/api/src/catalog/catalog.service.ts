@@ -213,6 +213,7 @@ export class CatalogService {
           id: image.id.toString(),
           path: image.imagePath,
           alt: image.altText,
+          colorName: image.colorName,
           isPrimary: image.isPrimary,
         })),
         variants: product.variants.map((variant) => ({
@@ -248,6 +249,7 @@ export class CatalogService {
         id: image.id.toString(),
         path: image.imagePath,
         alt: image.altText,
+        colorName: image.colorName,
       })),
       priceToman: cheapestVariant ? toSafeNumber(cheapestVariant.priceToman) : null,
       compareAtPriceToman: cheapestVariant?.compareAtPriceToman == null

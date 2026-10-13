@@ -28,7 +28,7 @@ export type StoreProductDetail = StoreProduct & {
   material: string | null;
   careInstructions: string | null;
   sizeGuide: unknown;
-  images: { id: string; path: string; alt: string | null; isPrimary: boolean }[];
+  images: { id: string; path: string; alt: string | null; colorName: string | null; isPrimary: boolean }[];
 };
 
 export type StoreCategory = {

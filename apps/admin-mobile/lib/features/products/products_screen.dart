@@ -219,8 +219,10 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     final input = await showDialog<JsonMap>(
       context: context,
       builder:
-          (_) =>
-              _AddProductImageDialog(productName: '${product['name'] ?? ''}'),
+          (_) => _AddProductImageDialog(
+            productName: '${product['name'] ?? ''}',
+            colorNames: _productColorNames(product),
+          ),
     );
     if (input == null || !mounted) return;
     try {
@@ -242,6 +244,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
           (_) => _EditProductImageDialog(
             productName: '${product['name'] ?? ''}',
             image: image,
+            colorNames: _productColorNames(product),
           ),
     );
     if (changes == null || !mounted) return;
@@ -755,6 +758,7 @@ class _ProductImageTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final primary = image['isPrimary'] == true;
+    final colorName = '${image['colorName'] ?? ''}'.trim();
     final bytes = int.tryParse('${image['fileSizeBytes'] ?? 0}') ?? 0;
     final sizeLabel =
         bytes <= 0
@@ -803,6 +807,12 @@ class _ProductImageTile extends StatelessWidget {
             ),
             Text(
               sizeLabel,
+              style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              'رنگ: ${colorName.isEmpty ? 'همهٔ رنگ‌ها' : colorName}',
               style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -960,6 +970,7 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
       _images[index] = _ProductImageDraft(
         imagePath: path,
         fileSizeBytes: path == null ? null : previous.fileSizeBytes,
+        colorName: previous.colorName,
       );
       if (_images[index].imagePath?.isNotEmpty == true) _imageError = false;
     });
@@ -970,6 +981,17 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
       _images[index] = _ProductImageDraft(
         imagePath: _images[index].imagePath,
         fileSizeBytes: fileSizeBytes,
+        colorName: _images[index].colorName,
+      );
+    });
+  }
+
+  void _setImageColor(int index, String? colorName) {
+    setState(() {
+      _images[index] = _ProductImageDraft(
+        imagePath: _images[index].imagePath,
+        fileSizeBytes: _images[index].fileSizeBytes,
+        colorName: colorName,
       );
     });
   }
@@ -1235,7 +1257,14 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
                       ListTile(
                         dense: true,
                         title: const Text('بهای خرید هر عدد'),
-                        trailing: Text(toman(int.tryParse(_asciiDigits(_cost.text).replaceAll(',', '')) ?? 0)),
+                        trailing: Text(
+                          toman(
+                            int.tryParse(
+                                  _asciiDigits(_cost.text).replaceAll(',', ''),
+                                ) ??
+                                0,
+                          ),
+                        ),
                       ),
                       Wrap(
                         spacing: 8,
@@ -1354,6 +1383,7 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
                               'imagePath': path,
                               'altText': _name.text.trim(),
                               'fileSizeBytes': image.fileSizeBytes ?? 0,
+                              'colorName': image.colorName,
                               'sortOrder': i,
                               'isPrimary': i == primaryIndex,
                             });
@@ -1370,11 +1400,15 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
                           final price = _asciiDigits(
                             _price.text.trim(),
                           ).replaceAll(',', '');
-                          final cost = _asciiDigits(_cost.text.trim()).replaceAll(',', '');
+                          final cost = _asciiDigits(
+                            _cost.text.trim(),
+                          ).replaceAll(',', '');
                           final stock = int.tryParse(
                             _asciiDigits(_stock.text.trim()),
                           );
-                          if (int.tryParse(price) == null || int.tryParse(cost) == null || stock == null)
+                          if (int.tryParse(price) == null ||
+                              int.tryParse(cost) == null ||
+                              stock == null)
                             return;
                           final values = <String, dynamic>{
                             'name': _name.text.trim(),
@@ -1485,6 +1519,30 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
                       ),
                     ),
                   ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: _images[index].colorName ?? '',
+                  decoration: const InputDecoration(
+                    labelText: 'عکس مربوط به کدام رنگ است؟',
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: '',
+                      child: Text('همهٔ رنگ‌ها / تصویر عمومی'),
+                    ),
+                    ...productColorPalette.map(
+                      (option) => DropdownMenuItem(
+                        value: option.name,
+                        child: Text(option.name),
+                      ),
+                    ),
+                  ],
+                  onChanged:
+                      (value) => _setImageColor(
+                        index,
+                        value == null || value.isEmpty ? null : value,
+                      ),
+                ),
                 Row(
                   children: [
                     Expanded(
@@ -1546,9 +1604,57 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
 }
 
 class _ProductImageDraft {
-  const _ProductImageDraft({this.imagePath, this.fileSizeBytes});
+  const _ProductImageDraft({
+    this.imagePath,
+    this.fileSizeBytes,
+    this.colorName,
+  });
   final String? imagePath;
   final int? fileSizeBytes;
+  final String? colorName;
+}
+
+List<String> _productColorNames(JsonMap product) {
+  final variants = product['variants'];
+  if (variants is! List) return const [];
+  return variants
+      .whereType<Map>()
+      .map((variant) => '${variant['colorName'] ?? ''}'.trim())
+      .where((name) => name.isNotEmpty)
+      .toSet()
+      .toList();
+}
+
+Widget _imageColorDropdown({
+  required List<String> colorNames,
+  required String? value,
+  required ValueChanged<String?> onChanged,
+}) {
+  final options =
+      colorNames
+          .map((name) => name.trim())
+          .where((name) => name.isNotEmpty)
+          .toSet()
+          .toList();
+  if (value != null && value.trim().isNotEmpty && !options.contains(value)) {
+    options.add(value);
+  }
+  return DropdownButtonFormField<String>(
+    initialValue: value ?? '',
+    decoration: const InputDecoration(labelText: 'عکس مربوط به کدام رنگ است؟'),
+    items: [
+      const DropdownMenuItem(
+        value: '',
+        child: Text('همهٔ رنگ‌ها / تصویر عمومی'),
+      ),
+      ...options.map(
+        (name) => DropdownMenuItem(value: name, child: Text(name)),
+      ),
+    ],
+    onChanged:
+        (selected) =>
+            onChanged(selected == null || selected.isEmpty ? null : selected),
+  );
 }
 
 class _CategoryRemoved {
@@ -2571,8 +2677,12 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
 }
 
 class _AddProductImageDialog extends StatefulWidget {
-  const _AddProductImageDialog({required this.productName});
+  const _AddProductImageDialog({
+    required this.productName,
+    required this.colorNames,
+  });
   final String productName;
+  final List<String> colorNames;
   @override
   State<_AddProductImageDialog> createState() => _AddProductImageDialogState();
 }
@@ -2581,9 +2691,11 @@ class _EditProductImageDialog extends StatefulWidget {
   const _EditProductImageDialog({
     required this.productName,
     required this.image,
+    required this.colorNames,
   });
   final String productName;
   final JsonMap image;
+  final List<String> colorNames;
 
   @override
   State<_EditProductImageDialog> createState() =>
@@ -2603,6 +2715,10 @@ class _EditProductImageDialogState extends State<_EditProductImageDialog> {
   late int _fileSizeBytes =
       int.tryParse('${widget.image['fileSizeBytes'] ?? 0}') ?? 0;
   late bool _primary = widget.image['isPrimary'] == true;
+  late String? _colorName =
+      '${widget.image['colorName'] ?? ''}'.trim().isEmpty
+          ? null
+          : '${widget.image['colorName']}'.trim();
 
   @override
   void dispose() {
@@ -2667,6 +2783,17 @@ class _EditProductImageDialogState extends State<_EditProductImageDialog> {
                 ),
               ),
               const SizedBox(height: 6),
+              _imageColorDropdown(
+                colorNames: [
+                  ...widget.colorNames,
+                  if (_colorName != null &&
+                      !widget.colorNames.contains(_colorName!))
+                    _colorName!,
+                ],
+                value: _colorName,
+                onChanged: (value) => setState(() => _colorName = value),
+              ),
+              const SizedBox(height: 6),
               _field(
                 _sortOrder,
                 'ترتیب نمایش',
@@ -2704,6 +2831,7 @@ class _EditProductImageDialogState extends State<_EditProductImageDialog> {
           Navigator.pop(context, <String, dynamic>{
             'imagePath': path,
             'altText': _alt.text.trim(),
+            'colorName': _colorName,
             'sortOrder': int.parse(_asciiDigits(_sortOrder.text)),
             'isPrimary': _primary,
             'fileSizeBytes': _fileSizeBytes,
@@ -2723,6 +2851,7 @@ class _AddProductImageDialogState extends State<_AddProductImageDialog> {
   int? _fileSizeBytes;
   bool _imageError = false;
   bool _primary = false;
+  String? _colorName;
   @override
   void dispose() {
     _alt.dispose();
@@ -2777,6 +2906,12 @@ class _AddProductImageDialogState extends State<_AddProductImageDialog> {
               ),
             ),
             const SizedBox(height: 6),
+            _imageColorDropdown(
+              colorNames: widget.colorNames,
+              value: _colorName,
+              onChanged: (value) => setState(() => _colorName = value),
+            ),
+            const SizedBox(height: 6),
             _ActiveStateSwitch(
               title: 'تصویر اصلی و اولین عکس',
               value: _primary,
@@ -2801,6 +2936,7 @@ class _AddProductImageDialogState extends State<_AddProductImageDialog> {
           Navigator.pop(context, {
             'imagePath': _imagePath,
             'altText': _alt.text.trim(),
+            'colorName': _colorName,
             'isPrimary': _primary,
             'fileSizeBytes': _fileSizeBytes ?? 0,
           });

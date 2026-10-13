@@ -31,9 +31,16 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
   const [relatedLoaded, setRelatedLoaded] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const galleryIndexRef = useRef(0);
-  const currentImages = useMemo(() => product.images.length
-    ? product.images
-    : product.image ? [{ id: "primary", path: product.image.path, alt: product.image.alt, isPrimary: true }] : [], [product.image, product.images]);
+  const currentImages = useMemo(() => {
+    const images = product.images.length
+      ? product.images
+      : product.image ? [{ id: "primary", path: product.image.path, alt: product.image.alt, colorName: null, isPrimary: true }] : [];
+    const colorImages = images.filter((image) => image.colorName && normalizeColorName(image.colorName) === normalizeColorName(color));
+    if (colorImages.length) return colorImages;
+    const generalImages = images.filter((image) => !image.colorName?.trim());
+    if (generalImages.length) return generalImages;
+    return images.some((image) => image.colorName?.trim()) ? [] : images;
+  }, [color, product.image, product.images]);
 
   useEffect(() => {
     setImageIndex(0);
@@ -202,7 +209,7 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
               onTouchCancel={() => { touchStart.current = null; }}
               aria-label={mainImage ? `تصویر ${imageIndex + 1} از ${currentImages.length} برای ${product.name}` : `تصویر ${product.name}`}
             >
-              {mainImage ? <PageFlipImage src={mainImage.path} alt={mainImage.alt || product.name} outgoing={galleryOutgoing} direction={galleryDirection} priority sizes="(max-width: 760px) 100vw, 54vw" /> : <div className="store-no-image">تصویر محصول</div>}
+              {mainImage ? <PageFlipImage src={mainImage.path} alt={mainImage.alt || product.name} outgoing={galleryOutgoing} direction={galleryDirection} priority sizes="(max-width: 760px) 100vw, 54vw" /> : <div className="store-no-image">{product.images.some((image) => image.colorName?.trim()) ? `برای رنگ ${color} عکسی ثبت نشده` : "تصویر محصول"}</div>}
               {discount > 0 && <span className="store-detail-sale">{new Intl.NumberFormat("fa-IR").format(discount)}٪ تخفیف</span>}
               {currentImages.length > 1 && <span className="store-image-count">{new Intl.NumberFormat("fa-IR").format(imageIndex + 1)} / {new Intl.NumberFormat("fa-IR").format(currentImages.length)}</span>}
             </div>
@@ -220,7 +227,7 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
 
             <fieldset className="store-choice-group"><legend>رنگ <span>{color}</span></legend><div className="store-color-choices">{product.colors.map((item) => {
               const colorAvailable = product.variants.some((entry) => entry.color.name === item.name && entry.availableQuantity > 0);
-              return <button key={item.name} type="button" className={`${color === item.name ? "active" : ""} ${!colorAvailable ? "unavailable" : ""}`} onClick={() => { setColor(item.name); const firstSize = product.variants.find((entry) => entry.color.name === item.name && entry.availableQuantity > 0)?.size ?? product.variants.find((entry) => entry.color.name === item.name)?.size ?? ""; setSize(firstSize); setQuantity(1); setStockSubscribed(false); }} aria-label={`${item.name}${colorAvailable ? "" : "، ناموجود"}`} aria-pressed={color === item.name}><i style={{ background: item.value }} />{item.name}</button>;
+              return <button key={item.name} type="button" className={`${color === item.name ? "active" : ""} ${!colorAvailable ? "unavailable" : ""}`} onClick={() => { if (color !== item.name) { if (mainImage) setGalleryOutgoing({ src: mainImage.path, alt: mainImage.alt || product.name }); setGalleryDirection("next"); galleryIndexRef.current = 0; setImageIndex(0); } setColor(item.name); const firstSize = product.variants.find((entry) => entry.color.name === item.name && entry.availableQuantity > 0)?.size ?? product.variants.find((entry) => entry.color.name === item.name)?.size ?? ""; setSize(firstSize); setQuantity(1); setStockSubscribed(false); }} aria-label={`${item.name}${colorAvailable ? "" : "، ناموجود"}`} aria-pressed={color === item.name}><i style={{ background: item.value }} />{item.name}</button>;
             })}</div></fieldset>
 
             <fieldset className="store-choice-group"><legend>سایز <span>{size || "انتخاب کن"}</span></legend><div className="store-size-choices">{product.sizes.map((item) => {
@@ -257,4 +264,8 @@ function readSizeGuide(value: unknown): Record<string, string | number>[] {
 
 function isGuideRow(value: unknown): value is Record<string, string | number> {
   return Boolean(value && typeof value === "object" && Object.values(value).every((item) => typeof item === "string" || typeof item === "number"));
+}
+
+function normalizeColorName(value: string) {
+  return value.normalize("NFKC").replace(/[يى]/g, "ی").replace(/ك/g, "ک").trim().replace(/\s+/g, " ");
 }
