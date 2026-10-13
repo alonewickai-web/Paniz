@@ -10,6 +10,7 @@ import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { PrismaService } from "../../database/prisma.service";
+import { AdminNotificationService } from "../../admin-notifications/admin-notification.service";
 
 const LINK_CODE_TTL_MS = 10 * 60_000;
 const BOT_API_BASE_URL = "https://botapi.rubika.ir/v3";
@@ -18,7 +19,11 @@ const BOT_API_BASE_URL = "https://botapi.rubika.ir/v3";
 export class RubikaBotService implements OnModuleInit {
   private readonly logger = new Logger(RubikaBotService.name);
 
-  constructor(private readonly prisma: PrismaService, private readonly config: ConfigService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+    private readonly notifications: AdminNotificationService,
+  ) {}
 
   async onModuleInit(): Promise<void> {
     const token = this.token();
@@ -175,7 +180,21 @@ export class RubikaBotService implements OnModuleInit {
     }
 
     const code = extractLinkCode(text);
-    if (!code) return { ok: true };
+    if (!code) {
+      const providerMessageId = message.message_id ?? update.update_id;
+      const dedupeKey = typeof providerMessageId === "string" || typeof providerMessageId === "number"
+        ? `rubika:${providerMessageId}`
+        : undefined;
+      await this.notifications.notifyOwners({
+        type: "rubika_message",
+        title: "پیام جدید از روبیکا",
+        body: text.slice(0, 500),
+        entityType: "rubika_chat",
+        externalRef: chatId,
+        dedupeKey,
+      });
+      return { ok: true };
+    }
     const tokenHash = hashLinkCode(code);
     const now = new Date();
     try {

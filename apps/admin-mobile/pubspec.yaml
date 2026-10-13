@@ -1,7 +1,7 @@
 name: panizstyle_admin
 description: PanizStyle store management app
 publish_to: none
-version: 1.0.11+2026101202
+version: 1.0.12+2026109001
 
 environment:
   sdk: '>=3.7.0 <4.0.0'
@@ -14,6 +14,8 @@ dependencies:
   flutter_riverpod: ^3.4.3
   dio: ^5.11.1
   flutter_secure_storage: ^11.2.0
+  firebase_core: ^4.15.0
+  firebase_messaging: ^16.7.0
   image_picker: ^1.2.4
   image_cropper: ^12.2.1
   flutter_image_compress: ^2.5.1

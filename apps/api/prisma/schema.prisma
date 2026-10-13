@@ -30,6 +30,8 @@ model AdminUser {
   smsCampaigns          SmsCampaign[]
   socialPosts           SocialPost[]
   appReleases           AdminAppRelease[]
+  notifications         AdminNotification[]
+  pushDevices           AdminPushDevice[]
 
   @@index([role, isActive], map: "ix_admin_users_role_active")
   @@map("admin_users")
@@ -64,6 +66,37 @@ model AdminUserPermission {
   @@id([adminId, permissionKey])
   @@index([permissionKey, expiresAt], map: "ix_admin_permissions_key_expiry")
   @@map("admin_user_permissions")
+}
+
+model AdminNotification {
+  id          BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  adminId     BigInt    @map("admin_id") @db.UnsignedBigInt
+  type        String    @db.VarChar(32)
+  title       String    @db.VarChar(160)
+  body        String    @db.VarChar(500)
+  entityType  String?   @map("entity_type") @db.VarChar(48)
+  entityId    BigInt?   @map("entity_id") @db.UnsignedBigInt
+  externalRef String?   @map("external_ref") @db.VarChar(128)
+  dedupeKey   String?   @unique(map: "uq_admin_notifications_dedupe") @map("dedupe_key") @db.VarChar(160)
+  readAt      DateTime? @map("read_at") @db.DateTime(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  admin       AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId, readAt, createdAt], map: "ix_admin_notifications_unread_created")
+  @@map("admin_notifications")
+}
+
+model AdminPushDevice {
+  id        BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  adminId   BigInt    @map("admin_id") @db.UnsignedBigInt
+  token     String    @unique(map: "uq_admin_push_devices_token") @db.VarChar(4096)
+  platform  String    @db.VarChar(16)
+  createdAt DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+  admin     AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId, updatedAt], map: "ix_admin_push_devices_admin_updated")
+  @@map("admin_push_devices")
 }
 
 model AdminSession {

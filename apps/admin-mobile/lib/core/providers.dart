@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'admin_api.dart';
+import 'push_notification_service.dart';
 
 final adminApiProvider = Provider<AdminApi>((ref) {
   final api = AdminApi();
@@ -16,24 +19,55 @@ final authProvider = AsyncNotifierProvider<AuthController, AdminIdentity?>(
 
 class AuthController extends AsyncNotifier<AdminIdentity?> {
   @override
-  Future<AdminIdentity?> build() => ref.read(adminApiProvider).restoreSession();
+  Future<AdminIdentity?> build() async {
+    final api = ref.read(adminApiProvider);
+    final admin = await api.restoreSession();
+    if (admin?.role == 'owner') unawaited(_registerPush(api));
+    return admin;
+  }
 
   Future<void> login(String username, String password) async {
     final admin = await ref.read(adminApiProvider).login(username, password);
     state = AsyncData(admin);
+    if (admin.role == 'owner') unawaited(_registerPush(ref.read(adminApiProvider)));
   }
 
   Future<void> logout() async {
+    final api = ref.read(adminApiProvider);
     try {
-      await ref.read(adminApiProvider).logout();
+      final token = await AdminPushNotifications.currentToken();
+      if (token != null && token.isNotEmpty) await api.unregisterPushDevice(token);
+    } catch (_) {
+      // Continue logout if the API is temporarily unavailable.
     } finally {
-      state = const AsyncData(null);
+      await AdminPushNotifications.stopWatchingTokens();
+      try {
+        await api.logout();
+      } finally {
+        state = const AsyncData(null);
+      }
     }
   }
 
   Future<void> clearLocalSession() async {
     await ref.read(adminApiProvider).clearSession();
     state = const AsyncData(null);
+  }
+
+  Future<void> refreshIdentity() async {
+    final admin = await ref.read(adminApiProvider).restoreSession();
+    state = AsyncData(admin);
+  }
+
+  Future<void> _registerPush(AdminApi api) async {
+    try {
+      final token = await AdminPushNotifications.requestToken();
+      if (token == null || token.isEmpty) return;
+      await api.registerPushDevice(token);
+      await AdminPushNotifications.watchTokenChanges(api.registerPushDevice);
+    } catch (_) {
+      // Push registration must not block sign-in or opening the management app.
+    }
   }
 }
 
@@ -82,15 +116,13 @@ final productsProvider = FutureProvider.autoDispose<List<JsonMap>>(
 final categoriesProvider = FutureProvider.autoDispose<List<JsonMap>>((
   ref,
 ) async {
-  final configuration = await ref.watch(storeConfigurationProvider.future);
-  final categories = configuration['categories'];
-  if (categories is! List) return const <JsonMap>[];
-  return categories
-      .whereType<Map>()
-      .map((category) => Map<String, dynamic>.from(category))
-      .where((category) => category['isActive'] == true)
-      .toList();
+  return ref.watch(adminApiProvider).productCategories();
 });
 final ordersProvider = FutureProvider.autoDispose<List<JsonMap>>(
   (ref) => ref.watch(adminApiProvider).orders(),
 );
+final adminNotificationsProvider = FutureProvider.autoDispose<JsonMap>((ref) {
+  final timer = Timer.periodic(const Duration(seconds: 30), (_) => ref.invalidateSelf());
+  ref.onDispose(timer.cancel);
+  return ref.watch(adminApiProvider).adminNotifications();
+});

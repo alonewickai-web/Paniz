@@ -12,6 +12,9 @@ class AdminIdentity {
     required this.username,
     required this.phone,
     required this.role,
+    this.avatarPath,
+    this.permissions = const [],
+    this.mustChangePassword = false,
   });
 
   final String id;
@@ -19,6 +22,11 @@ class AdminIdentity {
   final String username;
   final String phone;
   final String role;
+  final String? avatarPath;
+  final List<String> permissions;
+  final bool mustChangePassword;
+  bool can(String permission) =>
+      role == 'owner' || role == 'admin' || permissions.contains(permission);
 
   factory AdminIdentity.fromJson(JsonMap json) => AdminIdentity(
     id: '${json['id'] ?? ''}',
@@ -26,6 +34,12 @@ class AdminIdentity {
     username: '${json['username'] ?? ''}',
     phone: '${json['phone'] ?? ''}',
     role: '${json['role'] ?? ''}',
+    avatarPath: json['avatarPath'] as String?,
+    permissions:
+        (json['permissions'] as List? ?? const [])
+            .map((item) => '$item')
+            .toList(),
+    mustChangePassword: json['mustChangePassword'] == true,
   );
 }
 
@@ -89,9 +103,12 @@ class AdminApi {
     try {
       final response = await dio.get('admin/auth/me');
       return AdminIdentity.fromJson(_data(response));
-    } on DioException {
-      await clearSession();
-      return null;
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 401) {
+        await clearSession();
+        return null;
+      }
+      rethrow;
     }
   }
 
@@ -145,6 +162,152 @@ class AdminApi {
   }
 
   Future<JsonMap> dashboard() async => _data(await dio.get('admin/dashboard'));
+
+  Future<JsonMap?> latestAppRelease() async {
+    final body = _payload(await dio.get('admin/app-releases/latest'));
+    return body is Map ? Map<String, dynamic>.from(body) : null;
+  }
+
+  Future<List<JsonMap>> appReleases() async =>
+      _list(_payload(await dio.get('admin/app-releases')));
+
+  Future<JsonMap> publishAppRelease(
+    String path,
+    String versionName,
+    int versionCode,
+    String notes,
+    void Function(int, int) onProgress,
+  ) async {
+    return _data(
+      await dio.post(
+        'admin/app-releases',
+        data: FormData.fromMap({
+          'file': await MultipartFile.fromFile(
+            path,
+            filename: 'PANIZ-Admin.apk',
+          ),
+          'versionName': versionName,
+          'versionCode': versionCode,
+          'releaseNotes': notes,
+        }),
+        options: Options(
+          sendTimeout: const Duration(minutes: 10),
+          receiveTimeout: const Duration(minutes: 2),
+        ),
+        onSendProgress: onProgress,
+      ),
+    );
+  }
+
+  Future<void> downloadAppRelease(
+    JsonMap release,
+    String destination,
+    CancelToken cancelToken,
+    void Function(int, int) onProgress,
+  ) async {
+    final base = Uri.parse(dio.options.baseUrl);
+    final uri = base.resolve('${release['downloadPath']}');
+    if (uri.scheme != 'https' ||
+        uri.host != base.host ||
+        uri.port != base.port) {
+      throw const AdminApiException(
+        'نشانی بروزرسانی باید از سرور امن همین فروشگاه باشد.',
+      );
+    }
+    await dio.download(
+      uri.toString(),
+      destination,
+      cancelToken: cancelToken,
+      onReceiveProgress: onProgress,
+      options: Options(receiveTimeout: const Duration(minutes: 5)),
+      deleteOnError: true,
+    );
+  }
+
+  Future<JsonMap> staff({
+    String query = '',
+    String active = '',
+    int page = 1,
+  }) async => _envelope(
+    await dio.get(
+      'admin/staff',
+      queryParameters: {
+        'q': query,
+        'active': active,
+        'page': page,
+        'pageSize': 30,
+      },
+    ),
+  );
+  Future<List<JsonMap>> permissionCatalog() async =>
+      _list(_payload(await dio.get('admin/staff/permissions')));
+  Future<JsonMap> saveStaff(JsonMap input, {String? id}) async => _data(
+    id == null
+        ? await dio.post('admin/staff', data: input)
+        : await dio.patch('admin/staff/$id', data: input),
+  );
+  Future<JsonMap> staffDetail(String id) async =>
+      _data(await dio.get('admin/staff/$id'));
+  Future<JsonMap> resetStaffPassword(String id) async =>
+      _data(await dio.post('admin/staff/$id/reset-password'));
+  Future<JsonMap> auditLogs({
+    int page = 1,
+    String? adminId,
+    String? entityType,
+    String? result,
+  }) async => _envelope(
+    await dio.get(
+      'admin/audit-logs',
+      queryParameters: {
+        'page': page,
+        'pageSize': 30,
+        if (adminId != null) 'adminId': adminId,
+        if (entityType != null) 'entityType': entityType,
+        if (result != null) 'result': result,
+      },
+    ),
+  );
+  Future<JsonMap> auditDetail(String id) async =>
+      _data(await dio.get('admin/audit-logs/$id'));
+  Future<JsonMap> updateProfile(JsonMap input) async =>
+      _data(await dio.patch('admin/auth/profile', data: input));
+  Future<JsonMap> uploadProfileAvatar(Uint8List bytes, String filename) async =>
+      _data(
+        await dio.post(
+          'admin/auth/profile/avatar',
+          data: FormData.fromMap({
+            'file': MultipartFile.fromBytes(bytes, filename: filename),
+          }),
+        ),
+      );
+  Future<List<JsonMap>> productCategories() async =>
+      _list(_payload(await dio.get('admin/product-categories')));
+  Future<JsonMap> productDetail(String id) async =>
+      _data(await dio.get('admin/products/detail/$id'));
+  Future<JsonMap> orderDetail(String id) async =>
+      _data(await dio.get('admin/orders/$id'));
+
+  Future<JsonMap> adminNotifications() async =>
+      _envelope(await dio.get('admin/notifications'));
+
+  Future<void> markAdminNotificationRead(String id) async {
+    await dio.patch('admin/notifications/$id/read');
+  }
+
+  Future<void> markAllAdminNotificationsRead() async {
+    await dio.patch('admin/notifications/read-all');
+  }
+
+  Future<void> registerPushDevice(String token) async {
+    await dio.post('admin/notifications/devices', data: {
+      'token': token,
+      'platform': 'android',
+    });
+  }
+
+  Future<void> unregisterPushDevice(String token) async {
+    await dio.delete('admin/notifications/devices', data: {'token': token});
+  }
 
   Future<JsonMap> siteVisitAnalytics() async =>
       _data(await dio.get('admin/analytics/site-visits'));
@@ -465,6 +628,13 @@ class AdminApi {
     if (payload is! Map)
       throw const AdminApiException('ساختار پاسخ API معتبر نیست.');
     return Map<String, dynamic>.from(payload);
+  }
+
+  static JsonMap _envelope(Response<dynamic> response) {
+    final body = response.data;
+    if (body is! Map || !body.containsKey('data'))
+      throw const AdminApiException('ساختار پاسخ API معتبر نیست.');
+    return Map<String, dynamic>.from(body);
   }
 
   static Object? _payload(Response<dynamic> response) {

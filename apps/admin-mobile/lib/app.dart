@@ -5,8 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/admin_api.dart';
 import 'core/paniz_theme.dart';
 import 'core/providers.dart';
+import 'core/push_notification_service.dart';
 import 'features/auth/login_screen.dart';
 import 'features/home/admin_home.dart';
+import 'features/auth/security_settings_screen.dart';
+import 'features/notifications/notification_inbox_screen.dart';
 
 class PanizAdminApp extends ConsumerWidget {
   const PanizAdminApp({super.key});
@@ -16,6 +19,8 @@ class PanizAdminApp extends ConsumerWidget {
     final auth = ref.watch(authProvider);
     final themeMode = ref.watch(themeModeProvider).asData?.value ?? ThemeMode.system;
     return MaterialApp(
+      navigatorKey: adminNavigatorKey,
+      scaffoldMessengerKey: adminScaffoldMessengerKey,
       title: 'PANIZ Admin',
       debugShowCheckedModeBanner: false,
       locale: const Locale('fa'),
@@ -28,10 +33,18 @@ class PanizAdminApp extends ConsumerWidget {
       theme: PanizTheme.light,
       darkTheme: PanizTheme.dark,
       themeMode: themeMode,
+      routes: {
+        '/admin-notifications': (_) => Scaffold(
+          appBar: AppBar(title: const Text('اعلان‌ها')),
+          body: const SafeArea(child: NotificationInboxScreen()),
+        ),
+      },
       home: auth.when(
         loading: () => const _LoadingScreen(),
         error: (error, _) => _AppErrorScreen(error: AdminApi.friendlyError(error)),
-        data: (admin) => admin == null ? const LoginScreen() : AdminHome(admin: admin),
+        data: (admin) => admin == null ? const LoginScreen() : admin.mustChangePassword
+          ? Scaffold(appBar: AppBar(title: const Text('تغییر گذرواژهٔ موقت')), body: SafeArea(child: SecuritySettingsScreen(admin: admin)))
+          : AdminHome(admin: admin),
       ),
     );
   }

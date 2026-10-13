@@ -9,6 +9,7 @@ import {
 import { Prisma } from "@prisma/client";
 import { randomBytes } from "node:crypto";
 import { PrismaService } from "../database/prisma.service";
+import { AdminNotificationService } from "../admin-notifications/admin-notification.service";
 import { CreateCustomerOrderDto } from "../customer/dto/create-customer-order.dto";
 import { CartItemDto } from "./dto/cart-item.dto";
 import { TrackOrderDto } from "./dto/track-order.dto";
@@ -32,7 +33,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OrdersService.name);
   private expirationTimer?: NodeJS.Timeout;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: AdminNotificationService,
+  ) {}
 
   onModuleInit(): void {
     this.expirationTimer = setInterval(() => {
@@ -204,8 +208,25 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           })),
         });
 
+        await this.notifications.createForOwners(tx, {
+          type: "new_order",
+          title: "سفارش جدید ثبت شد",
+          body: `سفارش ${order.orderNumber} از ${order.recipientNameSnapshot} ثبت شد.`,
+          entityType: "order",
+          entityId: order.id,
+          dedupeKey: `order:${order.id}`,
+        });
+
         return order;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+      void this.notifications.pushToOwners({
+        type: "new_order",
+        title: "سفارش جدید ثبت شد",
+        body: `سفارش ${order.orderNumber} از ${order.recipientNameSnapshot} ثبت شد.`,
+        entityType: "order",
+        entityId: order.id,
+      }).catch(() => this.logger.warn("Could not send the new-order push notification."));
 
       return this.toCreatedOrder(order);
     } catch (error) {

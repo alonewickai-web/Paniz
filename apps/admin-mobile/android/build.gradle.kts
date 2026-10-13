@@ -1,8 +1,22 @@
+import com.android.build.gradle.LibraryExtension
+
 allprojects {
     repositories {
         google()
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
         mavenCentral()
+        maven { url = uri("https://jitpack.io") }
+    }
+}
+
+// FlutterFire currently declares API 34 in its library project. The app uses
+// API 36, so align those Firebase libraries with the installed app SDK.
+subprojects {
+    afterEvaluate {
+        if (name == "firebase_core" || name == "firebase_messaging") {
+            extensions.configure<LibraryExtension>("android") {
+                compileSdkVersion(36)
+            }
+        }
     }
 }
 

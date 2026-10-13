@@ -6,6 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/admin_api.dart';
 import '../../core/paniz_theme.dart';
 import '../../core/providers.dart';
+import '../../core/push_notification_service.dart';
+import '../notifications/notification_inbox_screen.dart';
+import '../updates/app_update_screen.dart';
 import '../../core/theme_toggle.dart';
 import '../../core/ui_helpers.dart';
 import '../auth/security_settings_screen.dart';
@@ -27,6 +30,17 @@ class AdminHome extends ConsumerStatefulWidget {
 
 class _AdminHomeState extends ConsumerState<AdminHome> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (AdminPushNotifications.takePendingInboxNavigation(isOwner: widget.admin.role == 'owner')) {
+        _pushTool('اعلان‌ها', const NotificationInboxScreen());
+      }
+    });
+  }
 
   static const _titles = ['خانه', 'محصولات', 'سفارش‌ها', 'گزارش‌ها', 'بیشتر'];
   static const _icons = [Icons.home_rounded, Icons.checkroom_rounded, Icons.receipt_long_rounded, Icons.bar_chart_rounded, Icons.grid_view_rounded];
@@ -73,6 +87,11 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
   Widget build(BuildContext context) {
     final dashboard = ref.watch(dashboardProvider);
     final newOrders = dashboard.maybeWhen(data: _newOrderCount, orElse: () => 0);
+    final notifications = widget.admin.role == 'owner' ? ref.watch(adminNotificationsProvider) : null;
+    final unreadNotifications = notifications?.maybeWhen(
+      data: (value) => value['unreadCount'] is num ? (value['unreadCount'] as num).toInt() : 0,
+      orElse: () => 0,
+    ) ?? 0;
     final connectionLabel = dashboard.when(data: (_) => 'اتصال برقرار است', loading: () => 'در حال بررسی اتصال', error: (_, __) => 'اتصال برقرار نیست');
     final connectionColor = dashboard.when(data: (_) => context.paniz.success, loading: () => context.paniz.warning, error: (_, __) => context.paniz.error);
 
@@ -102,10 +121,12 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
           const PanizThemeToggle(),
           IconButton(
             tooltip: 'سفارش‌های نیازمند رسیدگی',
-            onPressed: () => setState(() => _index = 2),
+            onPressed: () => widget.admin.role == 'owner'
+                ? _pushTool('اعلان‌ها', const NotificationInboxScreen())
+                : setState(() => _index = 2),
             icon: Badge(
-              isLabelVisible: newOrders > 0,
-              label: Text(persianNumber(newOrders)),
+              isLabelVisible: widget.admin.role == 'owner' ? unreadNotifications > 0 : newOrders > 0,
+              label: Text(persianNumber(widget.admin.role == 'owner' ? unreadNotifications : newOrders)),
               backgroundColor: context.paniz.error,
               child: const Icon(Icons.notifications_none_rounded),
             ),
@@ -216,6 +237,7 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
         _drawerHeading('حساب و ظاهر برنامه'),
         _drawerTile('امنیت و ورود', Icons.shield_outlined, detail: 'اطلاعات ورود مدیر', onTap: () => _pushToolFromDrawer('امنیت و ورود', SecuritySettingsScreen(admin: widget.admin))),
         _drawerTile('سرور و پایگاه داده', Icons.dns_outlined, onTap: () => _pushToolFromDrawer('سرور و پشتیبان‌گیری', const OperationsScreen())),
+        _drawerTile('بروزرسانی', Icons.system_update_outlined, detail: 'بررسی و انتشار نسخهٔ برنامه', onTap: () => _pushToolFromDrawer('بروزرسانی', const AppUpdateScreen())),
       ])),
       const Divider(height: 1),
       ListTile(
