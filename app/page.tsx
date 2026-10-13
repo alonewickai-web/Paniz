@@ -889,10 +889,11 @@ export default function Home() {
             </div>
           ) : visibleProducts.length > 0 ? (
             <div className="product-grid">
-              {visibleProducts.map((product) => (
-                <article className="product-card" key={product.id}>
+              {visibleProducts.map((product) => {
+                const productUrl = product.slug ? `/products/${encodeURIComponent(product.slug)}` : null;
+                return <article className="product-card" key={product.id}>
                   <div className="product-image-area">
-                    <button className="product-photo-button" onClick={() => openProduct(product)} aria-label={`مشاهده ${product.name}`}>
+                    {productUrl ? <Link className="product-photo-button" href={productUrl} aria-label={`مشاهده ${product.name}`}>
                       <StoreImage
                         src={product.image}
                         alt={product.imageAlt}
@@ -900,7 +901,9 @@ export default function Home() {
                         sizes="(max-width: 580px) 45vw, (max-width: 950px) 30vw, 24vw"
                         className="product-image"
                       />
-                    </button>
+                    </Link> : <button className="product-photo-button" onClick={() => openProduct(product)} aria-label={`مشاهده ${product.name}`}>
+                      <StoreImage src={product.image} alt={product.imageAlt} fill sizes="(max-width: 580px) 45vw, (max-width: 950px) 30vw, 24vw" className="product-image" />
+                    </button>}
                     {product.badge && <span className={`product-badge ${product.badge.includes("تخفیف") ? "sale" : "fresh"}`}>{product.badge}</span>}
                     <button
                       className={`favorite-button ${favorites.includes(product.id) ? "favorited" : ""}`}
@@ -910,11 +913,11 @@ export default function Home() {
                     >
                       <Heart size={18} fill={favorites.includes(product.id) ? "currentColor" : "none"} />
                     </button>
-                    <button className="quick-add" disabled={product.available === false} onClick={() => openProduct(product)}><Plus size={16} /> {product.available === false ? "ناموجود" : "انتخاب سایز"}</button>
+                    {productUrl ? <Link className="quick-add" href={productUrl}><Plus size={16} /> {product.available === false ? "جزئیات محصول" : "انتخاب رنگ و سایز"}</Link> : <button className="quick-add" disabled={product.available === false} onClick={() => openProduct(product)}><Plus size={16} /> {product.available === false ? "ناموجود" : "انتخاب سایز"}</button>}
                   </div>
                   <div className="product-details">
                     <span className="product-category">{product.category}</span>
-                    <button className="product-name" onClick={() => openProduct(product)}>{product.name}</button>
+                    {productUrl ? <Link className="product-name" href={productUrl}>{product.name}</Link> : <button className="product-name" onClick={() => openProduct(product)}>{product.name}</button>}
                     {product.reviews > 0 ? (
                       <div className="product-rating"><Star size={13} fill="currentColor" /><span>{product.rating}</span><span className="rating-count">({money(product.reviews)} نظر)</span></div>
                     ) : (
@@ -930,8 +933,8 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
-                </article>
-              ))}
+                </article>;
+              })}
             </div>
           ) : catalogSource === "api" && catalogProducts.length === 0 ? (
             <div className="empty-state">

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Check, Heart, Minus, Plus, Share2, ShieldCheck, ShoppingBag, Truck } from "lucide-react";
+import { Bell, Check, ChevronLeft, ChevronRight, Heart, Minus, Plus, Share2, ShieldCheck, ShoppingBag, Truck } from "lucide-react";
 import { StoreProductCard } from "./store-product-card";
+import { StoreImage } from "./store-image";
 import { apiBaseUrl, formatToman, type StoreProduct, type StoreProductDetail } from "../lib/catalog";
 import { useStorefront } from "../lib/storefront-state";
 import { PageFlipImage, type FlipImage } from "./page-flip-image";
@@ -15,10 +16,16 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
   const productId = Number(product.id);
   const availableVariants = product.variants.filter((variant) => variant.availableQuantity > 0);
   const initial = availableVariants[0] ?? product.variants[0];
-  const [color, setColor] = useState(initial?.color.name ?? product.colors[0]?.name ?? "");
+  const initialColor = initial?.color.name ?? product.colors[0]?.name ?? "";
+  const allImages = useMemo(() => product.images.length
+    ? product.images
+    : product.image ? [{ id: "primary", path: product.image.path, alt: product.image.alt, colorName: null, isPrimary: true }] : [], [product.image, product.images]);
+  const initialColorImage = allImages.findIndex((image) => image.colorName && normalizeColorName(image.colorName) === normalizeColorName(initialColor));
+  const firstGeneralImage = allImages.findIndex((image) => !image.colorName?.trim());
+  const [color, setColor] = useState(initialColor);
   const [size, setSize] = useState(initial?.size ?? "");
   const [quantity, setQuantity] = useState(1);
-  const [imageIndex, setImageIndex] = useState(0);
+  const [imageIndex, setImageIndex] = useState(initialColorImage >= 0 ? initialColorImage : firstGeneralImage);
   const [galleryDirection, setGalleryDirection] = useState<"next" | "previous">("next");
   const [galleryOutgoing, setGalleryOutgoing] = useState<FlipImage | null>(null);
   const [galleryHovered, setGalleryHovered] = useState(false);
@@ -29,42 +36,47 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
   const [stockSubscribed, setStockSubscribed] = useState(false);
   const [related, setRelated] = useState<StoreProduct[]>([]);
   const [relatedLoaded, setRelatedLoaded] = useState(false);
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
-  const galleryIndexRef = useRef(0);
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
+  const galleryIndexRef = useRef(initialColorImage >= 0 ? initialColorImage : firstGeneralImage);
   const currentImages = useMemo(() => {
-    const images = product.images.length
-      ? product.images
-      : product.image ? [{ id: "primary", path: product.image.path, alt: product.image.alt, colorName: null, isPrimary: true }] : [];
-    const colorImages = images.filter((image) => image.colorName && normalizeColorName(image.colorName) === normalizeColorName(color));
-    if (colorImages.length) return colorImages;
-    const generalImages = images.filter((image) => !image.colorName?.trim());
+    const colorImages = allImages.filter((image) => image.colorName && normalizeColorName(image.colorName) === normalizeColorName(color));
+    const generalImages = allImages.filter((image) => !image.colorName?.trim());
+    if (colorImages.length) return [...colorImages, ...generalImages];
     if (generalImages.length) return generalImages;
-    return images.some((image) => image.colorName?.trim()) ? [] : images;
-  }, [color, product.image, product.images]);
+    return allImages.some((image) => image.colorName?.trim()) ? [] : allImages;
+  }, [allImages, color]);
 
   useEffect(() => {
-    setImageIndex(0);
-    galleryIndexRef.current = 0;
+    const initialImage = allImages.findIndex((image) => image.colorName && normalizeColorName(image.colorName) === normalizeColorName(initialColor));
+    const generalImage = allImages.findIndex((image) => !image.colorName?.trim());
+    const nextIndex = initialImage >= 0 ? initialImage : generalImage;
+    setColor(initialColor);
+    setSize(initial?.size ?? "");
+    setImageIndex(nextIndex);
+    galleryIndexRef.current = nextIndex;
     setGalleryOutgoing(null);
     setGalleryDirection("next");
-    touchStart.current = null;
-  }, [product.id]);
+    pointerStart.current = null;
+  }, [allImages, initial?.size, initialColor, product.id]);
 
   useEffect(() => {
     if (currentImages.length < 2 || galleryHovered || galleryFocused) return;
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "visible" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      const currentIndex = galleryIndexRef.current % currentImages.length;
-      const currentImage = currentImages[currentIndex];
+      const currentImage = allImages[galleryIndexRef.current];
       if (!currentImage) return;
-      const nextIndex = (currentIndex + 1) % currentImages.length;
+      const activePosition = currentImages.findIndex((image) => image.id === currentImage.id);
+      if (activePosition < 0) return;
+      const nextImage = currentImages[(activePosition + 1) % currentImages.length];
+      if (!nextImage) return;
+      const nextIndex = allImages.findIndex((image) => image.id === nextImage.id);
       setGalleryOutgoing({ src: currentImage.path, alt: currentImage.alt || product.name });
       setGalleryDirection("next");
       galleryIndexRef.current = nextIndex;
       setImageIndex(nextIndex);
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [currentImages, galleryFocused, galleryHovered, product.name]);
+  }, [allImages, currentImages, galleryFocused, galleryHovered, product.name]);
 
   useEffect(() => {
     if (!galleryOutgoing) return;
@@ -78,27 +90,71 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
 
   const variant = product.variants.find((item) => item.color.name === color && item.size === size);
   const stock = variant?.availableQuantity ?? 0;
-  const mainImage = currentImages[Math.min(imageIndex, Math.max(currentImages.length - 1, 0))];
+  const selectedGalleryImage = allImages[imageIndex];
+  const imageHasDifferentColor = Boolean(selectedGalleryImage?.colorName?.trim()
+    && normalizeColorName(selectedGalleryImage.colorName) !== normalizeColorName(color)
+    && product.colors.some((item) => normalizeColorName(item.name) === normalizeColorName(selectedGalleryImage.colorName!)));
+  const mainImage = selectedGalleryImage && !imageHasDifferentColor ? selectedGalleryImage : undefined;
   const favorite = favorites.includes(productId);
   const discount = variant?.compareAtPriceToman && variant.priceToman
     ? Math.round((1 - variant.priceToman / variant.compareAtPriceToman) * 100)
     : 0;
   const sizeGuideRows = useMemo(() => readSizeGuide(product.sizeGuide), [product.sizeGuide]);
 
-  function moveGallery(step: number) {
-    if (currentImages.length < 2) return;
-    const currentIndex = galleryIndexRef.current % currentImages.length;
-    const currentImage = currentImages[currentIndex];
-    const nextIndex = (currentIndex + step + currentImages.length) % currentImages.length;
-    if (currentImage) setGalleryOutgoing({ src: currentImage.path, alt: currentImage.alt || product.name });
-    setGalleryDirection(step > 0 ? "next" : "previous");
+  function showGalleryImage(nextIndex: number, direction: "next" | "previous") {
+    const nextImage = allImages[nextIndex];
+    if (!nextImage) return;
+    if (mainImage) setGalleryOutgoing({ src: mainImage.path, alt: mainImage.alt || product.name });
+    setGalleryDirection(direction);
     galleryIndexRef.current = nextIndex;
     setImageIndex(nextIndex);
+    if (nextImage.colorName?.trim()) {
+      const matchingColor = product.colors.find((item) => normalizeColorName(item.name) === normalizeColorName(nextImage.colorName!));
+      if (matchingColor && normalizeColorName(matchingColor.name) !== normalizeColorName(color)) {
+        setColor(matchingColor.name);
+        const firstSize = product.variants.find((entry) => entry.color.name === matchingColor.name && entry.availableQuantity > 0)?.size
+          ?? product.variants.find((entry) => entry.color.name === matchingColor.name)?.size ?? "";
+        setSize(firstSize);
+        setQuantity(1);
+        setStockSubscribed(false);
+      }
+    }
+  }
+
+  function moveGallery(step: number) {
+    if (allImages.length < 2) return;
+    const currentIndex = galleryIndexRef.current;
+    const nextIndex = currentIndex < 0
+      ? (step > 0 ? 0 : allImages.length - 1)
+      : (currentIndex + step + allImages.length) % allImages.length;
+    showGalleryImage(nextIndex, step > 0 ? "next" : "previous");
+  }
+
+  function selectGalleryImage(nextIndex: number) {
+    if (nextIndex === imageIndex) return;
+    showGalleryImage(nextIndex, nextIndex > imageIndex ? "next" : "previous");
+  }
+
+  function selectColor(nextColor: string) {
+    if (color === nextColor) return;
+    const nextColorIndex = allImages.findIndex((image) => image.colorName && normalizeColorName(image.colorName) === normalizeColorName(nextColor));
+    const generalIndex = allImages.findIndex((image) => !image.colorName?.trim());
+    const nextIndex = nextColorIndex >= 0 ? nextColorIndex : generalIndex;
+    if (mainImage) setGalleryOutgoing({ src: mainImage.path, alt: mainImage.alt || product.name });
+    setGalleryDirection("next");
+    galleryIndexRef.current = nextIndex;
+    setImageIndex(nextIndex);
+    setColor(nextColor);
+    const firstSize = product.variants.find((entry) => entry.color.name === nextColor && entry.availableQuantity > 0)?.size
+      ?? product.variants.find((entry) => entry.color.name === nextColor)?.size ?? "";
+    setSize(firstSize);
+    setQuantity(1);
+    setStockSubscribed(false);
   }
 
   function finishGallerySwipe(x: number, y: number) {
-    const start = touchStart.current;
-    touchStart.current = null;
+    const start = pointerStart.current;
+    pointerStart.current = null;
     if (!start) return;
     const dx = x - start.x;
     const dy = y - start.y;
@@ -204,31 +260,48 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
               onMouseLeave={() => setGalleryHovered(false)}
               onFocusCapture={() => setGalleryFocused(true)}
               onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setGalleryFocused(false); }}
-              onTouchStart={(event) => { const touch = event.changedTouches[0]; if (touch) touchStart.current = { x: touch.clientX, y: touch.clientY }; }}
-              onTouchEnd={(event) => { const touch = event.changedTouches[0]; if (touch) finishGallerySwipe(touch.clientX, touch.clientY); }}
-              onTouchCancel={() => { touchStart.current = null; }}
-              aria-label={mainImage ? `تصویر ${imageIndex + 1} از ${currentImages.length} برای ${product.name}` : `تصویر ${product.name}`}
+              onPointerDown={(event) => {
+                if (!event.isPrimary || event.button !== 0 || (event.target instanceof Element && event.target.closest("button"))) return;
+                pointerStart.current = { x: event.clientX, y: event.clientY };
+                event.currentTarget.setPointerCapture(event.pointerId);
+              }}
+              onPointerUp={(event) => finishGallerySwipe(event.clientX, event.clientY)}
+              onPointerCancel={() => { pointerStart.current = null; }}
+              onDragStart={(event) => event.preventDefault()}
+              aria-label={mainImage ? `تصویر ${imageIndex + 1} از ${allImages.length} برای ${product.name}` : `تصویر ${product.name}`}
             >
               {mainImage ? <PageFlipImage src={mainImage.path} alt={mainImage.alt || product.name} outgoing={galleryOutgoing} direction={galleryDirection} priority sizes="(max-width: 760px) 100vw, 54vw" /> : <div className="store-no-image">{product.images.some((image) => image.colorName?.trim()) ? `برای رنگ ${color} عکسی ثبت نشده` : "تصویر محصول"}</div>}
               {discount > 0 && <span className="store-detail-sale">{new Intl.NumberFormat("fa-IR").format(discount)}٪ تخفیف</span>}
-              {currentImages.length > 1 && <span className="store-image-count">{new Intl.NumberFormat("fa-IR").format(imageIndex + 1)} / {new Intl.NumberFormat("fa-IR").format(currentImages.length)}</span>}
+              {allImages.length > 1 && <>
+                <span className="store-image-count">{new Intl.NumberFormat("fa-IR").format(Math.max(0, imageIndex + 1))} / {new Intl.NumberFormat("fa-IR").format(allImages.length)}</span>
+                <button className="store-gallery-arrow store-gallery-previous" type="button" onClick={() => moveGallery(-1)} aria-label="تصویر قبلی"><ChevronLeft size={22} /></button>
+                <button className="store-gallery-arrow store-gallery-next" type="button" onClick={() => moveGallery(1)} aria-label="تصویر بعدی"><ChevronRight size={22} /></button>
+              </>}
             </div>
+            {allImages.length > 1 && <div className="store-gallery-thumbnails" role="group" aria-label="انتخاب تصویر محصول">
+              {allImages.map((image, index) => <button key={image.id} type="button" className={`store-gallery-thumbnail ${index === imageIndex ? "active" : ""}`} onClick={() => selectGalleryImage(index)} aria-label={`نمایش تصویر ${new Intl.NumberFormat("fa-IR").format(index + 1)}${image.colorName ? `، رنگ ${image.colorName}` : ""}`} aria-pressed={index === imageIndex}>
+                <StoreImage src={image.path} alt="" fill sizes="68px" />
+                <span>{new Intl.NumberFormat("fa-IR").format(index + 1)}</span>
+              </button>)}
+            </div>}
           </section>
 
           <section className="store-product-info">
             <span className="section-kicker">{product.category?.name || "پوشاک زنانه"}</span>
             <h1>{product.name}</h1>
             <p className="store-product-lead">{product.shortDescription || "انتخابی راحت و دوست‌داشتنی از کالکشن پانیذ."}</p>
-            <div className="store-detail-price">
-              <strong>{variant ? formatToman(variant.priceToman) : product.priceToman === null ? "قیمت نامشخص" : formatToman(product.priceToman)}</strong>
-              {variant?.compareAtPriceToman && <del>{formatToman(variant.compareAtPriceToman)}</del>}
+            <div className="store-product-price-color-row">
+              <div className="store-detail-price">
+                <span>قیمت</span>
+                <strong>{variant ? formatToman(variant.priceToman) : product.priceToman === null ? "قیمت نامشخص" : formatToman(product.priceToman)} <small>تومان</small></strong>
+                {variant?.compareAtPriceToman && <del>{formatToman(variant.compareAtPriceToman)} تومان</del>}
+              </div>
+              <fieldset className="store-choice-group store-inline-color-group"><legend>رنگ <span>{color}</span></legend><div className="store-color-choices">{product.colors.map((item) => {
+                const colorAvailable = product.variants.some((entry) => entry.color.name === item.name && entry.availableQuantity > 0);
+                return <button key={item.name} type="button" className={`${color === item.name ? "active" : ""} ${!colorAvailable ? "unavailable" : ""}`} onClick={() => selectColor(item.name)} aria-label={`${item.name}${colorAvailable ? "" : "، ناموجود"}`} aria-pressed={color === item.name}><i style={{ background: item.value }} />{item.name}</button>;
+              })}</div></fieldset>
             </div>
             <div className="store-stock-line" role="status">{stock > 0 ? <><span className="store-stock-dot" /> {stock <= 3 ? `فقط ${new Intl.NumberFormat("fa-IR").format(stock)} عدد باقی مانده` : "موجود و آمادهٔ خرید"}</> : <><span className="store-stock-dot unavailable" /> این ترکیب موجود نیست</>}</div>
-
-            <fieldset className="store-choice-group"><legend>رنگ <span>{color}</span></legend><div className="store-color-choices">{product.colors.map((item) => {
-              const colorAvailable = product.variants.some((entry) => entry.color.name === item.name && entry.availableQuantity > 0);
-              return <button key={item.name} type="button" className={`${color === item.name ? "active" : ""} ${!colorAvailable ? "unavailable" : ""}`} onClick={() => { if (color !== item.name) { if (mainImage) setGalleryOutgoing({ src: mainImage.path, alt: mainImage.alt || product.name }); setGalleryDirection("next"); galleryIndexRef.current = 0; setImageIndex(0); } setColor(item.name); const firstSize = product.variants.find((entry) => entry.color.name === item.name && entry.availableQuantity > 0)?.size ?? product.variants.find((entry) => entry.color.name === item.name)?.size ?? ""; setSize(firstSize); setQuantity(1); setStockSubscribed(false); }} aria-label={`${item.name}${colorAvailable ? "" : "، ناموجود"}`} aria-pressed={color === item.name}><i style={{ background: item.value }} />{item.name}</button>;
-            })}</div></fieldset>
 
             <fieldset className="store-choice-group"><legend>سایز <span>{size || "انتخاب کن"}</span></legend><div className="store-size-choices">{product.sizes.map((item) => {
               const itemAvailable = product.variants.some((entry) => entry.color.name === color && entry.size === item && entry.availableQuantity > 0);
