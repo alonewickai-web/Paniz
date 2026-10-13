@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/admin_api.dart';
+import '../../core/admin_avatar.dart';
+import '../auth/profile_screen.dart';
+import '../staff/staff_management_screen.dart';
+import '../activity/audit_log_screen.dart';
 import '../../core/paniz_theme.dart';
 import '../../core/providers.dart';
 import '../notifications/notification_inbox_screen.dart';
@@ -30,26 +34,40 @@ class AdminHome extends ConsumerStatefulWidget {
 class _AdminHomeState extends ConsumerState<AdminHome> {
   int _index = 0;
 
-
   static const _titles = ['خانه', 'محصولات', 'سفارش‌ها', 'گزارش‌ها', 'بیشتر'];
-  static const _icons = [Icons.home_rounded, Icons.checkroom_rounded, Icons.receipt_long_rounded, Icons.bar_chart_rounded, Icons.grid_view_rounded];
+  static const _icons = [
+    Icons.home_rounded,
+    Icons.checkroom_rounded,
+    Icons.receipt_long_rounded,
+    Icons.bar_chart_rounded,
+    Icons.grid_view_rounded,
+  ];
 
   Future<void> _logout() async {
     try {
       await ref.read(authProvider.notifier).logout();
     } catch (error) {
-      if (mounted) showAppMessage(context, AdminApi.friendlyError(error), error: true);
+      if (mounted)
+        showAppMessage(context, AdminApi.friendlyError(error), error: true);
     }
   }
 
   void _pushTool(String title, Widget screen) {
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => Scaffold(
-      appBar: AppBar(
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-        actions: const [PanizThemeToggle(), SizedBox(width: 4)],
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (_) => Scaffold(
+              appBar: AppBar(
+                title: Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                actions: const [PanizThemeToggle(), SizedBox(width: 4)],
+              ),
+              body: SafeArea(child: screen),
+            ),
       ),
-      body: SafeArea(child: screen),
-    )));
+    );
   }
 
   void _pushToolFromDrawer(String title, Widget screen) {
@@ -68,54 +86,116 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
     final counts = data['orderCounts'];
     if (counts is! Map) return 0;
     final paid = counts['paid'] is num ? (counts['paid'] as num).toInt() : 0;
-    final confirmed = counts['confirmed'] is num ? (counts['confirmed'] as num).toInt() : 0;
+    final confirmed =
+        counts['confirmed'] is num ? (counts['confirmed'] as num).toInt() : 0;
     return paid + confirmed;
   }
 
   @override
   Widget build(BuildContext context) {
     final dashboard = ref.watch(dashboardProvider);
-    final newOrders = dashboard.maybeWhen(data: _newOrderCount, orElse: () => 0);
-    final notifications = widget.admin.role == 'owner' ? ref.watch(adminNotificationsProvider) : null;
-    final unreadNotifications = notifications?.maybeWhen(
-      data: (value) => value['unreadCount'] is num ? (value['unreadCount'] as num).toInt() : 0,
+    final newOrders = dashboard.maybeWhen(
+      data: _newOrderCount,
       orElse: () => 0,
-    ) ?? 0;
-    final connectionLabel = dashboard.when(data: (_) => 'اتصال برقرار است', loading: () => 'در حال بررسی اتصال', error: (_, __) => 'اتصال برقرار نیست');
-    final connectionColor = dashboard.when(data: (_) => context.paniz.success, loading: () => context.paniz.warning, error: (_, __) => context.paniz.error);
+    );
+    final notifications =
+        widget.admin.role == 'owner'
+            ? ref.watch(adminNotificationsProvider)
+            : null;
+    final unreadNotifications =
+        notifications?.maybeWhen(
+          data:
+              (value) =>
+                  value['unreadCount'] is num
+                      ? (value['unreadCount'] as num).toInt()
+                      : 0,
+          orElse: () => 0,
+        ) ??
+        0;
+    final connectionLabel = dashboard.when(
+      data: (_) => 'اتصال برقرار است',
+      loading: () => 'در حال بررسی اتصال',
+      error: (_, __) => 'اتصال برقرار نیست',
+    );
+    final connectionColor = dashboard.when(
+      data: (_) => context.paniz.success,
+      loading: () => context.paniz.warning,
+      error: (_, __) => context.paniz.error,
+    );
 
     return Scaffold(
       drawer: _buildDrawer(connectionLabel, connectionColor),
       appBar: AppBar(
-        leading: Builder(builder: (context) => IconButton(
-          tooltip: 'بازکردن منوی مدیریت',
-          onPressed: () => Scaffold.of(context).openDrawer(),
-          icon: const Icon(Icons.menu_rounded),
-        )),
+        leading: Builder(
+          builder:
+              (context) => IconButton(
+                tooltip: 'بازکردن منوی مدیریت',
+                onPressed: () => Scaffold.of(context).openDrawer(),
+                icon: const Icon(Icons.menu_rounded),
+              ),
+        ),
         titleSpacing: 0,
-        title: Row(children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(color: context.paniz.primarySoft, borderRadius: BorderRadius.circular(12)),
-            child: Icon(Icons.checkroom_rounded, color: context.paniz.primary, size: 19),
-          ),
-          const SizedBox(width: 10),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            const Text('PANIZ', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: .8)),
-            Text(_titles[_index], style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.paniz.muted)),
-          ])),
-        ]),
+        title: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: context.paniz.primarySoft,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                Icons.checkroom_rounded,
+                color: context.paniz.primary,
+                size: 19,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'PANIZ',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: .8,
+                    ),
+                  ),
+                  Text(
+                    _titles[_index],
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: context.paniz.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         actions: [
           const PanizThemeToggle(),
           IconButton(
             tooltip: 'سفارش‌های نیازمند رسیدگی',
-            onPressed: () => widget.admin.role == 'owner'
-                ? _pushTool('اعلان‌ها', const NotificationInboxScreen())
-                : setState(() => _index = 2),
+            onPressed:
+                () =>
+                    widget.admin.role == 'owner'
+                        ? _pushTool('اعلان‌ها', const NotificationInboxScreen())
+                        : setState(() => _index = 2),
             icon: Badge(
-              isLabelVisible: widget.admin.role == 'owner' ? unreadNotifications > 0 : newOrders > 0,
-              label: Text(persianNumber(widget.admin.role == 'owner' ? unreadNotifications : newOrders)),
+              isLabelVisible:
+                  widget.admin.role == 'owner'
+                      ? unreadNotifications > 0
+                      : newOrders > 0,
+              label: Text(
+                persianNumber(
+                  widget.admin.role == 'owner'
+                      ? unreadNotifications
+                      : newOrders,
+                ),
+              ),
               backgroundColor: context.paniz.error,
               child: const Icon(Icons.notifications_none_rounded),
             ),
@@ -125,137 +205,518 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
             child: PopupMenuButton<String>(
               tooltip: 'حساب مدیر',
               onSelected: (value) {
-                if (value == 'security') _pushTool('امنیت و ورود', SecuritySettingsScreen(admin: widget.admin));
+                if (value == 'profile')
+                  _pushTool('پروفایل من', ProfileScreen(admin: widget.admin));
+                if (value == 'security')
+                  _pushTool(
+                    'امنیت و ورود',
+                    SecuritySettingsScreen(admin: widget.admin),
+                  );
                 if (value == 'logout') _logout();
               },
-              itemBuilder: (context) => [
-                PopupMenuItem<String>(enabled: false, child: Text(widget.admin.fullName)),
-                PopupMenuItem<String>(enabled: false, child: Text('@${widget.admin.username}', style: TextStyle(color: context.paniz.muted, fontSize: 12))),
-                const PopupMenuDivider(),
-                const PopupMenuItem<String>(value: 'security', child: Row(children: [Icon(Icons.shield_outlined), SizedBox(width: 10), Text('امنیت و ورود')])),
-                const PopupMenuItem<String>(value: 'logout', child: Row(children: [Icon(Icons.logout_rounded), SizedBox(width: 10), Text('خروج از حساب')])),
-              ],
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: context.paniz.primarySoft,
-                child: Text(widget.admin.fullName.isEmpty ? 'م' : widget.admin.fullName.substring(0, 1), style: TextStyle(color: context.paniz.primary, fontWeight: FontWeight.w900)),
+              itemBuilder:
+                  (context) => [
+                    PopupMenuItem<String>(
+                      enabled: false,
+                      child: Text(widget.admin.fullName),
+                    ),
+                    PopupMenuItem<String>(
+                      enabled: false,
+                      child: Text(
+                        '@${widget.admin.username}',
+                        style: TextStyle(
+                          color: context.paniz.muted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem<String>(
+                      value: 'profile',
+                      child: Row(
+                        children: [
+                          Icon(Icons.person_outline),
+                          SizedBox(width: 10),
+                          Text('پروفایل من'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'security',
+                      child: Row(
+                        children: [
+                          Icon(Icons.shield_outlined),
+                          SizedBox(width: 10),
+                          Text('امنیت و ورود'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'logout',
+                      child: Row(
+                        children: [
+                          Icon(Icons.logout_rounded),
+                          SizedBox(width: 10),
+                          Text('خروج از حساب'),
+                        ],
+                      ),
+                    ),
+                  ],
+              child: AdminAvatar(
+                name: widget.admin.fullName,
+                path: widget.admin.avatarPath,
+                size: 36,
               ),
             ),
           ),
         ],
       ),
-      body: IndexedStack(index: _index, children: [
-        DashboardScreen(onProducts: () => _selectTab(1), onOrders: () => _selectTab(2), onInventory: () => _pushTool('انبار و موجودی', const InventoryScreen())),
-        const ProductsScreen(),
-        const OrdersScreen(),
-        const StatisticsScreen(),
-        MoreToolsScreen(
-          admin: widget.admin,
-          onInventory: () => _pushTool('مدیریت انبار', const InventoryScreen()),
-          onStore: () => _pushTool('تنظیمات فروشگاه', const StoreManagementScreen()),
-          onSecurity: () => _pushTool('امنیت و ورود', SecuritySettingsScreen(admin: widget.admin)),
-          onCustomers: () => _pushTool('مدیریت مشتریان', const CustomerManagementScreen()),
-          onCoupons: () => _pushTool('کدهای تخفیف', const CouponManagementScreen()),
-          onSocial: () => _pushTool('انتشار تبلیغات', const SocialPublishingScreen()),
-          onSms: () => _pushTool('پیام‌رسانی به مشتریان', const SmsCampaignScreen()),
-          onOperations: () => _pushTool('سرور و پشتیبان‌گیری', const OperationsScreen()),
-          onLogout: _logout,
-        ),
-      ]),
+      body: IndexedStack(
+        index: _index,
+        children: [
+          DashboardScreen(
+            onProducts:
+                widget.admin.can('products.view') ? () => _selectTab(1) : null,
+            onOrders:
+                widget.admin.can('orders.view') ? () => _selectTab(2) : null,
+            onInventory:
+                widget.admin.can('products.view')
+                    ? () => _pushTool('انبار و موجودی', const InventoryScreen())
+                    : null,
+            onSms:
+                widget.admin.can('marketing.sms.send')
+                    ? () => _pushTool(
+                      'پیام‌رسانی به مشتریان',
+                      const SmsCampaignScreen(),
+                    )
+                    : null,
+            onRubika:
+                widget.admin.can('marketing.rubika.view')
+                    ? () => _pushTool(
+                      'تبلیغات و روبیکا',
+                      const SocialPublishingScreen(),
+                    )
+                    : null,
+            onActivity:
+                widget.admin.can('staff.activity')
+                    ? () => _pushTool('گزارش فعالیت‌ها', const AuditLogScreen())
+                    : null,
+          ),
+          widget.admin.can('products.view')
+              ? const ProductsScreen()
+              : _restrictedTab('محصولات'),
+          widget.admin.can('orders.view')
+              ? const OrdersScreen()
+              : _restrictedTab('سفارش‌ها'),
+          widget.admin.can('reports.view')
+              ? const StatisticsScreen()
+              : _restrictedTab('گزارش‌ها'),
+          MoreToolsScreen(
+            admin: widget.admin,
+            onProfile:
+                () =>
+                    _pushTool('پروفایل من', ProfileScreen(admin: widget.admin)),
+            onStaff:
+                () => _pushTool(
+                  'کارکنان و دسترسی‌ها',
+                  const StaffManagementScreen(),
+                ),
+            onActivity:
+                () => _pushTool('گزارش فعالیت‌ها', const AuditLogScreen()),
+            onUpdate: () => _pushTool('بروزرسانی', const AppUpdateScreen()),
+            onInventory:
+                () => _pushTool('مدیریت انبار', const InventoryScreen()),
+            onStore:
+                () =>
+                    _pushTool('تنظیمات فروشگاه', const StoreManagementScreen()),
+            onSecurity:
+                () => _pushTool(
+                  'امنیت و ورود',
+                  SecuritySettingsScreen(admin: widget.admin),
+                ),
+            onCustomers:
+                () => _pushTool(
+                  'مدیریت مشتریان',
+                  const CustomerManagementScreen(),
+                ),
+            onCoupons:
+                () => _pushTool('کدهای تخفیف', const CouponManagementScreen()),
+            onSocial:
+                () =>
+                    _pushTool('انتشار تبلیغات', const SocialPublishingScreen()),
+            onSms:
+                () => _pushTool(
+                  'پیام‌رسانی به مشتریان',
+                  const SmsCampaignScreen(),
+                ),
+            onOperations:
+                () =>
+                    _pushTool('سرور و پشتیبان‌گیری', const OperationsScreen()),
+            onLogout: _logout,
+          ),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (index) => setState(() => _index = index),
         animationDuration: const Duration(milliseconds: 240),
-        destinations: List.generate(_titles.length, (index) => NavigationDestination(
-          icon: index == 2 && newOrders > 0
-              ? Badge(smallSize: 7, backgroundColor: context.paniz.error, child: Icon(_icons[index]))
-              : Icon(_icons[index]),
-          selectedIcon: Icon(_icons[index]),
-          label: _titles[index],
-          tooltip: _titles[index],
-        )),
+        destinations: List.generate(
+          _titles.length,
+          (index) => NavigationDestination(
+            icon:
+                index == 2 && newOrders > 0
+                    ? Badge(
+                      smallSize: 7,
+                      backgroundColor: context.paniz.error,
+                      child: Icon(_icons[index]),
+                    )
+                    : Icon(_icons[index]),
+            selectedIcon: Icon(_icons[index]),
+            label: _titles[index],
+            tooltip: _titles[index],
+          ),
+        ),
       ),
     );
   }
 
+  Widget _restrictedTab(String title) => Center(
+    child: PanizEmptyState(
+      icon: Icons.lock_outline,
+      title: 'دسترسی به $title فعال نیست',
+      description: 'برای فعال‌شدن این بخش با مدیر فروشگاه هماهنگ کنید.',
+    ),
+  );
+
   Widget _buildDrawer(String connectionLabel, Color connectionColor) => Drawer(
     width: math.min(360.0, MediaQuery.sizeOf(context).width * .9),
-    child: SafeArea(child: Column(children: [
-      Padding(
-        padding: const EdgeInsetsDirectional.fromSTEB(18, 12, 14, 10),
-        child: Row(children: [
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('مرکز مدیریت', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
-            const SizedBox(height: 3),
-            Text('ابزارهای فروشگاه PANIZ', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.paniz.muted)),
-          ])),
-          IconButton(tooltip: 'بستن منو', onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
-        ]),
+    child: SafeArea(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(18, 12, 14, 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'مرکز مدیریت',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'ابزارهای فروشگاه PANIZ',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: context.paniz.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'بستن منو',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(14, 4, 14, 12),
+            child: Container(
+              padding: const EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                color: context.paniz.primarySoft,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                children: [
+                  AdminAvatar(
+                    name: widget.admin.fullName,
+                    path: widget.admin.avatarPath,
+                    size: 44,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.admin.fullName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        Text(
+                          '@${widget.admin.username}',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: context.paniz.muted),
+                        ),
+                        const SizedBox(height: 5),
+                        Row(
+                          children: [
+                            Container(
+                              width: 7,
+                              height: 7,
+                              decoration: BoxDecoration(
+                                color: connectionColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                connectionLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(color: context.paniz.ink),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'امنیت حساب',
+                    onPressed:
+                        () => _pushToolFromDrawer(
+                          'امنیت و ورود',
+                          SecuritySettingsScreen(admin: widget.admin),
+                        ),
+                    icon: const Icon(Icons.settings_outlined),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              children: [
+                _drawerHeading('مدیریت فروشگاه'),
+                _drawerTile(
+                  'انبار و موجودی',
+                  Icons.inventory_2_outlined,
+                  permission: 'products.view',
+                  detail: 'اصلاح و بررسی تنوع‌ها',
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'مدیریت انبار',
+                        const InventoryScreen(),
+                      ),
+                ),
+                _drawerTile(
+                  'ظاهر و چیدمان سایت',
+                  Icons.palette_outlined,
+                  permission: 'store.content',
+                  detail: 'رنگ، دسته‌بندی و بنرها',
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'تنظیمات فروشگاه',
+                        const StoreManagementScreen(),
+                      ),
+                ),
+                _drawerTile(
+                  'مشتریان',
+                  Icons.people_outline_rounded,
+                  permission: 'customers.view',
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'مدیریت مشتریان',
+                        const CustomerManagementScreen(),
+                      ),
+                ),
+                _drawerTile(
+                  'تخفیف‌ها',
+                  Icons.sell_outlined,
+                  permission: 'store.content',
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'کدهای تخفیف',
+                        const CouponManagementScreen(),
+                      ),
+                ),
+                _drawerTile(
+                  'تبلیغات و روبیکا',
+                  Icons.campaign_outlined,
+                  permission: 'marketing.rubika.view',
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'انتشار تبلیغات',
+                        const SocialPublishingScreen(),
+                      ),
+                ),
+                _drawerTile(
+                  'پیام‌رسانی به مشتریان',
+                  Icons.campaign_outlined,
+                  permission: 'marketing.sms.send',
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'پیام‌رسانی به مشتریان',
+                        const SmsCampaignScreen(),
+                      ),
+                ),
+                _drawerHeading('مدیریت و کارکنان'),
+                _drawerTile(
+                  'کارکنان و دسترسی‌ها',
+                  Icons.manage_accounts_outlined,
+                  permission: 'staff.manage',
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'کارکنان و دسترسی‌ها',
+                        const StaffManagementScreen(),
+                      ),
+                ),
+                _drawerTile(
+                  'گزارش فعالیت‌ها',
+                  Icons.history_outlined,
+                  permission: 'staff.activity',
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'گزارش فعالیت‌ها',
+                        const AuditLogScreen(),
+                      ),
+                ),
+                _drawerHeading('حساب و ظاهر برنامه'),
+                _drawerTile(
+                  'پروفایل من',
+                  Icons.person_outline,
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'پروفایل من',
+                        ProfileScreen(admin: widget.admin),
+                      ),
+                ),
+                _drawerTile(
+                  'امنیت و ورود',
+                  Icons.shield_outlined,
+                  detail: 'اطلاعات ورود مدیر',
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'امنیت و ورود',
+                        SecuritySettingsScreen(admin: widget.admin),
+                      ),
+                ),
+                _drawerTile(
+                  'سرور و پایگاه داده',
+                  Icons.dns_outlined,
+                  permission: 'system.monitor',
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'سرور و پشتیبان‌گیری',
+                        const OperationsScreen(),
+                      ),
+                ),
+
+                _drawerTile(
+                  'بروزرسانی',
+                  Icons.system_update_outlined,
+                  detail: 'بررسی و انتشار نسخهٔ برنامه',
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'بروزرسانی',
+                        const AppUpdateScreen(),
+                      ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            minVerticalPadding: 8,
+            leading: Icon(Icons.logout_rounded, color: context.paniz.error),
+            title: Text(
+              'خروج از حساب',
+              style: TextStyle(
+                color: context.paniz.error,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              _logout();
+            },
+          ),
+        ],
       ),
-      Padding(
-        padding: const EdgeInsetsDirectional.fromSTEB(14, 4, 14, 12),
-        child: Container(
-          padding: const EdgeInsets.all(15),
-          decoration: BoxDecoration(color: context.paniz.primarySoft, borderRadius: BorderRadius.circular(20)),
-          child: Row(children: [
-            CircleAvatar(backgroundColor: context.paniz.surface, child: Icon(Icons.person_outline_rounded, color: context.paniz.primary)),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(widget.admin.fullName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
-              Text('@${widget.admin.username}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.paniz.muted)),
-              const SizedBox(height: 5),
-              Row(children: [
-                Container(width: 7, height: 7, decoration: BoxDecoration(color: connectionColor, shape: BoxShape.circle)),
-                const SizedBox(width: 6),
-                Flexible(child: Text(connectionLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.paniz.ink))),
-              ]),
-            ])),
-            IconButton(tooltip: 'امنیت حساب', onPressed: () => _pushToolFromDrawer('امنیت و ورود', SecuritySettingsScreen(admin: widget.admin)), icon: const Icon(Icons.settings_outlined)),
-          ]),
-        ),
-      ),
-      const Divider(height: 1),
-      Expanded(child: ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: [
-        _drawerHeading('مدیریت فروشگاه'),
-        _drawerTile('انبار و موجودی', Icons.inventory_2_outlined, detail: 'اصلاح و بررسی تنوع‌ها', onTap: () => _pushToolFromDrawer('مدیریت انبار', const InventoryScreen())),
-        _drawerTile('ظاهر و چیدمان سایت', Icons.palette_outlined, detail: 'رنگ، دسته‌بندی و بنرها', onTap: () => _pushToolFromDrawer('تنظیمات فروشگاه', const StoreManagementScreen())),
-        _drawerTile('مشتریان', Icons.people_outline_rounded, onTap: () => _pushToolFromDrawer('مدیریت مشتریان', const CustomerManagementScreen())),
-        _drawerTile('تخفیف‌ها', Icons.sell_outlined, onTap: () => _pushToolFromDrawer('کدهای تخفیف', const CouponManagementScreen())),
-        _drawerTile('تبلیغات و روبیکا', Icons.campaign_outlined, onTap: () => _pushToolFromDrawer('انتشار تبلیغات', const SocialPublishingScreen())),
-        _drawerTile('پیام‌رسانی به مشتریان', Icons.campaign_outlined, onTap: () => _pushToolFromDrawer('پیام‌رسانی به مشتریان', const SmsCampaignScreen())),
-        _drawerHeading('حساب و ظاهر برنامه'),
-        _drawerTile('امنیت و ورود', Icons.shield_outlined, detail: 'اطلاعات ورود مدیر', onTap: () => _pushToolFromDrawer('امنیت و ورود', SecuritySettingsScreen(admin: widget.admin))),
-        _drawerTile('سرور و پایگاه داده', Icons.dns_outlined, onTap: () => _pushToolFromDrawer('سرور و پشتیبان‌گیری', const OperationsScreen())),
-        _drawerTile('بروزرسانی', Icons.system_update_outlined, detail: 'بررسی و انتشار نسخهٔ برنامه', onTap: () => _pushToolFromDrawer('بروزرسانی', const AppUpdateScreen())),
-      ])),
-      const Divider(height: 1),
-      ListTile(
-        minVerticalPadding: 8,
-        leading: Icon(Icons.logout_rounded, color: context.paniz.error),
-        title: Text('خروج از حساب', style: TextStyle(color: context.paniz.error, fontWeight: FontWeight.w800)),
-        onTap: () { Navigator.pop(context); _logout(); },
-      ),
-    ])),
+    ),
   );
 
   Widget _drawerHeading(String title) => Padding(
     padding: const EdgeInsetsDirectional.fromSTEB(18, 12, 18, 4),
-    child: Align(alignment: AlignmentDirectional.centerStart, child: Text(title, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: context.paniz.muted, fontWeight: FontWeight.w900))),
+    child: Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: context.paniz.muted,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    ),
   );
 
-  Widget _drawerTile(String title, IconData icon, {required VoidCallback onTap, String? detail}) => ListTile(
-    minLeadingWidth: 28,
-    leading: Icon(icon, color: context.paniz.primary, size: 21),
-    title: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-    subtitle: detail == null ? null : Text(detail, style: TextStyle(color: context.paniz.muted, fontSize: 11)),
-    trailing: const Icon(Icons.chevron_left_rounded, size: 19),
-    onTap: onTap,
-  );
+  Widget _drawerTile(
+    String title,
+    IconData icon, {
+    required VoidCallback onTap,
+    String? detail,
+    String? permission,
+  }) =>
+      permission != null && !widget.admin.can(permission)
+          ? const SizedBox.shrink()
+          : ListTile(
+            minLeadingWidth: 28,
+            leading: Icon(icon, color: context.paniz.primary, size: 21),
+            title: Text(
+              title,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+            subtitle:
+                detail == null
+                    ? null
+                    : Text(
+                      detail,
+                      style: TextStyle(
+                        color: context.paniz.muted,
+                        fontSize: 11,
+                      ),
+                    ),
+            trailing: const Icon(Icons.chevron_left_rounded, size: 19),
+            onTap: onTap,
+          );
 }
 
 class MoreToolsScreen extends StatelessWidget {
-  const MoreToolsScreen({super.key, required this.admin, required this.onInventory, required this.onStore, required this.onSecurity, required this.onCustomers, required this.onCoupons, required this.onSocial, required this.onSms, required this.onOperations, required this.onLogout});
+  const MoreToolsScreen({
+    super.key,
+    required this.admin,
+    required this.onProfile,
+    required this.onStaff,
+    required this.onActivity,
+    required this.onUpdate,
+    required this.onInventory,
+    required this.onStore,
+    required this.onSecurity,
+    required this.onCustomers,
+    required this.onCoupons,
+    required this.onSocial,
+    required this.onSms,
+    required this.onOperations,
+    required this.onLogout,
+  });
   final AdminIdentity admin;
+  final VoidCallback onProfile;
+  final VoidCallback onStaff;
+  final VoidCallback onActivity;
+  final VoidCallback onUpdate;
   final VoidCallback onInventory;
   final VoidCallback onStore;
   final VoidCallback onSecurity;
@@ -267,42 +728,163 @@ class MoreToolsScreen extends StatelessWidget {
   final VoidCallback onLogout;
 
   @override
-  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.fromLTRB(16, 14, 16, 26), children: [
-    ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 760),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        PanizPageHeader(title: 'بیشتر', subtitle: 'تنظیمات و ابزارهای مدیریت فروشگاه'),
-        Card(child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          leading: CircleAvatar(radius: 24, backgroundColor: context.paniz.primarySoft, child: Icon(Icons.admin_panel_settings_outlined, color: context.paniz.primary)),
-          title: Text(admin.fullName, style: const TextStyle(fontWeight: FontWeight.w900)),
-          subtitle: Text('@${admin.username} · مدیر فروشگاه', style: TextStyle(color: context.paniz.muted, fontSize: 12)),
-          trailing: const Icon(Icons.chevron_left_rounded),
-          onTap: onSecurity,
-        )),
-        const SizedBox(height: 22),
-        sectionTitle('ابزارهای مدیریتی'),
-        const SizedBox(height: 10),
-        _ToolTile(icon: Icons.inventory_2_outlined, tint: context.paniz.peach, title: 'انبار و موجودی', detail: 'بررسی سایزها و اصلاح تعداد کالا', onTap: onInventory),
-        _ToolTile(icon: Icons.palette_outlined, tint: context.paniz.lilac, title: 'ظاهر سایت', detail: 'رنگ‌بندی، دسته‌ها، بنر و چیدمان', onTap: onStore),
-        _ToolTile(icon: Icons.shield_outlined, tint: context.paniz.mint, title: 'امنیت و ورود', detail: 'تغییر نام کاربری و گذرواژه', onTap: onSecurity),
-        const SizedBox(height: 20),
-        sectionTitle('امکانات در حال آماده‌سازی'),
-        const SizedBox(height: 10),
-        _ToolTile(icon: Icons.people_outline_rounded, tint: context.paniz.mint, title: 'مدیریت مشتریان', detail: 'جست‌وجو، فیلتر خرید و رضایت پیامک', onTap: onCustomers),
-        _ToolTile(icon: Icons.sell_outlined, tint: context.paniz.peach, title: 'کدهای تخفیف', detail: 'ساخت و کنترل کدهای خرید', onTap: onCoupons),
-        _ToolTile(icon: Icons.campaign_outlined, tint: context.paniz.lilac, title: 'انتشار تبلیغات', detail: 'روبیکا و Instagram', onTap: onSocial),
-        _ToolTile(icon: Icons.campaign_outlined, tint: context.paniz.coral, title: 'پیام‌رسانی به مشتریان', detail: 'پیامک یا ربات روبیکا با فیلتر مخاطب', onTap: onSms),
-        _ToolTile(icon: Icons.dns_outlined, tint: context.paniz.mint, title: 'سرور و پشتیبان‌گیری', detail: 'وضعیت سرویس و فایل‌های SQL', onTap: onOperations),
-        const SizedBox(height: 14),
-        OutlinedButton.icon(onPressed: onLogout, icon: const Icon(Icons.logout_rounded), label: const Text('خروج از حساب'), style: OutlinedButton.styleFrom(foregroundColor: context.paniz.error, side: BorderSide(color: context.paniz.error.withValues(alpha: .45)))),
-      ]),
-    ),
-  ]);
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.fromLTRB(16, 14, 16, 26),
+    children: [
+      ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            PanizPageHeader(
+              title: 'بیشتر',
+              subtitle: 'تنظیمات و ابزارهای مدیریت فروشگاه',
+            ),
+            Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                leading: AdminAvatar(
+                  name: admin.fullName,
+                  path: admin.avatarPath,
+                  size: 48,
+                ),
+                title: Text(
+                  admin.fullName,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                subtitle: Text(
+                  '@${admin.username} · مدیر فروشگاه',
+                  style: TextStyle(color: context.paniz.muted, fontSize: 12),
+                ),
+                trailing: const Icon(Icons.chevron_left_rounded),
+                onTap: onProfile,
+              ),
+            ),
+            const SizedBox(height: 22),
+            sectionTitle('ابزارهای مدیریتی'),
+            const SizedBox(height: 10),
+            if (admin.can('products.view'))
+              _ToolTile(
+                icon: Icons.inventory_2_outlined,
+                tint: context.paniz.peach,
+                title: 'انبار و موجودی',
+                detail: 'بررسی سایزها و اصلاح تعداد کالا',
+                onTap: onInventory,
+              ),
+            if (admin.can('store.content'))
+              _ToolTile(
+                icon: Icons.palette_outlined,
+                tint: context.paniz.lilac,
+                title: 'ظاهر سایت',
+                detail: 'رنگ‌بندی، دسته‌ها، بنر و چیدمان',
+                onTap: onStore,
+              ),
+            _ToolTile(
+              icon: Icons.shield_outlined,
+              tint: context.paniz.mint,
+              title: 'امنیت و ورود',
+              detail: 'تغییر نام کاربری و گذرواژه',
+              onTap: onSecurity,
+            ),
+            const SizedBox(height: 20),
+            sectionTitle('بازاریابی و ارتباط با مشتریان'),
+            const SizedBox(height: 10),
+            if (admin.can('customers.view'))
+              _ToolTile(
+                icon: Icons.people_outline_rounded,
+                tint: context.paniz.mint,
+                title: 'مدیریت مشتریان',
+                detail: 'جست‌وجو، فیلتر خرید و رضایت پیامک',
+                onTap: onCustomers,
+              ),
+            if (admin.can('store.content'))
+              _ToolTile(
+                icon: Icons.sell_outlined,
+                tint: context.paniz.peach,
+                title: 'کدهای تخفیف',
+                detail: 'ساخت و کنترل کدهای خرید',
+                onTap: onCoupons,
+              ),
+            if (admin.can('marketing.rubika.view'))
+              _ToolTile(
+                icon: Icons.campaign_outlined,
+                tint: context.paniz.lilac,
+                title: 'انتشار تبلیغات',
+                detail: 'روبیکا و Instagram',
+                onTap: onSocial,
+              ),
+            if (admin.can('marketing.sms.send'))
+              _ToolTile(
+                icon: Icons.campaign_outlined,
+                tint: context.paniz.coral,
+                title: 'پیام‌رسانی به مشتریان',
+                detail: 'پیامک یا ربات روبیکا با فیلتر مخاطب',
+                onTap: onSms,
+              ),
+            if (admin.can('system.monitor'))
+              _ToolTile(
+                icon: Icons.dns_outlined,
+                tint: context.paniz.mint,
+                title: 'سرور و پشتیبان‌گیری',
+                detail: 'وضعیت سرویس و فایل‌های SQL',
+                onTap: onOperations,
+              ),
+            const SizedBox(height: 20),
+            sectionTitle('حساب و مدیریت'),
+            const SizedBox(height: 10),
+            if (admin.can('staff.manage'))
+              _ToolTile(
+                icon: Icons.manage_accounts_outlined,
+                tint: context.paniz.mint,
+                title: 'کارکنان و دسترسی‌ها',
+                detail: 'افزودن کارمند و تعیین مجوزها',
+                onTap: onStaff,
+              ),
+            if (admin.can('staff.activity'))
+              _ToolTile(
+                icon: Icons.history_outlined,
+                tint: context.paniz.lilac,
+                title: 'گزارش فعالیت‌ها',
+                detail: 'رویدادهای فارسی و جزئیات تغییرات',
+                onTap: onActivity,
+              ),
+            _ToolTile(
+              icon: Icons.system_update_outlined,
+              tint: context.paniz.mint,
+              title: 'بروزرسانی',
+              detail: 'دریافت آخرین نسخه از سرور فروشگاه',
+              onTap: onUpdate,
+            ),
+            const SizedBox(height: 14),
+            OutlinedButton.icon(
+              onPressed: onLogout,
+              icon: const Icon(Icons.logout_rounded),
+              label: const Text('خروج از حساب'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: context.paniz.error,
+                side: BorderSide(
+                  color: context.paniz.error.withValues(alpha: .45),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
 }
 
 class _ToolTile extends StatelessWidget {
-  const _ToolTile({required this.icon, required this.tint, required this.title, required this.detail, required this.onTap});
+  const _ToolTile({
+    required this.icon,
+    required this.tint,
+    required this.title,
+    required this.detail,
+    required this.onTap,
+  });
   final IconData icon;
   final Color tint;
   final String title;
@@ -310,12 +892,31 @@ class _ToolTile extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(bottom: 9), child: Card(child: ListTile(
-    minVerticalPadding: 9,
-    leading: Container(width: 42, height: 42, decoration: BoxDecoration(color: tint.withValues(alpha: .45), borderRadius: BorderRadius.circular(14)), child: Icon(icon, color: context.paniz.primary, size: 21)),
-    title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-    subtitle: Text(detail, style: TextStyle(color: context.paniz.muted, fontSize: 12)),
-    trailing: const Icon(Icons.chevron_left_rounded),
-    onTap: onTap,
-  )));
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 9),
+    child: Card(
+      child: ListTile(
+        minVerticalPadding: 9,
+        leading: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: tint.withValues(alpha: .45),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(icon, color: context.paniz.primary, size: 21),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+        ),
+        subtitle: Text(
+          detail,
+          style: TextStyle(color: context.paniz.muted, fontSize: 12),
+        ),
+        trailing: const Icon(Icons.chevron_left_rounded),
+        onTap: onTap,
+      ),
+    ),
+  );
 }

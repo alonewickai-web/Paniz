@@ -45,6 +45,7 @@ class StatisticsScreen extends ConsumerWidget {
       data: (data) {
         final today = _map(data['today']);
         final month = _map(data['month']);
+        final financialAccess = data['financialAccess'] == true;
         final counts = _map(data['orderCounts']);
         final totalOrders = counts.values.fold<int>(
           0,
@@ -100,7 +101,7 @@ class StatisticsScreen extends ConsumerWidget {
                 onRetry: () => ref.invalidate(siteVisitAnalyticsProvider),
               ),
               const SizedBox(height: 16),
-              _PeriodCard(
+              if (financialAccess) _PeriodCard(
                 title: 'امروز',
                 tint: Theme.of(context).colorScheme.primaryContainer,
                 amount: toman(today['paidSalesToman'] ?? 0),
@@ -108,8 +109,8 @@ class StatisticsScreen extends ConsumerWidget {
                     '${persianNumber(today['paidOrderCount'] ?? 0)} سفارش پرداخت‌شده',
                 icon: Icons.today_rounded,
               ),
-              const SizedBox(height: 10),
-              _PeriodCard(
+              if (financialAccess) const SizedBox(height: 10),
+              if (financialAccess) _PeriodCard(
                 title: 'این ماه',
                 tint: Theme.of(context).colorScheme.secondaryContainer,
                 amount: toman(month['paidSalesToman'] ?? 0),
@@ -117,7 +118,8 @@ class StatisticsScreen extends ConsumerWidget {
                     '${persianNumber(month['paidOrderCount'] ?? 0)} سفارش پرداخت‌شده',
                 icon: Icons.calendar_month_rounded,
               ),
-              const SizedBox(height: 20),
+              if (data['orderCounts'] is Map && (data['orderCounts'] as Map).isNotEmpty) const SizedBox(height: 20),
+              if (data['orderCounts'] is Map && (data['orderCounts'] as Map).isNotEmpty)
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),

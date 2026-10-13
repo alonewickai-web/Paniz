@@ -23,24 +23,14 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
   final Set<String> _publishingProductIds = {};
 
   Future<void> _createProduct() async {
-    final values = await showDialog<JsonMap>(
-      context: context,
-      builder: (_) => const _CreateProductDialog(),
+    final created = await Navigator.push<JsonMap>(
+      context,
+      MaterialPageRoute(builder: (_) => const _CreateProductDialog()),
     );
-    if (values == null || !mounted) return;
-    setState(() => _saving = true);
-    try {
-      final api = ref.read(adminApiProvider);
-      final created = await api.createProduct(values);
-      ref.invalidate(productsProvider);
-      if (mounted)
-        showAppMessage(context, 'کد محصول: ' + created['sku'].toString());
-    } catch (error) {
-      if (mounted)
-        showAppMessage(context, AdminApi.friendlyError(error), error: true);
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+    if (created == null || !mounted) return;
+    ref.invalidate(productsProvider);
+    ref.invalidate(dashboardProvider);
+    showAppMessage(context, 'کد محصول: ${created['sku']}');
   }
 
   Future<void> _toggleStatus(JsonMap product, bool active) async {
@@ -451,23 +441,24 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                 ),
               ),
         ),
-        PositionedDirectional(
-          end: 18,
-          bottom: 18,
-          child: FloatingActionButton.extended(
-            onPressed: _saving ? null : _createProduct,
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            foregroundColor: Colors.white,
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('محصول جدید'),
+        if (ref.watch(authProvider).value?.can('products.create') == true)
+          PositionedDirectional(
+            end: 18,
+            bottom: 18,
+            child: FloatingActionButton.extended(
+              onPressed: _saving ? null : _createProduct,
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('محصول جدید'),
+            ),
           ),
-        ),
       ],
     );
   }
 }
 
-class _ProductCard extends StatelessWidget {
+class _ProductCard extends ConsumerWidget {
   const _ProductCard({
     required this.product,
     required this.onPublish,
@@ -500,7 +491,9 @@ class _ProductCard extends StatelessWidget {
   final void Function(JsonMap variant, bool active) onToggleVariant;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final admin = ref.watch(authProvider).value;
+    bool can(String key) => admin?.can(key) == true;
     final images =
         product['images'] is List
             ? (product['images'] as List)
@@ -558,23 +551,24 @@ class _ProductCard extends StatelessWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextButton.icon(
-              onPressed: publishing ? null : onPublish,
-              style: TextButton.styleFrom(
-                minimumSize: const Size(0, 36),
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                visualDensity: VisualDensity.compact,
+            if (can('marketing.rubika.publish'))
+              TextButton.icon(
+                onPressed: publishing ? null : onPublish,
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 36),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon:
+                    publishing
+                        ? const SizedBox(
+                          width: 15,
+                          height: 15,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                        : const Icon(Icons.send_outlined, size: 16),
+                label: const Text('انتشار', style: TextStyle(fontSize: 12)),
               ),
-              icon:
-                  publishing
-                      ? const SizedBox(
-                        width: 15,
-                        height: 15,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                      : const Icon(Icons.send_outlined, size: 16),
-              label: const Text('انتشار', style: TextStyle(fontSize: 12)),
-            ),
             const Icon(Icons.expand_more_rounded, size: 20),
           ],
         ),
@@ -585,7 +579,7 @@ class _ProductCard extends StatelessWidget {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: onEditProduct,
+                  onPressed: can('products.edit') ? onEditProduct : null,
                   icon: const Icon(Icons.edit_outlined, size: 17),
                   label: const Text('ویرایش کالا'),
                 ),
@@ -595,7 +589,7 @@ class _ProductCard extends StatelessWidget {
                 child: _ActiveStateSwitch(
                   title: 'نمایش در سایت',
                   value: status == 'published',
-                  onChanged: onStatus,
+                  onChanged: can('products.publish') ? onStatus : null,
                 ),
               ),
             ],
@@ -605,7 +599,7 @@ class _ProductCard extends StatelessWidget {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: onAddVariant,
+                  onPressed: can('products.edit') ? onAddVariant : null,
                   icon: const Icon(Icons.add_box_outlined, size: 18),
                   label: const Text('افزودن تنوع'),
                 ),
@@ -613,7 +607,10 @@ class _ProductCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: images.length >= 4 ? null : onAddImage,
+                  onPressed:
+                      !can('products.edit') || images.length >= 4
+                          ? null
+                          : onAddImage,
                   icon: const Icon(
                     Icons.add_photo_alternate_outlined,
                     size: 18,
@@ -623,7 +620,7 @@ class _ProductCard extends StatelessWidget {
               ),
               IconButton(
                 tooltip: 'بایگانی محصول',
-                onPressed: onArchive,
+                onPressed: can('products.archive') ? onArchive : null,
                 icon: const Icon(Icons.archive_outlined),
               ),
             ],
@@ -693,7 +690,10 @@ class _ProductCard extends StatelessWidget {
                     children: [
                       IconButton(
                         tooltip: 'ویرایش همهٔ مشخصات تنوع',
-                        onPressed: () => onEditVariant(variant),
+                        onPressed:
+                            can('products.edit') && can('products.change_price')
+                                ? () => onEditVariant(variant)
+                                : null,
                         icon: Icon(
                           Icons.edit_outlined,
                           color: Theme.of(context).colorScheme.primary,
@@ -701,7 +701,10 @@ class _ProductCard extends StatelessWidget {
                       ),
                       IconButton(
                         tooltip: 'اصلاح موجودی این تنوع',
-                        onPressed: () => onAdjustVariant(variant),
+                        onPressed:
+                            can('products.change_stock')
+                                ? () => onAdjustVariant(variant)
+                                : null,
                         icon: Icon(
                           Icons.inventory_2_outlined,
                           color: Theme.of(context).colorScheme.tertiary,
@@ -718,7 +721,10 @@ class _ProductCard extends StatelessWidget {
                   child: _ActiveStateSwitch(
                     title: 'وضعیت این تنوع',
                     value: variant['isActive'] == true,
-                    onChanged: (active) => onToggleVariant(variant, active),
+                    onChanged:
+                        can('products.edit')
+                            ? (active) => onToggleVariant(variant, active)
+                            : null,
                   ),
                 ),
                 const Divider(height: 8),
@@ -848,7 +854,7 @@ class _ActiveStateSwitch extends StatelessWidget {
   });
   final String title;
   final bool value;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -924,6 +930,8 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
   final List<_ProductImageDraft> _images = [_ProductImageDraft()];
   int _primaryImageIndex = 0;
   bool _imageError = false;
+  int _step = 0;
+  bool _submitting = false;
 
   static const _sizes = <(String, String)>[
     ('XS', 'XS'),
@@ -990,263 +998,414 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
   @override
   Widget build(BuildContext context) {
     final categories = ref.watch(categoriesProvider);
-    return AlertDialog(
-      title: const Text('ثبت محصول جدید'),
-      content: SizedBox(
-        width: 460,
-        child: Form(
-          key: _form,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _field(_name, 'نام محصول', required: true),
-                const SizedBox(height: 10),
-                categories.when(
-                  loading: () => const LinearProgressIndicator(),
-                  error:
-                      (error, _) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            AdminApi.friendlyError(error),
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                          ),
-                          TextButton.icon(
-                            onPressed:
-                                () =>
-                                    ref.invalidate(storeConfigurationProvider),
-                            icon: const Icon(Icons.refresh_rounded),
-                            label: const Text('بارگذاری دوباره دسته‌بندی‌ها'),
-                          ),
-                        ],
-                      ),
-                  data:
-                      (items) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          DropdownButtonFormField<String>(
-                            initialValue:
-                                items.any(
-                                      (item) =>
-                                          item['id'].toString() == _categoryId,
-                                    )
-                                    ? _categoryId
-                                    : null,
-                            decoration: const InputDecoration(
-                              labelText: 'دسته‌بندی',
-                            ),
-                            items:
-                                items
-                                    .map(
-                                      (item) => DropdownMenuItem(
-                                        value: item['id'].toString(),
-                                        child: Text(item['name'].toString()),
-                                      ),
-                                    )
-                                    .toList(),
-                            onChanged:
-                                (value) => setState(() => _categoryId = value),
-                            validator:
-                                (value) =>
-                                    value == null
-                                        ? 'یک دسته‌بندی انتخاب یا اضافه کنید'
-                                        : null,
-                          ),
-                          Align(
-                            alignment: AlignmentDirectional.centerStart,
-                            child: TextButton.icon(
-                              onPressed: _manageCategories,
-                              icon: const Icon(
-                                Icons.category_outlined,
-                                size: 19,
-                              ),
-                              label: const Text('افزودن یا حذف دسته‌بندی'),
-                            ),
-                          ),
-                          if (items.isEmpty)
-                            Text(
-                              'هنوز دسته‌بندی فعالی ندارید؛ از دکمهٔ بالا یک دسته بسازید.',
-                              style: Theme.of(
-                                context,
-                              ).textTheme.bodySmall?.copyWith(
-                                color:
-                                    Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                        ],
-                      ),
-                ),
-                const SizedBox(height: 4),
-                _imageGalleryPicker(context),
-                const SizedBox(height: 14),
-                Row(
+    return Scaffold(
+      appBar: AppBar(title: const Text('ثبت محصول جدید')),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: SizedBox(
+            child: Form(
+              key: _form,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: ProductColorField(
-                        initialValue: productColorPalette.first.name,
-                        selectedColor: _selectedColor,
-                        onSelected:
-                            (color) => setState(() => _selectedColor = color),
-                        onQueryChanged: (query) {
-                          if (_selectedColor != null &&
-                              normalizeProductColorText(query) !=
-                                  normalizeProductColorText(
-                                    _selectedColor!.name,
-                                  )) {
-                            setState(() => _selectedColor = null);
-                          }
-                        },
-                      ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final stage
+                            in [
+                              'اطلاعات',
+                              'تنوع و قیمت',
+                              'تصاویر',
+                              'ثبت',
+                            ].indexed)
+                          Chip(
+                            label: Text(
+                              '${persianNumber(stage.$1 + 1)}. ${stage.$2}',
+                            ),
+                            backgroundColor:
+                                stage.$1 == _step
+                                    ? Theme.of(
+                                      context,
+                                    ).colorScheme.primaryContainer
+                                    : null,
+                          ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _size,
-                        decoration: const InputDecoration(labelText: 'سایز'),
-                        items:
-                            _sizes
+                    const SizedBox(height: 24),
+                    if (_step == 0) ...[
+                      _field(_name, 'نام محصول', required: true),
+                      const SizedBox(height: 10),
+                      categories.when(
+                        loading: () => const LinearProgressIndicator(),
+                        error:
+                            (error, _) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  AdminApi.friendlyError(error),
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                                ),
+                                TextButton.icon(
+                                  onPressed:
+                                      () => ref.invalidate(
+                                        storeConfigurationProvider,
+                                      ),
+                                  icon: const Icon(Icons.refresh_rounded),
+                                  label: const Text(
+                                    'بارگذاری دوباره دسته‌بندی‌ها',
+                                  ),
+                                ),
+                              ],
+                            ),
+                        data:
+                            (items) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                DropdownButtonFormField<String>(
+                                  initialValue:
+                                      items.any(
+                                            (item) =>
+                                                item['id'].toString() ==
+                                                _categoryId,
+                                          )
+                                          ? _categoryId
+                                          : null,
+                                  decoration: const InputDecoration(
+                                    labelText: 'دسته‌بندی',
+                                  ),
+                                  items:
+                                      items
+                                          .map(
+                                            (item) => DropdownMenuItem(
+                                              value: item['id'].toString(),
+                                              child: Text(
+                                                item['name'].toString(),
+                                              ),
+                                            ),
+                                          )
+                                          .toList(),
+                                  onChanged:
+                                      (value) =>
+                                          setState(() => _categoryId = value),
+                                  validator:
+                                      (value) =>
+                                          value == null
+                                              ? 'یک دسته‌بندی انتخاب یا اضافه کنید'
+                                              : null,
+                                ),
+                                Align(
+                                  alignment: AlignmentDirectional.centerStart,
+                                  child: TextButton.icon(
+                                    onPressed:
+                                        ref
+                                                    .read(authProvider)
+                                                    .value
+                                                    ?.can('store.content') ==
+                                                true
+                                            ? _manageCategories
+                                            : null,
+                                    icon: const Icon(
+                                      Icons.category_outlined,
+                                      size: 19,
+                                    ),
+                                    label: const Text(
+                                      'افزودن یا حذف دسته‌بندی',
+                                    ),
+                                  ),
+                                ),
+                                if (items.isEmpty)
+                                  Text(
+                                    'هنوز دسته‌بندی فعالی ندارید؛ از دکمهٔ بالا یک دسته بسازید.',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall?.copyWith(
+                                      color:
+                                          Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                      ),
+                    ],
+                    if (_step == 2) _imageGalleryPicker(context),
+                    if (_step == 1) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ProductColorField(
+                              initialValue: productColorPalette.first.name,
+                              selectedColor: _selectedColor,
+                              onSelected:
+                                  (color) =>
+                                      setState(() => _selectedColor = color),
+                              onQueryChanged: (query) {
+                                if (_selectedColor != null &&
+                                    normalizeProductColorText(query) !=
+                                        normalizeProductColorText(
+                                          _selectedColor!.name,
+                                        )) {
+                                  setState(() => _selectedColor = null);
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: _size,
+                              decoration: const InputDecoration(
+                                labelText: 'سایز',
+                              ),
+                              items:
+                                  _sizes
+                                      .map(
+                                        (size) => DropdownMenuItem(
+                                          value: size.$1,
+                                          child: Text(size.$2),
+                                        ),
+                                      )
+                                      .toList(),
+                              onChanged: (value) {
+                                if (value != null)
+                                  setState(() => _size = value);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _field(
+                              _price,
+                              'قیمت به تومان',
+                              required: true,
+                              currency: true,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _field(
+                              _stock,
+                              'موجودی اولیه',
+                              required: true,
+                              numeric: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (_step == 3) ...[
+                      Text(
+                        _name.text,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      ListTile(
+                        title: Text('${_selectedColor?.name ?? ''} · $_size'),
+                        subtitle: Text('موجودی: ${persianNumber(_stock.text)}'),
+                        trailing: Text(
+                          toman(
+                            int.tryParse(
+                                  _asciiDigits(_price.text).replaceAll(',', ''),
+                                ) ??
+                                0,
+                          ),
+                        ),
+                      ),
+                      Wrap(
+                        spacing: 8,
+                        children:
+                            _images
+                                .where((image) => image.imagePath != null)
                                 .map(
-                                  (size) => DropdownMenuItem(
-                                    value: size.$1,
-                                    child: Text(size.$2),
+                                  (image) => SizedBox(
+                                    width: 80,
+                                    height: 100,
+                                    child: AdminNetworkImage(
+                                      imagePath: image.imagePath!,
+                                      fit: BoxFit.contain,
+                                    ),
                                   ),
                                 )
                                 .toList(),
-                        onChanged: (value) {
-                          if (value != null) setState(() => _size = value);
-                        },
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _field(
-                        _price,
-                        'قیمت به تومان',
-                        required: true,
-                        currency: true,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _field(
-                        _stock,
-                        'موجودی اولیه',
-                        required: true,
-                        numeric: true,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primaryContainer.withValues(alpha: .55),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.auto_awesome_rounded,
-                        color: Theme.of(context).colorScheme.primary,
-                        size: 19,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'کد محصول بعد از ثبت به‌صورت خودکار، مانند PDC-001، ساخته می‌شود.',
-                          style: Theme.of(
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(
                             context,
-                          ).textTheme.bodySmall?.copyWith(height: 1.4),
+                          ).colorScheme.primaryContainer.withValues(alpha: .55),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.auto_awesome_rounded,
+                              color: Theme.of(context).colorScheme.primary,
+                              size: 19,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'کد محصول بعد از ثبت به‌صورت خودکار، مانند PDC-001، ساخته می‌شود.',
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.bodySmall?.copyWith(height: 1.4),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('انصراف'),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              TextButton(
+                onPressed:
+                    _submitting
+                        ? null
+                        : _step > 0
+                        ? () => setState(() => _step--)
+                        : () => Navigator.pop(context),
+                child: Text(_step > 0 ? 'مرحلهٔ قبل' : 'انصراف'),
+              ),
+              FilledButton.icon(
+                onPressed:
+                    _submitting
+                        ? null
+                        : () async {
+                          if (!_form.currentState!.validate()) return;
+                          if (_step == 1 && _selectedColor == null) {
+                            showAppMessage(
+                              context,
+                              'یک رنگ معتبر انتخاب کنید.',
+                              error: true,
+                            );
+                            return;
+                          }
+                          if (_step == 2 &&
+                              !_images.any(
+                                (image) => image.imagePath?.isNotEmpty == true,
+                              )) {
+                            setState(() => _imageError = true);
+                            return;
+                          }
+                          if (_step < 3) {
+                            setState(() => _step++);
+                            return;
+                          }
+                          final validImages = <JsonMap>[];
+                          final selectedPrimary = _images.indexWhere(
+                            (image) =>
+                                image.imagePath?.isNotEmpty == true &&
+                                _images.indexOf(image) == _primaryImageIndex,
+                          );
+                          final primaryIndex =
+                              selectedPrimary >= 0
+                                  ? selectedPrimary
+                                  : _images.indexWhere(
+                                    (image) =>
+                                        image.imagePath?.isNotEmpty == true,
+                                  );
+                          for (var i = 0; i < _images.length; i++) {
+                            final image = _images[i];
+                            final path = image.imagePath?.trim();
+                            if (path == null || path.isEmpty) continue;
+                            validImages.add({
+                              'imagePath': path,
+                              'altText': _name.text.trim(),
+                              'fileSizeBytes': image.fileSizeBytes ?? 0,
+                              'sortOrder': i,
+                              'isPrimary': i == primaryIndex,
+                            });
+                          }
+                          if (validImages.isEmpty) {
+                            setState(() => _imageError = true);
+                            showAppMessage(
+                              context,
+                              'حداقل یک تصویر برای محصول انتخاب کن.',
+                              error: true,
+                            );
+                            return;
+                          }
+                          final price = _asciiDigits(
+                            _price.text.trim(),
+                          ).replaceAll(',', '');
+                          final stock = int.tryParse(
+                            _asciiDigits(_stock.text.trim()),
+                          );
+                          if (int.tryParse(price) == null || stock == null)
+                            return;
+                          final values = <String, dynamic>{
+                            'name': _name.text.trim(),
+                            'categoryId': _categoryId,
+                            'status': 'draft',
+                            'images': validImages,
+                            'variants': [
+                              {
+                                'colorName': _selectedColor!.name,
+                                'colorHex': _selectedColor!.hex,
+                                'sizeLabel': _size,
+                                'priceToman': price,
+                                'stockQuantity': stock,
+                              },
+                            ],
+                          };
+                          setState(() => _submitting = true);
+                          try {
+                            final created = await ref
+                                .read(adminApiProvider)
+                                .createProduct(values);
+                            if (mounted) Navigator.pop(context, created);
+                          } catch (error) {
+                            if (mounted)
+                              showAppMessage(
+                                context,
+                                AdminApi.friendlyError(error),
+                                error: true,
+                              );
+                          } finally {
+                            if (mounted) setState(() => _submitting = false);
+                          }
+                        },
+                icon: const Icon(Icons.save_outlined),
+                label: Text(
+                  _submitting
+                      ? 'در حال ثبت…'
+                      : _step == 3
+                      ? 'ثبت پیش‌نویس محصول'
+                      : 'مرحلهٔ بعد',
+                ),
+              ),
+            ],
+          ),
         ),
-        FilledButton.icon(
-          onPressed: () {
-            if (!_form.currentState!.validate()) return;
-            final validImages = <JsonMap>[];
-            final selectedPrimary = _images.indexWhere(
-              (image) =>
-                  image.imagePath?.isNotEmpty == true &&
-                  _images.indexOf(image) == _primaryImageIndex,
-            );
-            final primaryIndex =
-                selectedPrimary >= 0
-                    ? selectedPrimary
-                    : _images.indexWhere(
-                      (image) => image.imagePath?.isNotEmpty == true,
-                    );
-            for (var i = 0; i < _images.length; i++) {
-              final image = _images[i];
-              final path = image.imagePath?.trim();
-              if (path == null || path.isEmpty) continue;
-              validImages.add({
-                'imagePath': path,
-                'altText': _name.text.trim(),
-                'fileSizeBytes': image.fileSizeBytes ?? 0,
-                'sortOrder': i,
-                'isPrimary': i == primaryIndex,
-              });
-            }
-            if (validImages.isEmpty) {
-              setState(() => _imageError = true);
-              showAppMessage(
-                context,
-                'حداقل یک تصویر برای محصول انتخاب کن.',
-                error: true,
-              );
-              return;
-            }
-            final price = _asciiDigits(_price.text.trim()).replaceAll(',', '');
-            final stock = int.tryParse(_asciiDigits(_stock.text.trim()));
-            if (int.tryParse(price) == null || stock == null) return;
-            Navigator.pop(context, <String, dynamic>{
-              'name': _name.text.trim(),
-              'categoryId': _categoryId,
-              'status': 'draft',
-              'images': validImages,
-              'variants': [
-                {
-                  'colorName': _selectedColor!.name,
-                  'colorHex': _selectedColor!.hex,
-                  'sizeLabel': _size,
-                  'priceToman': price,
-                  'stockQuantity': stock,
-                },
-              ],
-            });
-          },
-          icon: const Icon(Icons.save_outlined),
-          label: const Text('ثبت پیش‌نویس'),
-        ),
-      ],
+      ),
     );
   }
 
@@ -1669,9 +1828,7 @@ class _EditProductDialogState extends ConsumerState<_EditProductDialog> {
                             ),
                           ),
                           TextButton.icon(
-                            onPressed:
-                                () =>
-                                    ref.invalidate(storeConfigurationProvider),
+                            onPressed: () => ref.invalidate(categoriesProvider),
                             icon: const Icon(Icons.refresh_rounded),
                             label: const Text('بارگذاری دوبارهٔ دسته‌بندی‌ها'),
                           ),

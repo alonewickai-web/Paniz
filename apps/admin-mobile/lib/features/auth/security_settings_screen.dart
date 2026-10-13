@@ -55,14 +55,14 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
         builder: (context) => AlertDialog(
           icon: Icon(Icons.verified_user_rounded, color: Theme.of(context).colorScheme.primary, size: 34),
           title: const Text('اطلاعات ورود تغییر کرد'),
-          content: const Text('برای امنیت، همهٔ نشست‌های مدیریتی بسته شدند. دوباره با اطلاعات جدید وارد شو.'),
-          actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('رفتن به صفحهٔ ورود'))],
+          content: const Text('اطلاعات جدید ذخیره شد و نشست دستگاه‌های دیگر بسته شد.'),
+          actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('ادامه'))],
         ),
       );
       final authController = ref.read(authProvider.notifier);
       if (!mounted) return;
       Navigator.of(context).popUntil((route) => route.isFirst);
-      await authController.clearLocalSession();
+      await authController.refreshIdentity();
     } catch (error) {
       if (mounted) setState(() => _error = AdminApi.friendlyError(error));
     } finally {
@@ -84,7 +84,7 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
             const SizedBox(height: 5),
             Text('نام کاربری فعلی: ${widget.admin.username}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
             const SizedBox(height: 4),
-            Text('برای هر تغییر، گذرواژهٔ فعلی لازم است. بعد از ذخیره همهٔ دستگاه‌ها دوباره باید وارد شوند.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12, height: 1.5)),
+            Text(widget.admin.mustChangePassword ? 'برای فعال‌شدن حساب، گذرواژهٔ موقت را با یک گذرواژهٔ شخصی جایگزین کنید.' : 'برای هر تغییر، گذرواژهٔ فعلی لازم است. پس از ذخیره، نشست دستگاه‌های دیگر بسته می‌شود.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12, height: 1.5)),
           ])),
         ]),
       )),
@@ -131,7 +131,7 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
                 suffixIcon: IconButton(onPressed: () => setState(() => _hideNew = !_hideNew), icon: Icon(_hideNew ? Icons.visibility_outlined : Icons.visibility_off_outlined)),
               ),
               validator: (value) {
-                if (value == null || value.isEmpty) return null;
+                if (value == null || value.isEmpty) return widget.admin.mustChangePassword ? 'گذرواژهٔ جدید را وارد کنید.' : null;
                 return value.length >= 12 ? null : 'گذرواژهٔ جدید باید دست‌کم ۱۲ نویسه باشد';
               },
             ),
@@ -154,7 +154,7 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
             FilledButton.icon(
               onPressed: _busy ? null : _save,
               icon: _busy ? const SizedBox.square(dimension: 17, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.save_outlined),
-              label: Text(_busy ? 'در حال ذخیره…' : 'ذخیره و خروج از همهٔ دستگاه‌ها'),
+              label: Text(_busy ? 'در حال ذخیره…' : 'ذخیرهٔ اطلاعات ورود'),
             ),
           ]),
         ),

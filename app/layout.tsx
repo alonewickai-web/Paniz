@@ -8,6 +8,7 @@ import "./storefront.css";
 import { StorefrontProvider } from "./lib/storefront-state";
 import { siteUrl } from "./lib/site-url";
 import { SiteVisitTracker } from "./components/site-visit-tracker";
+import { StoreThemeSync } from "./components/store-theme-sync";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
@@ -56,7 +57,7 @@ export default async function RootLayout({
   const theme = await getStoreTheme();
   return (
     <html lang="fa" dir="rtl" data-theme={theme}>
-      <body><StorefrontProvider><SiteVisitTracker />{children}</StorefrontProvider></body>
+      <body><StorefrontProvider><StoreThemeSync /><SiteVisitTracker />{children}</StorefrontProvider></body>
     </html>
   );
 }

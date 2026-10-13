@@ -23,6 +23,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useStorefront } from "./lib/storefront-state";
 import { StoreImage } from "./components/store-image";
+import { PageFlipImage, type FlipImage } from "./components/page-flip-image";
 import { ProductSearchAutocomplete } from "./components/product-search-autocomplete";
 
 type Product = {
@@ -327,12 +328,18 @@ export default function Home() {
   const [catalogReloadKey, setCatalogReloadKey] = useState(0);
   const [storefrontConfig, setStorefrontConfig] = useState<StorefrontConfig>({ theme: "rose", sections: [], banners: [] });
   const [bannerIndex, setBannerIndex] = useState(0);
+  const [outgoingBanner, setOutgoingBanner] = useState<StorefrontConfig["banners"][number] | null>(null);
+  const [bannerHovered, setBannerHovered] = useState(false);
+  const [bannerFocused, setBannerFocused] = useState(false);
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("همه محصولات");
   const [sortBy, setSortBy] = useState("newest");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [galleryDirection, setGalleryDirection] = useState<"next" | "previous">("next");
+  const [quickGalleryOutgoing, setQuickGalleryOutgoing] = useState<FlipImage | null>(null);
+  const [quickGalleryHovered, setQuickGalleryHovered] = useState(false);
+  const [quickGalleryFocused, setQuickGalleryFocused] = useState(false);
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState("");
   const [cartOpen, setCartOpen] = useState(false);
@@ -340,6 +347,8 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const galleryTouchStart = useRef<{ x: number; y: number } | null>(null);
+  const bannerIndexRef = useRef(0);
+  const galleryIndexRef = useRef(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -439,10 +448,50 @@ export default function Home() {
   }, [catalogReloadKey]);
 
   useEffect(() => {
-    if (storefrontConfig.banners.length < 2) return;
-    const timer = window.setInterval(() => setBannerIndex((index) => (index + 1) % storefrontConfig.banners.length), 5500);
+    if (storefrontConfig.banners.length < 2 || bannerHovered || bannerFocused) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const currentIndex = bannerIndexRef.current % storefrontConfig.banners.length;
+      const nextIndex = (currentIndex + 1) % storefrontConfig.banners.length;
+      setOutgoingBanner(storefrontConfig.banners[currentIndex]);
+      bannerIndexRef.current = nextIndex;
+      setBannerIndex(nextIndex);
+    }, 5500);
     return () => window.clearInterval(timer);
-  }, [storefrontConfig.banners.length]);
+  }, [bannerFocused, bannerHovered, storefrontConfig.banners]);
+
+  useEffect(() => {
+    if (!outgoingBanner) return;
+    const timer = window.setTimeout(() => setOutgoingBanner(null), 820);
+    return () => window.clearTimeout(timer);
+  }, [outgoingBanner]);
+
+  useEffect(() => {
+    galleryIndexRef.current = selectedImageIndex;
+  }, [selectedImageIndex]);
+
+  useEffect(() => {
+    if (!selectedProduct || (selectedProduct.images?.length ?? 0) < 2 || quickGalleryHovered || quickGalleryFocused) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const images = selectedProduct.images ?? [];
+      const currentIndex = galleryIndexRef.current % images.length;
+      const currentImage = images[currentIndex];
+      if (!currentImage) return;
+      const nextIndex = (currentIndex + 1) % images.length;
+      setQuickGalleryOutgoing({ src: currentImage.path, alt: currentImage.alt || selectedProduct.name });
+      setGalleryDirection("next");
+      galleryIndexRef.current = nextIndex;
+      setSelectedImageIndex(nextIndex);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [quickGalleryFocused, quickGalleryHovered, selectedProduct]);
+
+  useEffect(() => {
+    if (!quickGalleryOutgoing) return;
+    const timer = window.setTimeout(() => setQuickGalleryOutgoing(null), 820);
+    return () => window.clearTimeout(timer);
+  }, [quickGalleryOutgoing]);
 
   useEffect(() => {
     if (!toast) return;
@@ -526,6 +575,10 @@ export default function Home() {
   function openProduct(product: Product) {
     setSelectedProduct(product);
     setSelectedImageIndex(0);
+    galleryIndexRef.current = 0;
+    setQuickGalleryOutgoing(null);
+    setQuickGalleryHovered(false);
+    setQuickGalleryFocused(false);
     setGalleryDirection("next");
     galleryTouchStart.current = null;
     setSelectedSize("");
@@ -533,10 +586,16 @@ export default function Home() {
   }
 
   function moveSelectedGallery(step: number) {
-    const imageCount = selectedProduct?.images?.length ?? 0;
+    const images = selectedProduct?.images ?? [];
+    const imageCount = images.length;
     if (imageCount < 2) return;
+    const currentIndex = galleryIndexRef.current % imageCount;
+    const currentImage = images[currentIndex];
+    const nextIndex = (currentIndex + step + imageCount) % imageCount;
+    if (currentImage) setQuickGalleryOutgoing({ src: currentImage.path, alt: currentImage.alt || selectedProduct?.name || "تصویر محصول" });
     setGalleryDirection(step > 0 ? "next" : "previous");
-    setSelectedImageIndex((index) => (index + step + imageCount) % imageCount);
+    galleryIndexRef.current = nextIndex;
+    setSelectedImageIndex(nextIndex);
   }
 
   function finishSelectedGallerySwipe(x: number, y: number) {
@@ -674,7 +733,12 @@ export default function Home() {
       </header>
 
       <div className="page-shell page-content" id="top">
-        {sectionIsActive("hero") && <section className="hero" aria-labelledby="hero-title" style={{
+        {sectionIsActive("hero") && <section className="hero" aria-labelledby="hero-title"
+          onMouseEnter={() => setBannerHovered(true)}
+          onMouseLeave={() => setBannerHovered(false)}
+          onFocusCapture={() => setBannerFocused(true)}
+          onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setBannerFocused(false); }}
+          style={{
           order: sectionOrder("hero", 0),
           ...(activeBanner?.backgroundColor ? {
             background: activeBanner.backgroundColor,
@@ -707,10 +771,11 @@ export default function Home() {
           </div>
           <div className="hero-visual">
             <div className="hero-image-wrap">
-              <StoreImage
+              <PageFlipImage
                 src={activeBanner?.imagePath || "/images/paniz-sage.webp"}
                 alt={activeBanner?.title || "استایل زنانهٔ تازه و راحت از کالکشن پانیذ"}
-                fill
+                outgoing={outgoingBanner ? { src: outgoingBanner.imagePath, alt: outgoingBanner.title } : null}
+                direction="next"
                 priority
                 sizes="(max-width: 760px) 92vw, 55vw"
                 className="hero-image"
@@ -720,9 +785,6 @@ export default function Home() {
             <div className="hero-tag"><span className="tag-line" /><span>برای روزهای خودت</span></div>
             <div className="hero-orbit" aria-hidden="true" />
           </div>
-          {storefrontConfig.banners.length > 1 && <div className="hero-pagination" aria-label="انتخاب بنر">
-            {storefrontConfig.banners.map((banner, index) => <button key={banner.id} className={index === bannerIndex ? "current" : ""} aria-label={`بنر ${money(index + 1)}`} aria-pressed={index === bannerIndex} onClick={() => setBannerIndex(index)} />)}
-          </div>}
         </section>}
 
         {sectionIsActive("categories") && <section className="categories-section" aria-labelledby="categories-title" id="categories" style={{ order: sectionOrder("categories", 1) }}>
@@ -909,23 +971,17 @@ export default function Home() {
                 data-gallery-direction={galleryDirection}
                 role="group"
                 aria-label={`تصاویر ${selectedProduct.name}`}
+                onMouseEnter={() => setQuickGalleryHovered(true)}
+                onMouseLeave={() => setQuickGalleryHovered(false)}
+                onFocusCapture={() => setQuickGalleryFocused(true)}
+                onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setQuickGalleryFocused(false); }}
                 onTouchStart={(event) => { const touch = event.changedTouches[0]; if (touch) galleryTouchStart.current = { x: touch.clientX, y: touch.clientY }; }}
                 onTouchEnd={(event) => { const touch = event.changedTouches[0]; if (touch) finishSelectedGallerySwipe(touch.clientX, touch.clientY); }}
                 onTouchCancel={() => { galleryTouchStart.current = null; }}
               >
-                <StoreImage key={currentImage.id} className="quick-gallery-current" src={currentImage.path} alt={currentImage.alt || selectedProduct.name} fill sizes="(max-width: 680px) 90vw, 420px" />
+                <PageFlipImage key={selectedProduct.id} className="quick-gallery-current" src={currentImage.path} alt={currentImage.alt || selectedProduct.name} outgoing={quickGalleryOutgoing} direction={galleryDirection} priority sizes="(max-width: 680px) 90vw, 420px" />
                 {galleryImages.length > 1 && <>
-                  <span className="quick-gallery-count" aria-live="polite">{new Intl.NumberFormat("fa-IR").format(selectedImageIndex + 1)} / {new Intl.NumberFormat("fa-IR").format(galleryImages.length)}</span>
-                  <div className="quick-gallery-thumbnails" aria-label="انتخاب تصویر">
-                    {galleryImages.map((image, index) => <button
-                      key={image.id}
-                      type="button"
-                      className={index === selectedImageIndex ? "active" : ""}
-                      onClick={() => { setGalleryDirection(index > selectedImageIndex ? "next" : "previous"); setSelectedImageIndex(index); }}
-                      aria-label={`نمایش تصویر ${index + 1}`}
-                      aria-pressed={index === selectedImageIndex}
-                    ><StoreImage src={image.path} alt={image.alt || `${selectedProduct.name}، تصویر ${index + 1}`} fill sizes="54px" /></button>)}
-                  </div>
+                  <span className="quick-gallery-count">{new Intl.NumberFormat("fa-IR").format(selectedImageIndex + 1)} / {new Intl.NumberFormat("fa-IR").format(galleryImages.length)}</span>
                 </>}
               </div>;
             })()}

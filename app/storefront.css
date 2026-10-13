@@ -31,7 +31,7 @@
 .header-search-autocomplete { width: 100%; }
 .store-search-wrap { position: relative; margin-bottom: 13px; }
 .store-search-field { display: flex; align-items: center; gap: 10px; min-height: 47px; padding: 0 13px; border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--muted); }
-.store-search-field:focus-within { border-color: #d78796; box-shadow: 0 0 0 3px rgba(199, 46, 82, .08); }
+.store-search-field:focus-within { border-color: var(--rose-bright); box-shadow: 0 0 0 3px color-mix(in srgb, var(--rose) 8%, transparent); }
 .store-search-field input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 14px; }
 .store-search-field button { display: grid; width: 34px; height: 34px; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
 .store-search-field button:hover { background: var(--rose-light); color: var(--rose); }
@@ -66,20 +66,11 @@
 
 .store-product-detail-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(360px, .95fr); align-items: start; gap: clamp(28px, 5vw, 70px); }
 .store-gallery, .store-product-info { min-width: 0; }
-  .store-main-image { position: relative; width: 100%; aspect-ratio: .88; overflow: hidden; border-radius: 22px; background: linear-gradient(135deg, #f1ede8, #f7e8e3); touch-action: pan-y; user-select: none; }
+  .store-main-image { position: relative; width: 100%; aspect-ratio: .88; overflow: hidden; border-radius: 22px; background: linear-gradient(135deg, #f1ede8, #f7e8e3); touch-action: pan-y; user-select: none; perspective: 1100px; transform-style: preserve-3d; }
 .store-main-image img { object-fit: cover; }
-.store-main-image[data-gallery-direction="next"] img { animation: store-image-enter-next 280ms cubic-bezier(.2,.72,.24,1) both; }
-.store-main-image[data-gallery-direction="previous"] img { animation: store-image-enter-previous 280ms cubic-bezier(.2,.72,.24,1) both; }
-@keyframes store-image-enter-next { from { opacity: .72; transform: translateX(18px) scale(.985); } to { opacity: 1; transform: translateX(0) scale(1); } }
-@keyframes store-image-enter-previous { from { opacity: .72; transform: translateX(-18px) scale(.985); } to { opacity: 1; transform: translateX(0) scale(1); } }
   .store-image-count { position: absolute; z-index: 3; inset-inline-end: 12px; bottom: 12px; min-width: 52px; padding: 6px 9px; border: 1px solid rgba(255,255,255,.65); border-radius: 20px; background: rgba(255,255,255,.88); color: var(--ink); font-size: 11px; font-weight: 700; text-align: center; }
-@media (prefers-reduced-motion: reduce) { .store-main-image[data-gallery-direction] img { animation: none; } }
 .store-detail-sale { position: absolute; top: 18px; inset-inline-start: 18px; z-index: 2; padding: 7px 11px; border-radius: 18px; background: var(--rose); color: #fff; font-size: 12px; }
 .store-no-image { display: grid; height: 100%; place-items: center; color: var(--muted); }
-.store-thumbnails { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 12px; }
-.store-thumbnails button { position: relative; width: 70px; height: 82px; overflow: hidden; border: 2px solid transparent; border-radius: 11px; background: var(--sand); cursor: pointer; }
-.store-thumbnails button.active { border-color: var(--rose); }
-.store-thumbnails img { object-fit: cover; }
 .store-product-info h1 { margin: 4px 0 8px; color: var(--ink); font-size: clamp(27px, 3vw, 39px); font-weight: 600; line-height: 1.35; }
 .store-product-lead { margin: 0; color: var(--muted); font-size: 14px; }
 .store-detail-price { display: flex; align-items: baseline; gap: 12px; margin: 20px 0 4px; }
@@ -213,6 +204,9 @@
 .store-info-page h1 { margin-top: 9px; }
 .store-info-lead { max-width: 700px; margin: 14px 0 22px; color: var(--ink-soft); font-size: 16px; line-height: 2; }
 .store-info-page .button-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; margin-top: 10px; padding: 8px 17px; border-radius: 11px; }
+.contact-message-status { margin: 14px 0 0; font-size: 13px; line-height: 1.8; }
+.contact-submit-spinner { animation: contact-submit-spin .9s linear infinite; }
+@keyframes contact-submit-spin { to { transform: rotate(360deg); } }
 .store-info-callout { display: flex; align-items: start; gap: 10px; margin: 20px 0; padding: 15px; border-radius: 13px; background: var(--rose-light); color: var(--rose); }
 .store-info-callout p { margin: 0; color: var(--ink-soft); font-size: 13px; line-height: 1.9; }
 .store-info-sections { display: grid; gap: 13px; margin: 22px 0; }

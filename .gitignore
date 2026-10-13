@@ -16,3 +16,9 @@ android/key.properties
 *.tsbuildinfo
 .railway/
 apps/api/uploads/
+
+.codex-remote-attachments/
+**/.tmp-maven/
+*.pem
+*.jks
+*.keystore

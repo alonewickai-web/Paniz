@@ -18,7 +18,7 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
   bool _saving = false;
   List<String>? _sectionOrderOverride;
 
-  static const _tabs = ['تم', 'دسته‌ها', 'بنرها', 'چیدمان'];
+  static const _tabs = ['قالب سایت', 'دسته‌ها', 'بنرها', 'چیدمان'];
 
   Future<void> _refresh() async {
     _sectionOrderOverride = null;
@@ -69,28 +69,34 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
   }
 
   Widget _themePanel(JsonMap data) {
-    const themes = <({String key, String title, Color first, Color second})>[
-      (key: 'rose', title: 'رز پانیذ', first: Color(0xFFC72E52), second: Color(0xFFEE536B)),
-      (key: 'mint', title: 'سبز نعنایی', first: Color(0xFF397D61), second: Color(0xFF82B99B)),
-      (key: 'peach', title: 'هلویی', first: Color(0xFFC66E4B), second: Color(0xFFF1A27B)),
-      (key: 'lilac', title: 'یاسی', first: Color(0xFF7868AE), second: Color(0xFFB49AD8)),
-      (key: 'coral', title: 'مرجانی', first: Color(0xFFDC5E5C), second: Color(0xFFFF9B73)),
-      (key: 'dark', title: 'تیره و رز', first: Color(0xFF332D35), second: Color(0xFF9A5367)),
-      (key: 'berry', title: 'تمشکی', first: Color(0xFFA21D55), second: Color(0xFFE75888)),
-      (key: 'ocean', title: 'اقیانوسی', first: Color(0xFF207C9A), second: Color(0xFF45C3C0)),
-      (key: 'sunset', title: 'غروب آفتاب', first: Color(0xFFD75245), second: Color(0xFFF4AA4D)),
-      (key: 'forest', title: 'جنگلی', first: Color(0xFF2F7049), second: Color(0xFFA8B94A)),
-      (key: 'royal', title: 'سلطنتی', first: Color(0xFF51459A), second: Color(0xFFBE68A7)),
-      (key: 'citrus', title: 'مرکباتی', first: Color(0xFF8C9B29), second: Color(0xFFE8C843)),
-      (key: 'lagoon', title: 'تالابی', first: Color(0xFF087E83), second: Color(0xFF64D5B1)),
-      (key: 'mocha', title: 'موکا', first: Color(0xFF7D5140), second: Color(0xFFD9A37E)),
-      (key: 'orchid', title: 'ارکیده‌ای', first: Color(0xFFA64690), second: Color(0xFFD68CC4)),
-      (key: 'slate', title: 'خاکستری آبی', first: Color(0xFF42546E), second: Color(0xFF8299AF)),
+    const themes = <({String key, String title, String description, Color first, Color second, Color canvas, bool dark})>[
+      (key: 'rose', title: 'رز پانیذ', description: 'گرم و لطیف', first: Color(0xFFC72E52), second: Color(0xFFEE536B), canvas: Color(0xFFFFFAF7), dark: false),
+      (key: 'mint', title: 'سبز نعنایی', description: 'طبیعی و آرام', first: Color(0xFF397D61), second: Color(0xFF82B99B), canvas: Color(0xFFF8FCF8), dark: false),
+      (key: 'peach', title: 'هلویی', description: 'نرم و صمیمی', first: Color(0xFFC66E4B), second: Color(0xFFF1A27B), canvas: Color(0xFFFFFAF6), dark: false),
+      (key: 'lilac', title: 'یاسی', description: 'آرام و ظریف', first: Color(0xFF7868AE), second: Color(0xFFB49AD8), canvas: Color(0xFFFCFBFF), dark: false),
+      (key: 'coral', title: 'مرجانی', description: 'شاد و پرانرژی', first: Color(0xFFDC5E5C), second: Color(0xFFFF9B73), canvas: Color(0xFFFFFAFA), dark: false),
+      (key: 'dark', title: 'تیره و رز', description: 'تیره و چشم‌نواز', first: Color(0xFF332D35), second: Color(0xFF9A5367), canvas: Color(0xFF19171B), dark: true),
+      (key: 'berry', title: 'تمشکی', description: 'پررنگ و مدرن', first: Color(0xFFA21D55), second: Color(0xFFE75888), canvas: Color(0xFFFFF9FC), dark: false),
+      (key: 'ocean', title: 'اقیانوسی', description: 'خنک و امروزی', first: Color(0xFF207C9A), second: Color(0xFF45C3C0), canvas: Color(0xFFF7FCFD), dark: false),
+      (key: 'sunset', title: 'غروب آفتاب', description: 'گرم و درخشان', first: Color(0xFFD75245), second: Color(0xFFF4AA4D), canvas: Color(0xFFFFFBF7), dark: false),
+      (key: 'forest', title: 'جنگلی', description: 'سبز و الهام‌گرفته از طبیعت', first: Color(0xFF2F7049), second: Color(0xFFA8B94A), canvas: Color(0xFFFAFCF7), dark: false),
+      (key: 'royal', title: 'سلطنتی', description: 'خاص و شیک', first: Color(0xFF51459A), second: Color(0xFFBE68A7), canvas: Color(0xFFFBFAFF), dark: false),
+      (key: 'citrus', title: 'مرکباتی', description: 'روشن و پرنشاط', first: Color(0xFF8C9B29), second: Color(0xFFE8C843), canvas: Color(0xFFFCFCF5), dark: false),
+      (key: 'lagoon', title: 'تالابی', description: 'فیروزه‌ای و تازه', first: Color(0xFF087E83), second: Color(0xFF64D5B1), canvas: Color(0xFFF7FCFA), dark: false),
+      (key: 'mocha', title: 'موکا', description: 'خاکی و دلنشین', first: Color(0xFF7D5140), second: Color(0xFFD9A37E), canvas: Color(0xFFFDFAF7), dark: false),
+      (key: 'orchid', title: 'ارکیده‌ای', description: 'لطیف و متفاوت', first: Color(0xFFA64690), second: Color(0xFFD68CC4), canvas: Color(0xFFFDF9FC), dark: false),
+      (key: 'slate', title: 'خاکستری آبی', description: 'مینیمال و رسمی', first: Color(0xFF42546E), second: Color(0xFF8299AF), canvas: Color(0xFFFAFBFD), dark: false),
     ];
     final current = '${data['theme'] ?? 'rose'}';
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      sectionTitle('رنگ‌بندی سایت'),
-      const Padding(padding: EdgeInsets.only(top: 4, bottom: 14), child: Text('از بین ۱۶ ترکیب رنگ روشن، تیره و طیفی انتخاب کن. تغییر بعد از بارگذاری دوبارهٔ سایت دیده می‌شود.', style: TextStyle(color: Color(0xFF74686C), fontSize: 12))),
+      sectionTitle('قالب‌های آمادهٔ سایت'),
+      const Padding(
+        padding: EdgeInsets.only(top: 4, bottom: 14),
+        child: Text(
+          'یکی از ۱۶ ترکیب رنگ را انتخاب کن. انتخابت ذخیره می‌شود؛ سایت باز هم با برگشتن به آن قالب تازه را می‌گیرد.',
+          style: TextStyle(color: Color(0xFF74686C), fontSize: 12),
+        ),
+      ),
       LayoutBuilder(builder: (context, constraints) {
         final width = (constraints.maxWidth - 8) / 2;
         return Wrap(spacing: 8, runSpacing: 8, children: themes.map((theme) {
@@ -98,25 +104,63 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
           return SizedBox(width: width, child: Card(
             margin: EdgeInsets.zero,
             clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: selected ? theme.first : const Color(0xFFE9E4E5), width: selected ? 1.6 : 1),
+            ),
             child: InkWell(
+              borderRadius: BorderRadius.circular(14),
               onTap: selected ? null : () => _run(() async {
                 await ref.read(adminApiProvider).updateStoreTheme(theme.key);
-              }, 'رنگ‌بندی سایت ذخیره شد'),
+              }, 'قالب سایت ذخیره و فعال شد'),
               child: Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(9, 11, 9, 11),
-                child: Row(children: [
+                padding: const EdgeInsets.all(9),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Container(
-                    width: 38,
-                    height: 38,
+                    height: 54,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [theme.first, theme.second]),
+                      color: theme.canvas,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: theme.dark ? const Color(0xFF403942) : const Color(0xFFECE7E5)),
                     ),
-                    child: selected ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                    child: Column(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                      Row(children: [
+                        Container(
+                          width: 19,
+                          height: 19,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: [theme.first, theme.second])),
+                          child: const Text('پ', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 5),
+                        Text('پانیذ', style: TextStyle(color: theme.dark ? Colors.white : const Color(0xFF29262A), fontSize: 10, fontWeight: FontWeight.w700)),
+                        const Spacer(),
+                        Container(width: 32, height: 11, decoration: BoxDecoration(color: theme.first, borderRadius: BorderRadius.circular(8))),
+                      ]),
+                      Row(children: [
+                        Expanded(child: Container(height: 7, decoration: BoxDecoration(color: theme.first.withValues(alpha: .20), borderRadius: BorderRadius.circular(5)))),
+                        const SizedBox(width: 5),
+                        Container(width: 25, height: 7, decoration: BoxDecoration(color: theme.second, borderRadius: BorderRadius.circular(5))),
+                      ]),
+                    ]),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(theme.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
-                  Icon(selected ? Icons.radio_button_checked : Icons.radio_button_off, size: 18, color: selected ? const Color(0xFFB52F50) : null),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(theme.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      Text(theme.description, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Color(0xFF74686C))),
+                    ])),
+                    if (selected)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(color: theme.first.withValues(alpha: .10), borderRadius: BorderRadius.circular(20)),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.check_rounded, size: 12, color: theme.first), const SizedBox(width: 2), Text('فعال', style: TextStyle(color: theme.first, fontSize: 10, fontWeight: FontWeight.w600))]),
+                      )
+                    else
+                      Icon(Icons.radio_button_unchecked_rounded, size: 18, color: theme.first),
+                  ]),
                 ]),
               ),
             ),
@@ -261,10 +305,9 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
         physics: const NeverScrollableScrollPhysics(),
         buildDefaultDragHandles: false,
         itemCount: sections.length,
-        onReorder: (oldIndex, newIndex) {
+        onReorderItem: (oldIndex, newIndex) {
           if (_saving || oldIndex == newIndex) return;
           final reordered = List<JsonMap>.of(sections);
-          if (newIndex > oldIndex) newIndex -= 1;
           final moved = reordered.removeAt(oldIndex);
           reordered.insert(newIndex, moved);
           _saveSectionOrder(reordered.map((section) => '${section['sectionKey']}').toList(growable: false));

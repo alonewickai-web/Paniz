@@ -6,7 +6,7 @@ import { Check, Heart, Minus, Plus, Share2, ShieldCheck, ShoppingBag, Truck } fr
 import { StoreProductCard } from "./store-product-card";
 import { apiBaseUrl, formatToman, type StoreProduct, type StoreProductDetail } from "../lib/catalog";
 import { useStorefront } from "../lib/storefront-state";
-import { StoreImage } from "./store-image";
+import { PageFlipImage, type FlipImage } from "./page-flip-image";
 
 export function ProductDetailView({ product }: { product: StoreProductDetail }) {
   const { cart, setCart, favorites, setFavorites } = useStorefront();
@@ -18,21 +18,55 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
   const [quantity, setQuantity] = useState(1);
   const [imageIndex, setImageIndex] = useState(0);
   const [galleryDirection, setGalleryDirection] = useState<"next" | "previous">("next");
+  const [galleryOutgoing, setGalleryOutgoing] = useState<FlipImage | null>(null);
+  const [galleryHovered, setGalleryHovered] = useState(false);
+  const [galleryFocused, setGalleryFocused] = useState(false);
   const [notice, setNotice] = useState("");
   const [isSharing, setIsSharing] = useState(false);
   const [related, setRelated] = useState<StoreProduct[]>([]);
   const [relatedLoaded, setRelatedLoaded] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const galleryIndexRef = useRef(0);
+  const currentImages = useMemo(() => product.images.length
+    ? product.images
+    : product.image ? [{ id: "primary", path: product.image.path, alt: product.image.alt, isPrimary: true }] : [], [product.image, product.images]);
 
   useEffect(() => {
     setImageIndex(0);
+    galleryIndexRef.current = 0;
+    setGalleryOutgoing(null);
     setGalleryDirection("next");
     touchStart.current = null;
   }, [product.id]);
 
+  useEffect(() => {
+    if (currentImages.length < 2 || galleryHovered || galleryFocused) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const currentIndex = galleryIndexRef.current % currentImages.length;
+      const currentImage = currentImages[currentIndex];
+      if (!currentImage) return;
+      const nextIndex = (currentIndex + 1) % currentImages.length;
+      setGalleryOutgoing({ src: currentImage.path, alt: currentImage.alt || product.name });
+      setGalleryDirection("next");
+      galleryIndexRef.current = nextIndex;
+      setImageIndex(nextIndex);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [currentImages, galleryFocused, galleryHovered, product.name]);
+
+  useEffect(() => {
+    if (!galleryOutgoing) return;
+    const timer = window.setTimeout(() => setGalleryOutgoing(null), 820);
+    return () => window.clearTimeout(timer);
+  }, [galleryOutgoing]);
+
+  useEffect(() => {
+    galleryIndexRef.current = imageIndex;
+  }, [imageIndex]);
+
   const variant = product.variants.find((item) => item.color.name === color && item.size === size);
   const stock = variant?.availableQuantity ?? 0;
-  const currentImages = product.images.length ? product.images : product.image ? [{ id: "primary", path: product.image.path, alt: product.image.alt, isPrimary: true }] : [];
   const mainImage = currentImages[Math.min(imageIndex, Math.max(currentImages.length - 1, 0))];
   const favorite = favorites.includes(productId);
   const discount = variant?.compareAtPriceToman && variant.priceToman
@@ -42,14 +76,13 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
 
   function moveGallery(step: number) {
     if (currentImages.length < 2) return;
+    const currentIndex = galleryIndexRef.current % currentImages.length;
+    const currentImage = currentImages[currentIndex];
+    const nextIndex = (currentIndex + step + currentImages.length) % currentImages.length;
+    if (currentImage) setGalleryOutgoing({ src: currentImage.path, alt: currentImage.alt || product.name });
     setGalleryDirection(step > 0 ? "next" : "previous");
-    setImageIndex((index) => (index + step + currentImages.length) % currentImages.length);
-  }
-
-  function selectGalleryImage(index: number) {
-    if (index === imageIndex) return;
-    setGalleryDirection(index > imageIndex ? "next" : "previous");
-    setImageIndex(index);
+    galleryIndexRef.current = nextIndex;
+    setImageIndex(nextIndex);
   }
 
   function finishGallerySwipe(x: number, y: number) {
@@ -139,18 +172,19 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
               className="store-main-image"
               data-gallery-direction={galleryDirection}
               role="group"
+              onMouseEnter={() => setGalleryHovered(true)}
+              onMouseLeave={() => setGalleryHovered(false)}
+              onFocusCapture={() => setGalleryFocused(true)}
+              onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setGalleryFocused(false); }}
               onTouchStart={(event) => { const touch = event.changedTouches[0]; if (touch) touchStart.current = { x: touch.clientX, y: touch.clientY }; }}
               onTouchEnd={(event) => { const touch = event.changedTouches[0]; if (touch) finishGallerySwipe(touch.clientX, touch.clientY); }}
               onTouchCancel={() => { touchStart.current = null; }}
               aria-label={mainImage ? `تصویر ${imageIndex + 1} از ${currentImages.length} برای ${product.name}` : `تصویر ${product.name}`}
             >
-              {mainImage ? <StoreImage key={mainImage.id} src={mainImage.path} alt={mainImage.alt || product.name} fill priority sizes="(max-width: 760px) 100vw, 54vw" /> : <div className="store-no-image">تصویر محصول</div>}
+              {mainImage ? <PageFlipImage src={mainImage.path} alt={mainImage.alt || product.name} outgoing={galleryOutgoing} direction={galleryDirection} priority sizes="(max-width: 760px) 100vw, 54vw" /> : <div className="store-no-image">تصویر محصول</div>}
               {discount > 0 && <span className="store-detail-sale">{new Intl.NumberFormat("fa-IR").format(discount)}٪ تخفیف</span>}
-              {currentImages.length > 1 && <>
-                <span className="store-image-count" aria-live="polite">{new Intl.NumberFormat("fa-IR").format(imageIndex + 1)} / {new Intl.NumberFormat("fa-IR").format(currentImages.length)}</span>
-              </>}
+              {currentImages.length > 1 && <span className="store-image-count">{new Intl.NumberFormat("fa-IR").format(imageIndex + 1)} / {new Intl.NumberFormat("fa-IR").format(currentImages.length)}</span>}
             </div>
-            {currentImages.length > 1 && <div className="store-thumbnails">{currentImages.map((image, index) => <button type="button" key={image.id} className={index === imageIndex ? "active" : ""} onClick={() => selectGalleryImage(index)} aria-label={`نمایش تصویر ${index + 1}`} aria-pressed={index === imageIndex}><StoreImage src={image.path} alt={image.alt || product.name} fill sizes="84px" /></button>)}</div>}
           </section>
 
           <section className="store-product-info">
