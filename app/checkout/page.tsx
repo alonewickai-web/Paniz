@@ -93,6 +93,7 @@ export default function CheckoutPage() {
       return () => controller.abort();
     }
     setLoadingQuote(true); setQuoteError("");
+    let rejectedCoupon = false;
     fetch(`${apiBaseUrl()}/checkout/quote`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items: cart.map((line) => ({ variantId: line.variantId, quantity: line.quantity })), ...(appliedCoupon ? { couponCode: appliedCoupon } : {}) }),
@@ -104,6 +105,7 @@ export default function CheckoutPage() {
     }).catch((error: unknown) => {
       if (!controller.signal.aborted) {
         if (appliedCoupon && error instanceof CheckoutQuoteError && error.code?.startsWith("COUPON_")) {
+          rejectedCoupon = true;
           setCouponError(error.message);
           setQuoteError("");
           setAppliedCoupon("");
@@ -112,7 +114,7 @@ export default function CheckoutPage() {
           setQuoteResult(null);
         }
       }
-    }).finally(() => { if (!controller.signal.aborted) setLoadingQuote(false); });
+    }).finally(() => { if (!controller.signal.aborted && !rejectedCoupon) setLoadingQuote(false); });
     return () => controller.abort();
   }, [cartPayload, ready, appliedCoupon, quoteInputKey]);
 
