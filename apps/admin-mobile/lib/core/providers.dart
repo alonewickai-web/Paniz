@@ -136,10 +136,16 @@ final dashboardProvider = FutureProvider.autoDispose<JsonMap>(
 final siteVisitAnalyticsProvider = FutureProvider.autoDispose<JsonMap>(
   (ref) => ref.watch(adminApiProvider).siteVisitAnalytics(),
 );
-final financeReportProvider = FutureProvider.autoDispose
-    .family<JsonMap, String>(
-      (ref, range) => ref.watch(adminApiProvider).financeReport(range),
-    );
+final seoAnalyticsProvider = FutureProvider.autoDispose.family<JsonMap, String>((ref, rangeKey) {
+  final parts = rangeKey.split(':');
+  if (parts.first == 'custom' && parts.length == 3) {
+    return ref.watch(adminApiProvider).seoAnalytics(range: 'custom', from: parts[1], to: parts[2]);
+  }
+  return ref.watch(adminApiProvider).seoAnalytics(range: parts.first);
+});
+final financeReportProvider = FutureProvider.autoDispose.family<JsonMap, String>(
+  (ref, range) => ref.watch(adminApiProvider).financeReport(range),
+);
 final storeConfigurationProvider = FutureProvider.autoDispose<JsonMap>(
   (ref) => ref.watch(adminApiProvider).storeConfiguration(),
 );

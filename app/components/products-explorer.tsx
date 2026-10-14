@@ -91,7 +91,7 @@ export function ProductsExplorer() {
       setError("");
       try {
         const query = new URLSearchParams(queryString);
-        query.set("pageSize", "12");
+        query.set("pageSize", "20");
         const response = await fetch(`${apiBaseUrl()}/products?${query}`, { signal: controller.signal, cache: "no-store" });
         if (!response.ok) throw new Error("فهرست محصولات در دسترس نیست.");
         const payload = await response.json() as ProductListPayload;

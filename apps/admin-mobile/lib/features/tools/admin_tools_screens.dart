@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/admin_image_picker_field.dart';
 import '../../core/admin_api.dart';
@@ -362,8 +363,11 @@ class _CouponManagementScreenState
 
   Future<void> _edit([JsonMap? coupon]) async {
     final code = TextEditingController(text: '${coupon?['code'] ?? ''}');
+    final initialType = coupon?['discountType'] == 'fixed' ? 'fixed' : 'percent';
     final value = TextEditingController(
-      text: '${coupon?['discountValue'] ?? ''}',
+      text: initialType == 'fixed'
+          ? groupedNumber(coupon?['discountValue'] ?? '')
+          : '${coupon?['discountValue'] ?? ''}',
     );
     final minimum = TextEditingController(
       text: '${coupon?['minOrderToman'] ?? '0'}',
@@ -377,9 +381,7 @@ class _CouponManagementScreenState
     final customerLimit = TextEditingController(
       text: '${coupon?['perCustomerLimit'] ?? ''}',
     );
-    final type = ValueNotifier<String>(
-      coupon?['discountType'] == 'fixed' ? 'fixed' : 'percent',
-    );
+    final type = ValueNotifier<String>(initialType);
     final usage = ValueNotifier<bool>(coupon?['isActive'] != false);
     final firstOrderOnly = ValueNotifier<bool>(
       coupon?['firstOrderOnly'] == true,
@@ -418,20 +420,36 @@ class _CouponManagementScreenState
                             ),
                           ],
                           onChanged: (next) {
-                            if (next != null) type.value = next;
+                            if (next != null) {
+                              value.text = next == 'fixed'
+                                  ? _formatGroupedValue(value.text)
+                                  : _ungroupedDigits(value.text);
+                              type.value = next;
+                            }
                           },
                         ),
                   ),
                   const SizedBox(height: 8),
-                  TextField(
-                    controller: value,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'مقدار تخفیف'),
+                  ValueListenableBuilder(
+                    valueListenable: type,
+                    builder: (_, selected, __) => TextField(
+                      controller: value,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: selected == 'fixed'
+                          ? const [_ThousandsSeparatorInputFormatter()]
+                          : const [],
+                      decoration: InputDecoration(
+                        labelText: selected == 'fixed'
+                            ? 'مبلغ تخفیف (تومان)'
+                            : 'درصد تخفیف',
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: minimum,
                     keyboardType: TextInputType.number,
+                    inputFormatters: const [_ThousandsSeparatorInputFormatter()],
                     decoration: const InputDecoration(
                       labelText: 'حداقل مبلغ سفارش (تومان)',
                     ),
@@ -440,6 +458,7 @@ class _CouponManagementScreenState
                   TextField(
                     controller: max,
                     keyboardType: TextInputType.number,
+                    inputFormatters: const [_ThousandsSeparatorInputFormatter()],
                     decoration: const InputDecoration(
                       labelText: 'سقف تخفیف (اختیاری)',
                     ),
@@ -488,12 +507,12 @@ class _CouponManagementScreenState
               ),
               FilledButton(
                 onPressed: () {
-                  final parsedValue = num.tryParse(_digits(value.text));
-                  final parsedMinimum = int.tryParse(_digits(minimum.text));
+                  final parsedValue = num.tryParse(_ungroupedDigits(value.text));
+                  final parsedMinimum = int.tryParse(_ungroupedDigits(minimum.text));
                   final parsedMax =
                       max.text.trim().isEmpty
                           ? null
-                          : int.tryParse(_digits(max.text));
+                          : int.tryParse(_ungroupedDigits(max.text));
                   final parsedUsageLimit =
                       usageLimit.text.trim().isEmpty
                           ? null
@@ -590,7 +609,7 @@ class _CouponManagementScreenState
                 style: const TextStyle(fontWeight: FontWeight.w900),
               ),
               subtitle: Text(
-                '${coupon['discountType'] == 'percent' ? '${coupon['discountValue']}٪' : '${persianNumber(coupon['discountValue'] ?? 0)} تومان'} · حداقل ${persianNumber(coupon['minOrderToman'] ?? 0)} تومان\n${coupon['isActive'] == true ? 'فعال' : 'غیرفعال'}',
+                '${coupon['discountType'] == 'percent' ? '${coupon['discountValue']}٪' : '${groupedNumber(coupon['discountValue'] ?? 0)} تومان'} · حداقل ${groupedNumber(coupon['minOrderToman'] ?? 0)} تومان\n${coupon['isActive'] == true ? 'فعال' : 'غیرفعال'}',
               ),
               isThreeLine: true,
               trailing: IconButton(
@@ -605,6 +624,301 @@ class _CouponManagementScreenState
       ],
     ),
   );
+}
+
+class ProductDiscountCampaignScreen extends ConsumerStatefulWidget {
+  const ProductDiscountCampaignScreen({super.key});
+
+  @override
+  ConsumerState<ProductDiscountCampaignScreen> createState() =>
+      _ProductDiscountCampaignScreenState();
+}
+
+class _ProductDiscountCampaignScreenState
+    extends ConsumerState<ProductDiscountCampaignScreen> {
+  final _amount = TextEditingController();
+  final _search = TextEditingController();
+  String _type = 'percent';
+  bool _loading = true;
+  bool _saving = false;
+  List<JsonMap> _products = const [];
+  final Set<String> _selectedIds = {};
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _search.dispose();
+    super.dispose();
+  }
+
+  List<JsonMap> _variants(JsonMap product) =>
+      (product['variants'] as List? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+
+  List<JsonMap> _discountedVariants(JsonMap product) => _variants(product)
+      .where((variant) {
+        final compare = int.tryParse('${variant['compareAtPriceToman'] ?? ''}');
+        final price = int.tryParse('${variant['priceToman'] ?? ''}');
+        return variant['isActive'] == true && compare != null && price != null && compare > price;
+      })
+      .toList();
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final products = await ref.read(adminApiProvider).products();
+      if (!mounted) return;
+      setState(() {
+        _products = products;
+        _selectedIds.removeWhere((id) => !products.any((product) => '${product['id']}' == id));
+      });
+    } catch (error) {
+      if (mounted) setState(() => _error = AdminApi.friendlyError(error));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  List<JsonMap> get _visibleProducts {
+    final query = _search.text.trim().toLowerCase();
+    return _products.where((product) {
+      final hasVariants = _variants(product).any((variant) => variant['isActive'] == true);
+      final matches = query.isEmpty ||
+          '${product['name'] ?? ''}'.toLowerCase().contains(query) ||
+          '${product['slug'] ?? ''}'.toLowerCase().contains(query);
+      return hasVariants && matches && product['status'] == 'published';
+    }).toList();
+  }
+
+  Future<void> _applyCampaign() async {
+    final value = int.tryParse(_ungroupedDigits(_amount.text));
+    if (_selectedIds.isEmpty) {
+      showAppMessage(context, 'ابتدا حداقل یک محصول را انتخاب کن.', error: true);
+      return;
+    }
+    if (value == null || value < 1 || (_type == 'percent' && value >= 100)) {
+      showAppMessage(context, _type == 'percent'
+          ? 'درصد تخفیف باید بین ۱ تا ۹۹ باشد.'
+          : 'مبلغ تخفیف را به تومان وارد کن.', error: true);
+      return;
+    }
+
+    setState(() => _saving = true);
+    var updated = 0;
+    var failed = 0;
+    final api = ref.read(adminApiProvider);
+    for (final product in _products.where((item) => _selectedIds.contains('${item['id']}'))) {
+      for (final variant in _variants(product).where((item) => item['isActive'] == true)) {
+        final price = int.tryParse('${variant['priceToman'] ?? ''}');
+        final compare = int.tryParse('${variant['compareAtPriceToman'] ?? ''}');
+        final base = compare != null && compare > (price ?? 0) ? compare : price;
+        if (base == null || base < 2) {
+          failed++;
+          continue;
+        }
+        final discount = _type == 'percent'
+            ? (base * value) ~/ 100
+            : (value < base - 1 ? value : base - 1);
+        final salePrice = base - discount;
+        if (salePrice < 1 || salePrice >= base) {
+          failed++;
+          continue;
+        }
+        try {
+          await api.updateVariant('${variant['id']}', {
+            'priceToman': '$salePrice',
+            'compareAtPriceToman': '$base',
+          });
+          updated++;
+        } catch (_) {
+          failed++;
+        }
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      _selectedIds.clear();
+    });
+    await _load();
+    if (!mounted) return;
+    showAppMessage(
+      context,
+      failed == 0
+          ? 'تخفیف روی ${persianNumber(updated)} تنوع اعمال شد.'
+          : 'روی ${persianNumber(updated)} تنوع اعمال شد؛ ${persianNumber(failed)} مورد ذخیره نشد.',
+      error: failed > 0,
+    );
+  }
+
+  Future<void> _removeCampaign(JsonMap product) async {
+    final variants = _discountedVariants(product);
+    if (variants.isEmpty) return;
+    setState(() => _saving = true);
+    var updated = 0;
+    var failed = 0;
+    final api = ref.read(adminApiProvider);
+    for (final variant in variants) {
+      try {
+        await api.updateVariant('${variant['id']}', {
+          'priceToman': '${variant['compareAtPriceToman']}',
+          'compareAtPriceToman': null,
+        });
+        updated++;
+      } catch (_) {
+        failed++;
+      }
+    }
+    if (!mounted) return;
+    setState(() => _saving = false);
+    await _load();
+    if (!mounted) return;
+    showAppMessage(
+      context,
+      failed == 0
+          ? 'تخفیف ${product['name']} برداشته شد.'
+          : 'تخفیف ${persianNumber(updated)} تنوع برداشته شد؛ ${persianNumber(failed)} مورد باقی ماند.',
+      error: failed > 0,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = _visibleProducts;
+    final discounted = _products.where((product) => product['status'] == 'published' && _discountedVariants(product).isNotEmpty).toList();
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const _PageIntro(
+            icon: Icons.sell_outlined,
+            title: 'کمپین تخفیف محصولات',
+            subtitle: 'تخفیف درصدی یا مبلغ ثابت را روی رنگ و سایزهای یک یا چند محصول اعمال کن؛ محصولات منتشرشده با قیمت جدید در سایت دیده می‌شوند.',
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('تنظیم تخفیف کمپین', style: TextStyle(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 10),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'percent', label: Text('درصدی'), icon: Icon(Icons.percent)),
+                      ButtonSegment(value: 'fixed', label: Text('مبلغ ثابت'), icon: Icon(Icons.payments_outlined)),
+                    ],
+                    selected: {_type},
+                    onSelectionChanged: _saving ? null : (selected) => setState(() {
+                      _type = selected.first;
+                      _amount.text = _type == 'fixed'
+                          ? _formatGroupedValue(_amount.text)
+                          : _ungroupedDigits(_amount.text);
+                    }),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _amount,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: _type == 'fixed' ? const [_ThousandsSeparatorInputFormatter()] : const [],
+                    decoration: InputDecoration(
+                      labelText: _type == 'percent' ? 'درصد تخفیف' : 'مبلغ تخفیف (تومان)',
+                      suffixText: _type == 'percent' ? '٪' : 'تومان',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _search,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      hintText: 'جست‌وجو و انتخاب محصولات',
+                    ),
+                  ),
+                  if (visible.isNotEmpty)
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: TextButton.icon(
+                        onPressed: _saving ? null : () => setState(() {
+                          final allSelected = visible.every((item) => _selectedIds.contains('${item['id']}'));
+                          if (allSelected) {
+                            _selectedIds.removeAll(visible.map((item) => '${item['id']}'));
+                          } else {
+                            _selectedIds.addAll(visible.map((item) => '${item['id']}'));
+                          }
+                        }),
+                        icon: const Icon(Icons.select_all),
+                        label: Text(visible.every((item) => _selectedIds.contains('${item['id']}')) ? 'لغو انتخاب همه' : 'انتخاب همهٔ نتایج'),
+                      ),
+                    ),
+                  if (_error != null) _ErrorCard(message: _error!, onRetry: _load),
+                  if (_loading)
+                    const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()))
+                  else if (visible.isEmpty)
+                    const _EmptyCard(text: 'محصولی برای انتخاب پیدا نشد.'),
+                  ...visible.map((product) {
+                    final id = '${product['id']}';
+                    final active = _discountedVariants(product);
+                    return CheckboxListTile(
+                      value: _selectedIds.contains(id),
+                      onChanged: _saving ? null : (checked) => setState(() {
+                        if (checked == true) _selectedIds.add(id); else _selectedIds.remove(id);
+                      }),
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('${product['name'] ?? 'محصول'}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                      subtitle: Text(active.isEmpty
+                          ? '${persianNumber(_variants(product).where((item) => item['isActive'] == true).length)} رنگ و سایز فعال'
+                          : '${persianNumber(active.length)} تنوع تخفیف‌دار · قیمت پایه ${groupedNumber(active.first['compareAtPriceToman'])} تومان'),
+                      secondary: Icon(active.isNotEmpty ? Icons.local_offer_rounded : Icons.checkroom_outlined),
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: _saving || _loading ? null : _applyCampaign,
+                    icon: _saving
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.campaign_outlined),
+                    label: Text(_saving ? 'در حال ثبت تغییرات…' : 'اعمال روی ${persianNumber(_selectedIds.length)} محصول'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('تخفیف‌های فعال در سایت · ${persianNumber(discounted.length)} محصول', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+          if (discounted.isEmpty && !_loading) const _EmptyCard(text: 'در حال حاضر محصول تخفیف‌داری در سایت نمایش داده نمی‌شود.'),
+          ...discounted.map((product) {
+            final variants = _discountedVariants(product);
+            return Card(
+              child: ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.sell_outlined)),
+                title: Text('${product['name'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: Text('${persianNumber(variants.length)} رنگ و سایز · ${groupedNumber(variants.first['priceToman'])} تومان'),
+                trailing: TextButton(
+                  onPressed: _saving ? null : () => _removeCampaign(product),
+                  child: const Text('برداشتن تخفیف'),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
 }
 
 class SmsCampaignScreen extends ConsumerStatefulWidget {
@@ -2028,4 +2342,49 @@ String _digits(String value) {
     final index = persian.indexOf(digit);
     return '${index >= 0 ? index : arabic.indexOf(digit)}';
   });
+}
+
+String _ungroupedDigits(String value) =>
+    _digits(value).replaceAll(RegExp(r'[,٬\s]'), '');
+
+String _formatGroupedValue(String value) {
+  final parsed = int.tryParse(_ungroupedDigits(value));
+  return parsed == null ? '' : groupedNumber(parsed);
+}
+
+class _ThousandsSeparatorInputFormatter extends TextInputFormatter {
+  const _ThousandsSeparatorInputFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final raw = _digits(newValue.text).replaceAll(RegExp(r'\D'), '');
+    if (raw.isEmpty) {
+      return newValue.copyWith(
+        text: '',
+        selection: const TextSelection.collapsed(offset: 0),
+      );
+    }
+    final grouped = raw.replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+      (_) => ',',
+    );
+    final formatted = persianNumber(grouped);
+    final oldOffset = newValue.selection.extentOffset.clamp(0, newValue.text.length).toInt();
+    final digitCountBeforeCursor = _digits(
+      newValue.text.substring(0, oldOffset),
+    ).replaceAll(RegExp(r'\D'), '').length;
+    var offset = 0;
+    var digitsSeen = 0;
+    while (offset < formatted.length && digitsSeen < digitCountBeforeCursor) {
+      if (RegExp(r'[۰-۹]').hasMatch(formatted[offset])) digitsSeen++;
+      offset++;
+    }
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: offset),
+    );
+  }
 }

@@ -4,10 +4,11 @@ import { AdminSiteAnalyticsController, PublicSiteAnalyticsController } from "./s
 import { SiteAnalyticsService } from "./site-analytics.service";
 import { FinancialReportController } from "./financial-report.controller";
 import { FinancialReportService } from "./financial-report.service";
+import { GoogleInsightsService } from "./google-insights.service";
 
 @Module({
   imports: [AdminAuthModule],
   controllers: [PublicSiteAnalyticsController, AdminSiteAnalyticsController, FinancialReportController],
-  providers: [SiteAnalyticsService, FinancialReportService],
+  providers: [SiteAnalyticsService, FinancialReportService, GoogleInsightsService],
 })
 export class AnalyticsModule {}

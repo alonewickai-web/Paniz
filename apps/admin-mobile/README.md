@@ -1,6 +1,6 @@
 # اپ مدیریت PanizStyle برای Android
 
-این اپ Flutter برای مدیریت روزانهٔ فروشگاه است. اپ فقط از API مرکزی استفاده می‌کند و هیچ اتصال مستقیمی به MySQL ندارد. نسخهٔ جاری `1.0.9+20261012` است؛ نسخه در `pubspec.yaml` تعریف می‌شود و APKهای Release با کلید ثابت امضا می‌شوند تا به‌روزرسانی‌های بعدی بدون حذف برنامه نصب شوند. مستندات راه‌اندازی مدیر و API در [docs/admin-api.md](../../docs/admin-api.md) هستند.
+این اپ Flutter برای مدیریت روزانهٔ فروشگاه است. اپ فقط از API مرکزی استفاده می‌کند و هیچ اتصال مستقیمی به MySQL ندارد. نسخهٔ جاری `1.0.20+2026109009` است؛ نسخه در `pubspec.yaml` تعریف می‌شود و APKهای Release با کلید ثابت امضا می‌شوند تا به‌روزرسانی‌های بعدی بدون حذف برنامه نصب شوند. مستندات راه‌اندازی مدیر و API در [docs/admin-api.md](../../docs/admin-api.md) هستند.
 
 ## قابلیت‌های متصل
 
@@ -82,12 +82,12 @@ IP را با نشانی رایانهٔ خود جایگزین کنید و دست�
 برای ساخت APK نسخهٔ Release روی گوشی واقعی، از URLهای HTTPS استفاده کنید. فرمان صریح ساخت فقط ARM64:
 
 ~~~powershell
-flutter build apk --release --target-platform android-arm64 --split-per-abi `
+flutter build apk --release --target-platform android-arm64 `
   --dart-define=PANIZ_API_BASE_URL=https://api.panizstyle.ir/api/v1/ `
   --dart-define=PANIZ_WEB_BASE_URL=https://panizstyle.ir/
 ~~~
 
-خروجی در **build/app/outputs/flutter-apk/app-arm64-v8a-release.apk** قرار می‌گیرد. نشانی پیش‌فرض نسخهٔ جدید `https://api.panizstyle.ir/api/v1/` است. Release باید از HTTPS استفاده کند؛ نسخهٔ Release به API با HTTP وصل نمی‌شود.
+خروجی در **build/app/outputs/flutter-apk/app-release.apk** قرار می‌گیرد و فقط کتابخانه‌های ARM64 را دارد. نشانی پیش‌فرض نسخهٔ جدید `https://api.panizstyle.ir/api/v1/` است. Release باید از HTTPS استفاده کند؛ نسخهٔ Release به API با HTTP وصل نمی‌شود.
 
 پیکربندی امضای Release در **android/app/build.gradle.kts** انجام شده است. فایل keystore و رمز آن را در Git یا APK قرار ندهید.
 

@@ -342,6 +342,7 @@ model Product {
   sizeGuide         Json?            @map("size_guide")
   seoTitle          String?          @map("seo_title") @db.VarChar(240)
   seoDescription    String?          @map("seo_description") @db.VarChar(500)
+  seoCanonicalUrl   String?          @map("seo_canonical_url") @db.VarChar(500)
   status            String           @default("draft") @db.VarChar(24)
   publishedAt       DateTime?        @map("published_at") @db.DateTime(3)
   rubikaPostedAt    DateTime?        @map("rubika_posted_at") @db.DateTime(3)
@@ -355,10 +356,21 @@ model Product {
   wishlistItems     WishlistItem[]
   reviews           Review[]
   orderItems        OrderItem[]
+  slugRedirects     ProductSlugRedirect[]
 
   @@index([categoryId, status, createdAt], map: "ix_products_category_status_created")
   @@index([status, publishedAt], map: "ix_products_status_published")
   @@map("products")
+}
+
+model ProductSlugRedirect {
+  oldSlug   String   @id @map("old_slug") @db.VarChar(240)
+  productId BigInt   @map("product_id") @db.UnsignedBigInt
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId], map: "ix_product_slug_redirects_product")
+  @@map("product_slug_redirects")
 }
 
 model ProductImage {

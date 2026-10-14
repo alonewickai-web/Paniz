@@ -22,6 +22,7 @@ import '../auth/security_settings_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../dashboard/statistics_screen.dart';
 import '../dashboard/financial_report_screen.dart';
+import '../dashboard/seo_analytics_screen.dart';
 import '../inventory/inventory_screen.dart';
 import '../orders/orders_screen.dart';
 import '../products/products_screen.dart';
@@ -528,6 +529,16 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
                       ),
                 ),
                 _drawerTile(
+                  'هزینه و روش ارسال',
+                  Icons.local_shipping_outlined,
+                  permission: 'store.content',
+                  detail: 'هزینهٔ پست و حد ارسال رایگان',
+                  onTap: () => _pushToolFromDrawer(
+                    'هزینه و روش ارسال',
+                    const StoreManagementScreen(initialTab: 4),
+                  ),
+                ),
+                _drawerTile(
                   'مشتریان',
                   Icons.people_outline_rounded,
                   permission: 'customers.view',
@@ -538,7 +549,7 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
                       ),
                 ),
                 _drawerTile(
-                  'تخفیف‌ها',
+                  'کدهای تخفیف',
                   Icons.sell_outlined,
                   permission: 'store.content',
                   onTap:
@@ -548,6 +559,16 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
                       ),
                 ),
                 _drawerHeading('بازاریابی و تبلیغات'),
+                _drawerTile(
+                  'کمپین تخفیف محصولات',
+                  Icons.local_offer_outlined,
+                  permission: 'products.change_price',
+                  detail: 'تخفیف درصدی یا مبلغی برای چند محصول',
+                  onTap: () => _pushToolFromDrawer(
+                    'کمپین تخفیف محصولات',
+                    const ProductDiscountCampaignScreen(),
+                  ),
+                ),
                 _drawerTile(
                   'تبلیغات و روبیکا',
                   Icons.campaign_outlined,
@@ -599,6 +620,16 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
                         'گزارش مالی',
                         const FinancialReportScreen(),
                       ),
+                ),
+                _drawerTile(
+                  'سئو و تحلیل بازدید',
+                  Icons.query_stats_rounded,
+                  permission: 'reports.view',
+                  detail: 'عملکرد گوگل، بازدید و محصولات',
+                  onTap: () => _pushToolFromDrawer(
+                    'سئو و تحلیل بازدید',
+                    SeoAnalyticsScreen(admin: widget.admin),
+                  ),
                 ),
                 _drawerTile(
                   'گفت‌وگوی مدیران',

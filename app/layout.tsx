@@ -10,6 +10,7 @@ import { StorefrontProvider } from "./lib/storefront-state";
 import { siteUrl } from "./lib/site-url";
 import { SiteVisitTracker } from "./components/site-visit-tracker";
 import { StoreThemeSync } from "./components/store-theme-sync";
+import { GoogleAnalyticsTag } from "./components/google-analytics-tag";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
@@ -30,6 +31,11 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "فروشگاه پانیذ",
     url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "فروشگاه پانیذ",
+    description: "خرید آنلاین لباس زنانه، پوشاک زنانه و ست زنانه از فروشگاه پانیذ.",
   },
 };
 
@@ -71,6 +77,7 @@ export default async function RootLayout({
     <html lang="fa" dir="rtl" data-theme={theme}>
       <body>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteStructuredData) }} />
+        <GoogleAnalyticsTag />
         <StorefrontProvider><StoreThemeSync /><SiteVisitTracker />{children}</StorefrontProvider>
       </body>
     </html>

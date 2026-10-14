@@ -3,6 +3,10 @@ export type StoreProduct = {
   name: string;
   slug: string;
   shortDescription: string | null;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  seoCanonicalUrl?: string | null;
+  updatedAt?: string;
   category: { id: string; name: string; slug: string } | null;
   image: { path: string; alt: string | null } | null;
   priceToman: number | null;

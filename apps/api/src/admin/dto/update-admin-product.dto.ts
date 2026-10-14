@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsIn, IsObject, IsOptional, IsString, Matches, MaxLength } from "class-validator";
+import { ArrayMaxSize, IsArray, IsIn, IsObject, IsOptional, IsString, IsUrl, Matches, MaxLength } from "class-validator";
 
 export class UpdateAdminProductDto {
   @IsOptional()
@@ -51,6 +51,11 @@ export class UpdateAdminProductDto {
   @IsString()
   @MaxLength(500)
   seoDescription?: string;
+
+  @IsOptional()
+  @IsUrl({ protocols: ["https"], require_protocol: true })
+  @MaxLength(500)
+  seoCanonicalUrl?: string | null;
 
   @IsOptional()
   @IsArray()

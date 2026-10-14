@@ -19,7 +19,8 @@ type StoreImageProps = {
 export function StoreImage({ src, alt, fill, width, height, sizes, priority, className, onError }: StoreImageProps) {
   const imageSrc = src.startsWith("/uploads/") ? `${apiOrigin}${src}` : src;
 
-  if (/^https?:\/\//i.test(imageSrc)) {
+  const canOptimizeUpload = /^https:\/\/api\.panizstyle\.ir\/uploads\/[^?#]+$/i.test(imageSrc);
+  if (/^https?:\/\//i.test(imageSrc) && !canOptimizeUpload) {
     return <img
       src={imageSrc}
       alt={alt}
@@ -33,5 +34,5 @@ export function StoreImage({ src, alt, fill, width, height, sizes, priority, cla
     />;
   }
 
-  return <Image src={src} alt={alt} fill={fill} width={fill ? undefined : width} height={fill ? undefined : height} sizes={sizes} priority={priority} className={className} onError={onError} />;
+  return <Image src={imageSrc} alt={alt} fill={fill} width={fill ? undefined : width} height={fill ? undefined : height} sizes={sizes} preload={priority} className={className} onError={onError} />;
 }

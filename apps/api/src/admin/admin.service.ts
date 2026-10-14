@@ -231,6 +231,21 @@ export class AdminService {
         },
       }),
     ]);
+    const soldQuantities = products.length
+      ? await this.prisma.orderItem.groupBy({
+          by: ["productId"],
+          where: {
+            productId: { in: products.map((product) => product.id) },
+            order: { is: { paymentStatus: "paid" } },
+          },
+          _sum: { quantity: true },
+        })
+      : [];
+    const soldByProductId = new Map(
+      soldQuantities
+        .filter((item) => item.productId !== null)
+        .map((item) => [item.productId!.toString(), item._sum.quantity ?? 0]),
+    );
     return {
       data: products.map((product) => ({
         id: product.id.toString(),
@@ -246,8 +261,11 @@ export class AdminService {
         sizeGuide: product.sizeGuide,
         seoTitle: product.seoTitle,
         seoDescription: product.seoDescription,
+        seoCanonicalUrl: product.seoCanonicalUrl,
         category: product.category ? { id: product.category.id.toString(), name: product.category.name, slug: product.category.slug } : null,
         images: product.images.map((image) => ({ id: image.id.toString(), imagePath: image.imagePath, altText: image.altText, colorName: image.colorName, fileSizeBytes: image.fileSizeBytes, isPrimary: image.isPrimary, sortOrder: image.sortOrder })),
+        soldQuantity: soldByProductId.get(product.id.toString()) ?? 0,
+        createdAt: product.createdAt.toISOString(),
         variants: product.variants.map((variant) => ({
           colorSortOrder: variant.colorSortOrder,
           id: variant.id.toString(),
@@ -280,6 +298,9 @@ export class AdminService {
       const created = await this.prisma.$transaction(async (tx) => {
         const category = await tx.category.findFirst({ where: { id: categoryId, isActive: true } });
         if (!category) throw new NotFoundException({ code: "CATEGORY_NOT_FOUND", message: "دسته‌بندی فعال پیدا نشد" });
+        if (input.slug && await tx.productSlugRedirect.findUnique({ where: { oldSlug: input.slug.trim() } })) {
+          throw new ConflictException({ code: "PRODUCT_SLUG_RESERVED", message: "این آدرس برای تغییر مسیر یک محصول قبلی نگه داشته شده است." });
+        }
         const product = await tx.product.create({
           data: {
             categoryId,
@@ -289,6 +310,9 @@ export class AdminService {
             description: input.description?.trim() || null,
             material: input.material?.trim() || null,
             careInstructions: input.careInstructions?.trim() || null,
+            seoTitle: input.seoTitle?.trim() || null,
+            seoDescription: input.seoDescription?.trim() || null,
+            seoCanonicalUrl: input.seoCanonicalUrl?.trim() || null,
             purchaseCostToman: BigInt(input.purchaseCostToman ?? "0"),
             status: input.status,
             publishedAt: input.status === "published" ? new Date() : null,
@@ -408,6 +432,7 @@ export class AdminService {
     }
     if (input.seoTitle !== undefined) data.seoTitle = input.seoTitle.trim() || null;
     if (input.seoDescription !== undefined) data.seoDescription = input.seoDescription.trim() || null;
+    if (input.seoCanonicalUrl !== undefined) data.seoCanonicalUrl = input.seoCanonicalUrl?.trim() || null;
     if (input.sizeGuide !== undefined) {
       data.sizeGuide = input.sizeGuide === null ? Prisma.JsonNull : input.sizeGuide as Prisma.InputJsonValue;
     }
@@ -418,7 +443,21 @@ export class AdminService {
 
     try {
       const updated = await this.prisma.$transaction(async (tx) => {
+        if (input.slug && input.slug.trim() !== before.slug) {
+          const alias = await tx.productSlugRedirect.findUnique({ where: { oldSlug: input.slug.trim() } });
+          if (alias && alias.productId !== productId) {
+            throw new ConflictException({ code: "PRODUCT_SLUG_RESERVED", message: "این آدرس برای تغییر مسیر یک محصول دیگر نگه داشته شده است." });
+          }
+        }
         const product = await tx.product.update({ where: { id: productId }, data });
+        if (before.slug !== product.slug) {
+          await tx.productSlugRedirect.deleteMany({ where: { oldSlug: product.slug } });
+          await tx.productSlugRedirect.upsert({
+            where: { oldSlug: before.slug },
+            create: { oldSlug: before.slug, productId },
+            update: { productId },
+          });
+        }
         await tx.adminAuditLog.create({
           data: {
             adminId: admin.id,

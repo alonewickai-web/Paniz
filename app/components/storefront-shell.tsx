@@ -14,6 +14,8 @@ export function StorefrontHeader() {
   const count = cart.reduce((total, line) => total + line.quantity, 0);
   const [categoryLinks, setCategoryLinks] = useState<{ name: string; slug: string }[]>([]);
   const [activeCategory, setActiveCategory] = useState("");
+  const [hasDiscounts, setHasDiscounts] = useState(false);
+  const [activeSale, setActiveSale] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -29,7 +31,26 @@ export function StorefrontHeader() {
   }, []);
 
   useEffect(() => {
-    const updateCategory = () => setActiveCategory(new URLSearchParams(window.location.search).get("category") ?? "");
+    const controller = new AbortController();
+    void fetch(`${apiBaseUrl()}/products?onSale=true&page=1&pageSize=1`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then((response) => response.ok ? response.json() as Promise<{ data?: unknown[]; meta?: { total?: number } }> : null)
+      .then((payload) => {
+        if (!payload) return;
+        setHasDiscounts((payload.meta?.total ?? payload.data?.length ?? 0) > 0);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const updateCategory = () => {
+      const params = new URLSearchParams(window.location.search);
+      setActiveCategory(params.get("category") ?? "");
+      setActiveSale(pathname === "/products" && params.get("onSale") === "true");
+    };
     updateCategory();
     window.addEventListener("popstate", updateCategory);
     return () => window.removeEventListener("popstate", updateCategory);
@@ -54,13 +75,14 @@ export function StorefrontHeader() {
         </div>
         <nav className="desktop-nav page-shell" aria-label="ناوبری اصلی">
           <Link className={`nav-link${pathname === "/" ? " active" : ""}`} href="/">خانه</Link>
-          <Link className={`nav-link${pathname.startsWith("/products") && !activeCategory ? " active" : ""}`} href="/products" onClick={() => setActiveCategory("")}>همهٔ محصولات</Link>
+          <Link className={`nav-link${pathname.startsWith("/products") && !activeCategory && !activeSale ? " active" : ""}`} href="/products" onClick={() => { setActiveCategory(""); setActiveSale(false); }}>همهٔ محصولات</Link>
           {(categoryLinks.length ? categoryLinks : [
             { name: "لباس راحتی", slug: "loungewear" },
             { name: "ست ورزشی", slug: "sportswear" },
             { name: "مانتو", slug: "coats" },
             { name: "تیشرت و بلوز", slug: "tops" },
-          ]).slice(0, 5).map((category) => <Link className={`nav-link${pathname.startsWith("/products") && activeCategory === category.slug ? " active" : ""}`} href={`/products?category=${encodeURIComponent(category.slug)}`} onClick={() => setActiveCategory(category.slug)} key={category.slug}>{category.name}</Link>)}
+          ]).slice(0, 5).map((category) => <Link className={`nav-link${pathname.startsWith("/products") && activeCategory === category.slug ? " active" : ""}`} href={`/products?category=${encodeURIComponent(category.slug)}`} onClick={() => { setActiveCategory(category.slug); setActiveSale(false); }} key={category.slug}>{category.name}</Link>)}
+          {hasDiscounts && <Link className={`nav-link nav-offer${activeSale ? " active" : ""}`} href="/products?onSale=true" onClick={() => { setActiveCategory(""); setActiveSale(true); }}>تخفیف‌ها</Link>}
           <Link className={`nav-link nav-help${pathname.startsWith("/help") ? " active" : ""}`} href="/help/faq">راهنمای خرید</Link>
         </nav>
       </header>

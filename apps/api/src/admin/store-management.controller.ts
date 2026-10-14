@@ -10,6 +10,7 @@ import { UpdateHomepageSectionDto } from "./dto/update-homepage-section.dto";
 import { UpdateStoreThemeDto } from "./dto/update-store-theme.dto";
 import { SaveShippingSettingsDto } from "./dto/save-shipping-settings.dto";
 import { UpdateStoreLogoDto } from "./dto/update-store-logo.dto";
+import { UpdateStoreAboutDto } from "./dto/update-store-about.dto";
 
 @ApiTags("مدیریت محتوای فروشگاه")
 @ApiBearerAuth("admin-session")
@@ -19,7 +20,7 @@ export class StoreManagementController {
   constructor(private readonly store: StoreManagementService) {}
 
   @Get("store")
-  @ApiOperation({ summary: "تنظیمات فروشگاه، دسته‌بندی‌ها، بنرها و چیدمان خانه" })
+  @ApiOperation({ summary: "تنظیمات فروشگاه، اطلاعات تماس، دسته‌بندی‌ها، بنرها و چیدمان خانه" })
   @RequireAdminPermission("store.content")
   configuration() {
     return this.store.adminConfiguration();
@@ -45,6 +46,14 @@ export class StoreManagementController {
   @RequireAdminPermission("store.content")
   updateLogo(@Req() request: AdminRequest, @Body() body: UpdateStoreLogoDto) {
     return this.store.saveLogo(request.admin!, body);
+  }
+
+  @Patch("store/about")
+  @ApiOperation({ summary: "ذخیرهٔ اطلاعات تماس و نشانی فروشگاه" })
+  @ApiBody({ type: UpdateStoreAboutDto })
+  @RequireAdminPermission("store.content")
+  updateAbout(@Req() request: AdminRequest, @Body() body: UpdateStoreAboutDto) {
+    return this.store.saveAboutInfo(request.admin!, body);
   }
 
   @Patch("homepage-sections/reorder")

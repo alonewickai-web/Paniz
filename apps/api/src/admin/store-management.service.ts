@@ -9,13 +9,13 @@ import { ReorderHomepageSectionsDto } from "./dto/reorder-homepage-sections.dto"
 import { UpdateHomepageSectionDto } from "./dto/update-homepage-section.dto";
 import { STORE_THEMES, UpdateStoreThemeDto } from "./dto/update-store-theme.dto";
 import { SaveShippingSettingsDto } from "./dto/save-shipping-settings.dto";
+import { UpdateStoreAboutDto } from "./dto/update-store-about.dto";
 
 const defaultSections = [
   { sectionKey: "hero", title: "بنر اصلی", isActive: true, sortOrder: 0 },
   { sectionKey: "categories", title: "دسته‌بندی‌ها", isActive: true, sortOrder: 1 },
   { sectionKey: "products", title: "محصولات", isActive: true, sortOrder: 2 },
-  { sectionKey: "story", title: "پیشنهاد پانیذ", isActive: true, sortOrder: 3 },
-  { sectionKey: "benefits", title: "خدمات فروشگاه", isActive: true, sortOrder: 4 },
+  { sectionKey: "benefits", title: "خدمات فروشگاه", isActive: true, sortOrder: 3 },
 ] as const;
 
 type StoreTheme = (typeof STORE_THEMES)[number];
@@ -51,9 +51,10 @@ export class StoreManagementService {
 
   async publicConfig() {
     const now = new Date();
-    const [themeSetting, logoSetting, savedSections, banners, shipping] = await Promise.all([
+    const [themeSetting, logoSetting, aboutSetting, savedSections, banners, shipping] = await Promise.all([
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.theme" }, select: { settingValue: true } }),
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.logoPath" }, select: { settingValue: true } }),
+      this.prisma.storeSetting.findUnique({ where: { settingKey: "store.about" }, select: { settingValue: true } }),
       this.prisma.homepageSection.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
       this.prisma.banner.findMany({
         where: {
@@ -80,6 +81,7 @@ export class StoreManagementService {
       data: {
         theme: safeTheme(themeSetting?.settingValue),
         logoPath: logoSetting?.settingValue || null,
+        about: safeStoreAbout(aboutSetting?.settingValue),
         sections: mergeSections(savedSections),
         banners: banners.map((banner) => ({
           id: banner.id.toString(),
@@ -93,9 +95,10 @@ export class StoreManagementService {
   }
 
   async adminConfiguration() {
-    const [themeSetting, logoSetting, sections, categories, banners, shipping] = await Promise.all([
+    const [themeSetting, logoSetting, aboutSetting, sections, categories, banners, shipping] = await Promise.all([
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.theme" }, select: { settingValue: true } }),
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.logoPath" }, select: { settingValue: true } }),
+      this.prisma.storeSetting.findUnique({ where: { settingKey: "store.about" }, select: { settingValue: true } }),
       this.prisma.homepageSection.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
       this.prisma.category.findMany({ orderBy: [{ parentId: "asc" }, { sortOrder: "asc" }, { name: "asc" }] }),
       this.prisma.banner.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
@@ -105,6 +108,7 @@ export class StoreManagementService {
       data: {
         theme: safeTheme(themeSetting?.settingValue),
         logoPath: logoSetting?.settingValue || null,
+        about: safeStoreAbout(aboutSetting?.settingValue),
         sections: mergeSections(sections),
         categories: categories.map((category) => ({ ...category, id: category.id.toString(), parentId: category.parentId?.toString() ?? null })),
         banners: banners.map((banner) => ({ ...banner, id: banner.id.toString(), altText: banner.altText?.trim() || banner.title, isArchived: banner.archivedAt !== null })),
@@ -142,6 +146,29 @@ export class StoreManagementService {
       await tx.adminAuditLog.create({ data: { adminId: admin.id, action: "store.logo.updated", entityType: "store_setting", details: { logoPath } } });
     });
     return { data: { logoPath } };
+  }
+
+  async saveAboutInfo(admin: AuthenticatedAdmin, input: UpdateStoreAboutDto) {
+    requireAdminPermission(admin, "store.content");
+    const about = {
+      address: input.address.trim(),
+      phone: input.phone.trim(),
+      rubikaUrl: input.rubikaUrl.trim(),
+      instagramUrl: input.instagramUrl.trim(),
+      physicalAddress: input.physicalAddress.trim(),
+      mapUrl: input.mapUrl.trim(),
+    };
+    await this.prisma.$transaction(async (tx) => {
+      await tx.storeSetting.upsert({
+        where: { settingKey: "store.about" },
+        create: { settingKey: "store.about", settingValue: about, isPublic: true, updatedByAdminId: admin.id },
+        update: { settingValue: about, isPublic: true, updatedByAdminId: admin.id },
+      });
+      await tx.adminAuditLog.create({
+        data: { adminId: admin.id, action: "store.about.updated", entityType: "store_setting", details: { fields: Object.keys(about) } },
+      });
+    });
+    return { data: { about } };
   }
 
   async saveTheme(admin: AuthenticatedAdmin, input: UpdateStoreThemeDto) {
@@ -466,6 +493,21 @@ function validateWindow(startsAt: Date | null, endsAt: Date | null): void {
 
 function safeTheme(value: Prisma.JsonValue | undefined): StoreTheme {
   return typeof value === "string" && STORE_THEMES.includes(value as StoreTheme) ? value as StoreTheme : "rose";
+}
+
+function safeStoreAbout(value: Prisma.JsonValue | undefined) {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Prisma.JsonObject
+    : {};
+  const read = (key: string) => typeof source[key] === "string" ? source[key] as string : "";
+  return {
+    address: read("address"),
+    phone: read("phone"),
+    rubikaUrl: read("rubikaUrl"),
+    instagramUrl: read("instagramUrl"),
+    physicalAddress: read("physicalAddress"),
+    mapUrl: read("mapUrl"),
+  };
 }
 
 function safeNumber(value: bigint): number {

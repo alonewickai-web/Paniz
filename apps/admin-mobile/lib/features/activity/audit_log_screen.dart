@@ -58,6 +58,7 @@ String activityTitle(JsonMap row) {
     'admin.test_account_seeded' => 'حساب اولیهٔ آزمایشی ایجاد شد',
     'store.theme.updated' => 'رنگ‌بندی سایت تغییر کرد',
     'store.logo.updated' => 'نشان فروشگاه تغییر کرد',
+    'store.about.updated' => 'اطلاعات دربارهٔ ما و راه‌های تماس تغییر کرد',
     'shipping.settings.updated' => 'هزینه و شرایط ارسال تغییر کرد',
     'homepage_section.updated' => 'تنظیمات یک بخش صفحهٔ اصلی تغییر کرد',
     'homepage_sections.reordered' => 'ترتیب بخش‌های صفحهٔ اصلی تغییر کرد',

@@ -10,6 +10,7 @@ import { useStorefront } from "../lib/storefront-state";
 import { PageFlipImage, type FlipImage } from "./page-flip-image";
 import { CustomerApiError, customerApi } from "../lib/customer-api";
 import { requestStorePush } from "../lib/customer-push";
+import { trackGa4 } from "../lib/ga4";
 
 export function ProductDetailView({ product }: { product: StoreProductDetail }) {
   const { cart, setCart, favorites, setFavorites } = useStorefront();
@@ -90,6 +91,22 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
 
   const variant = product.variants.find((item) => item.color.name === color && item.size === size);
   const stock = variant?.availableQuantity ?? 0;
+  const maxOrderQuantity = Math.min(10, stock);
+  useEffect(() => {
+    const firstAvailable = product.variants.find((item) => item.availableQuantity > 0) ?? product.variants[0];
+    if (!firstAvailable) return;
+    trackGa4("view_item", {
+      currency: "IRR",
+      value: Math.round(firstAvailable.priceToman * 10),
+      items: [{
+        item_id: firstAvailable.sku || product.slug,
+        item_name: product.name,
+        item_category: product.category?.name,
+        item_variant: `${firstAvailable.color.name} / ${firstAvailable.size}`,
+        price: Math.round(firstAvailable.priceToman * 10),
+      }],
+    });
+  }, [product]);
   const selectedGalleryImage = allImages[imageIndex];
   const imageHasDifferentColor = Boolean(selectedGalleryImage?.colorName?.trim()
     && normalizeColorName(selectedGalleryImage.colorName) !== normalizeColorName(color)
@@ -163,7 +180,7 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
   }
 
   async function addToCart() {
-    if (!variant || stock < quantity) {
+    if (!variant || maxOrderQuantity < quantity) {
       setNotice("این ترکیب رنگ و سایز به تعداد انتخاب‌شده موجود نیست.");
       return;
     }
@@ -173,13 +190,17 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
     }
     const key = variant.id;
     const current = cart.find((line) => line.key === key);
-    if (current && current.quantity + quantity > stock) {
-      setNotice("تعداد درخواستی از موجودی این تنوع بیشتر است.");
+    if (current && current.quantity + quantity > maxOrderQuantity) {
+      setNotice("حداکثر تعداد قابل سفارش از این تنوع ۱۰ عدد یا موجودی انبار است.");
       return;
     }
-    setCart((items) => current
-      ? items.map((line) => line.key === key ? { ...line, quantity: line.quantity + quantity } : line)
-      : [...items, {
+    setCart((items) => {
+      const existingLine = items.find((line) => line.key === key);
+      if (existingLine) {
+        if (existingLine.quantity + quantity > maxOrderQuantity) return items;
+        return items.map((line) => line.key === key ? { ...line, quantity: line.quantity + quantity } : line);
+      }
+      return [...items, {
           key,
           productId,
           productSlug: product.slug,
@@ -188,7 +209,20 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
           color: variant.color.name,
           quantity,
           unitPrice: variant.priceToman,
-        }]);
+        }];
+    });
+    trackGa4("add_to_cart", {
+      currency: "IRR",
+      value: Math.round(variant.priceToman * quantity * 10),
+      items: [{
+        item_id: variant.sku || product.slug,
+        item_name: product.name,
+        item_category: product.category?.name,
+        item_variant: `${variant.color.name} / ${variant.size}`,
+        price: Math.round(variant.priceToman * 10),
+        quantity,
+      }],
+    });
     setNotice("به سبد خرید اضافه شد.");
   }
 
@@ -308,7 +342,7 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
               return <button key={item} type="button" className={`${size === item ? "active" : ""} ${!itemAvailable ? "unavailable" : ""}`} onClick={() => { setSize(item); setQuantity(1); setStockSubscribed(false); }} aria-label={`سایز ${item}${itemAvailable ? "" : "، ناموجود"}`} aria-pressed={size === item}>{item}</button>;
             })}</div>{sizeGuideRows.length > 0 && <div className="store-size-guide"><strong>راهنمای سایز</strong><div className="store-table-scroll"><table><thead><tr>{Object.keys(sizeGuideRows[0]).map((key) => <th key={key}>{key}</th>)}</tr></thead><tbody>{sizeGuideRows.map((row, index) => <tr key={index}>{Object.values(row).map((value, cell) => <td key={cell}>{String(value)}</td>)}</tr>)}</tbody></table></div></div>}</fieldset>
 
-            <div className="store-buy-controls"><div className="store-quantity" aria-label="تعداد"><button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))} disabled={quantity <= 1} aria-label="کم‌کردن تعداد"><Minus size={16} /></button><span>{new Intl.NumberFormat("fa-IR").format(quantity)}</span><button type="button" onClick={() => setQuantity((value) => Math.min(Math.max(1, stock), value + 1))} disabled={!stock || quantity >= stock} aria-label="زیادکردن تعداد"><Plus size={16} /></button></div><button className="button-primary store-add-button" type="button" onClick={addToCart} disabled={!variant || !stock}><ShoppingBag size={19} /> افزودن به سبد خرید</button></div>
+            <div className="store-buy-controls"><div className="store-quantity" aria-label="تعداد"><button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))} disabled={quantity <= 1} aria-label="کم‌کردن تعداد"><Minus size={16} /></button><span>{new Intl.NumberFormat("fa-IR").format(quantity)}</span><button type="button" onClick={() => setQuantity((value) => Math.min(Math.max(1, maxOrderQuantity), value + 1))} disabled={!maxOrderQuantity || quantity >= maxOrderQuantity} aria-label="زیادکردن تعداد"><Plus size={16} /></button></div><button className="button-primary store-add-button" type="button" onClick={addToCart} disabled={!variant || !stock}><ShoppingBag size={19} /> افزودن به سبد خرید</button></div>
             {variant && stock === 0 && <button className={`store-back-in-stock-button ${stockSubscribed ? "is-subscribed" : ""}`} type="button" onClick={() => void notifyWhenAvailable()} disabled={subscribingStock || stockSubscribed}><Bell className={subscribingStock || stockSubscribed ? "" : "stock-notify-bell"} size={18} />{stockSubscribed ? "برای موجودشدن این انتخاب خبرت می‌کنیم" : subscribingStock ? "در حال ثبت درخواست…" : "موجود شد خبرم کن"}</button>}
             <div className="store-product-actions"><button type="button" onClick={toggleFavorite} aria-pressed={favorite}><Heart size={17} fill={favorite ? "currentColor" : "none"} />{favorite ? "ذخیره شد" : "افزودن به علاقه‌مندی‌ها"}</button><button type="button" onClick={shareProduct} disabled={isSharing}><Share2 size={17} />اشتراک محصول</button></div>
             {notice && <p className="store-inline-notice" role="status"><Check size={16} />{notice}</p>}

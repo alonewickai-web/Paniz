@@ -52,7 +52,7 @@
 .store-suggestions small { color: var(--rose); font-size: 11px; }
 .store-active-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin: 0 0 13px; color: var(--muted); font-size: 11px; }
 .store-active-filters button { display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px; border: 0; border-radius: 18px; background: var(--rose-light); color: var(--rose-deep); font-size: 11px; cursor: pointer; }
-.store-product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.store-product-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .store-product-card .product-name { display: block; width: fit-content; text-align: start; }
 .store-product-card .product-name:hover { color: var(--rose); }
 .store-product-card .product-rating { min-height: 20px; }
@@ -222,6 +222,26 @@
 .store-info-page h1 { margin-top: 9px; }
 .store-info-lead { max-width: 700px; margin: 14px 0 22px; color: var(--ink-soft); font-size: 16px; line-height: 2; }
 .store-info-page .button-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; margin-top: 10px; padding: 8px 17px; border-radius: 11px; }
+.about-contact-section { display: grid; gap: 13px; margin: 25px 0 18px; }
+.about-contact-section h2 { margin: 0; color: var(--ink); font-size: 18px; }
+.about-contact-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+.about-contact-card { display: flex; min-width: 0; min-height: 84px; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface, #fff); color: var(--ink); text-decoration: none; }
+.about-contact-card-wide { grid-column: 1 / -1; }
+.about-contact-link { transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease; }
+.about-contact-link:hover { transform: translateY(-1px); border-color: var(--rose-bright); box-shadow: 0 6px 18px rgba(63, 38, 43, .07); }
+.about-contact-icon { display: grid; width: 42px; height: 42px; flex: none; place-items: center; border-radius: 13px; background: var(--rose-light); color: var(--rose); }
+.about-contact-copy { display: grid; min-width: 0; flex: 1; gap: 4px; }
+.about-contact-copy strong { color: var(--ink); font-size: 13px; }
+.about-contact-copy p { overflow-wrap: anywhere; margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.8; }
+.about-call-button, .about-map-button { display: inline-flex; min-height: 40px; flex: none; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; border: 1px solid color-mix(in srgb, var(--rose) 22%, var(--line)); border-radius: 10px; background: var(--rose-light); color: var(--rose); font-size: 12px; font-weight: 700; text-decoration: none; }
+.about-call-button:hover, .about-map-button:hover { background: var(--rose); color: #fff; }
+.instagram-contact-icon { background: #fff0f4; color: #c13584; }
+.instagram-contact-icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 2.2; }
+.instagram-contact-icon .instagram-mark-dot { fill: currentColor; stroke: none; }
+.rubika-contact-icon { background: linear-gradient(145deg, #a91a8e, #ef526a); color: #fff; }
+.rubika-contact-icon svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.8; }
+.about-contact-empty { margin: 0; padding: 15px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); font-size: 13px; }
+.about-contact-skeleton { min-height: 174px; border-radius: 14px; background: linear-gradient(100deg, var(--line) 20%, var(--surface, #fff) 40%, var(--line) 60%); background-size: 220% 100%; animation: store-skeleton 1.2s ease-in-out infinite; }
 .contact-message-status { margin: 14px 0 0; font-size: 13px; line-height: 1.8; }
 .contact-submit-spinner { animation: contact-submit-spin .9s linear infinite; }
 @keyframes contact-submit-spin { to { transform: rotate(360deg); } }
@@ -233,9 +253,12 @@
 .store-info-sections p { margin: 0; color: var(--ink-soft); font-size: 13px; line-height: 1.95; }
 .store-inline-link { display: inline-block; margin-inline-start: 14px; color: var(--rose); font-size: 13px; }
 .store-footer { margin-top: 8px; }
+html[data-theme="dark"] .about-contact-card { background: var(--surface); border-color: var(--line); }
+html[data-theme="dark"] .about-contact-copy strong { color: var(--ink); }
+html[data-theme="dark"] .instagram-contact-icon { background: #382530; }
 
 @media (max-width: 1000px) {
-  .store-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .store-product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .store-filter-panel { top: 125px; }
   .store-cart-layout { grid-template-columns: minmax(0, 1fr) 290px; }
   .store-checkout-layout { grid-template-columns: minmax(0, 1fr) 300px; }
@@ -255,6 +278,7 @@
   .store-filter-group { grid-column: span 2; }
   .store-check { min-height: 35px; font-size: 11px; }
   .store-product-grid { gap: 10px; }
+  .store-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .store-product-grid .product-card { padding: 7px; border-radius: 13px; }
   .store-product-grid .product-image-area { border-radius: 10px; }
   .store-product-grid .product-details { padding: 9px 2px 3px; }
@@ -503,4 +527,11 @@ html[data-theme="dark"] .address-map-locate, html[data-theme="dark"] .jalali-cal
 @media (max-width: 760px) {
   .address-map-frame { height: 255px; }
   .jalali-calendar { right: 50%; transform: translateX(50%); }
+}
+
+@media (max-width: 560px) {
+  .about-contact-grid { grid-template-columns: minmax(0, 1fr); }
+  .about-contact-card-wide { grid-column: auto; }
+  .about-contact-card { gap: 10px; padding: 12px; }
+  .about-contact-icon { width: 39px; height: 39px; }
 }

@@ -7,6 +7,10 @@ const apiBaseUrl = (
 ).replace(/\/+$/, "");
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [{ protocol: "https", hostname: "api.panizstyle.ir", port: "", pathname: "/uploads/**", search: "" }],
+    qualities: [75],
+  },
   async rewrites() {
     return [{
       source: "/api/v1/:path*",

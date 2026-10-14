@@ -195,6 +195,26 @@ export class CatalogService {
     });
 
     if (!product) {
+      const redirect = await this.prisma.productSlugRedirect.findUnique({
+        where: { oldSlug: slug },
+        include: {
+          product: {
+            select: {
+              slug: true,
+              status: true,
+              publishedAt: true,
+              deletedAt: true,
+              variants: { where: { isActive: true }, select: { id: true }, take: 1 },
+              category: { select: { isActive: true } },
+            },
+          },
+        },
+      });
+      const target = redirect?.product;
+      if (target?.status === "published" && target.publishedAt && target.publishedAt <= new Date() &&
+          !target.deletedAt && target.variants.length > 0 && target.category?.isActive) {
+        return { data: { redirectTo: `/products/${encodeURIComponent(target.slug)}`, statusCode: 301 } };
+      }
       throw new NotFoundException({
         code: "PRODUCT_NOT_FOUND",
         message: "محصول موردنظر پیدا نشد",
@@ -208,6 +228,9 @@ export class CatalogService {
     return {
       data: {
         ...this.toProductSummary(product),
+        seoTitle: product.seoTitle,
+        seoDescription: product.seoDescription,
+        seoCanonicalUrl: product.seoCanonicalUrl,
         description: product.description,
         material: product.material,
         careInstructions: product.careInstructions,
@@ -235,6 +258,21 @@ export class CatalogService {
     };
   }
 
+  async productSlugRedirect(slug: string) {
+    const redirect = await this.prisma.productSlugRedirect.findUnique({
+      where: { oldSlug: slug },
+      include: { product: { select: {
+        slug: true, status: true, publishedAt: true, deletedAt: true,
+        category: { select: { isActive: true } },
+        variants: { where: { isActive: true }, select: { id: true }, take: 1 },
+      } } },
+    });
+    const product = redirect?.product;
+    if (!product || product.status !== "published" || !product.publishedAt || product.publishedAt > new Date() ||
+        product.deletedAt || !product.category?.isActive || !product.variants.length) return { data: null };
+    return { data: { redirectTo: `/products/${encodeURIComponent(product.slug)}` } };
+  }
+
   private toProductSummary(product: PublicProduct) {
     const cheapestVariant = product.variants.reduce((cheapest, variant) =>
       cheapest === null || variant.priceToman < cheapest.priceToman ? variant : cheapest,
@@ -245,6 +283,10 @@ export class CatalogService {
       name: product.name,
       slug: product.slug,
       shortDescription: product.shortDescription,
+      seoTitle: product.seoTitle,
+      seoDescription: product.seoDescription,
+      seoCanonicalUrl: product.seoCanonicalUrl,
+      updatedAt: product.updatedAt.toISOString(),
       category: product.category
         ? { id: product.category.id.toString(), name: product.category.name, slug: product.category.slug }
         : null,

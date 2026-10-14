@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
+import { trackGa4 } from "../lib/ga4";
 
 const visitorStorageKey = "panizstyle.analytics.visitor";
 
@@ -12,6 +13,11 @@ export function SiteVisitTracker() {
   useEffect(() => {
     if (!pathname || lastTrackedPath.current === pathname) return;
     lastTrackedPath.current = pathname;
+    trackGa4("page_view", {
+      page_location: `${window.location.origin}${pathname}`,
+      page_path: pathname,
+      page_title: document.title,
+    });
 
     let visitorId: string;
     try {

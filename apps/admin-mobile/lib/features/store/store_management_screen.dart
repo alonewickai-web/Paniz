@@ -7,7 +7,9 @@ import '../../core/providers.dart';
 import '../../core/ui_helpers.dart';
 
 class StoreManagementScreen extends ConsumerStatefulWidget {
-  const StoreManagementScreen({super.key});
+  const StoreManagementScreen({super.key, this.initialTab = 0});
+
+  final int initialTab;
 
   @override
   ConsumerState<StoreManagementScreen> createState() => _StoreManagementScreenState();
@@ -24,18 +26,39 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
   bool _alwaysFree = false;
   bool _freeThresholdEnabled = false;
 
+  final _aboutAddress = TextEditingController();
+  final _aboutPhone = TextEditingController();
+  final _aboutRubikaUrl = TextEditingController();
+  final _aboutInstagramUrl = TextEditingController();
+  final _aboutPhysicalAddress = TextEditingController();
+  final _aboutMapUrl = TextEditingController();
+  bool _aboutInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = widget.initialTab;
+  }
+
   @override
   void dispose() {
     _shippingCost.dispose();
     _freeShippingThreshold.dispose();
+    _aboutAddress.dispose();
+    _aboutPhone.dispose();
+    _aboutRubikaUrl.dispose();
+    _aboutInstagramUrl.dispose();
+    _aboutPhysicalAddress.dispose();
+    _aboutMapUrl.dispose();
     super.dispose();
   }
 
-  static const _tabs = ['قالب سایت', 'دسته‌ها', 'بنرها', 'چیدمان', 'ارسال'];
+  static const _tabs = ['قالب سایت', 'دسته‌ها', 'بنرها', 'چیدمان', 'ارسال', 'درباره ما'];
 
   Future<void> _refresh() async {
     _sectionOrderOverride = null;
     _shippingInitialized = false;
+    _aboutInitialized = false;
     ref.invalidate(storeConfigurationProvider);
   }
 
@@ -77,6 +100,7 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
             if (_tab == 2) _bannersPanel(data),
             if (_tab == 3) _sectionsPanel(data),
             if (_tab == 4) _shippingPanel(data),
+            if (_tab == 5) _aboutPanel(data),
           ]),
         ),
       )),
@@ -262,6 +286,57 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
           }, 'تنظیمات ارسال ذخیره شد'),
           icon: const Icon(Icons.save_outlined),
           label: const Text('ذخیرهٔ هزینهٔ ارسال'),
+        ),
+      ]))),
+    ]);
+  }
+
+  Widget _aboutPanel(JsonMap data) {
+    final about = data['about'] is Map
+        ? Map<String, dynamic>.from(data['about'] as Map)
+        : <String, dynamic>{};
+    if (!_aboutInitialized) {
+      _aboutAddress.text = '${about['address'] ?? ''}';
+      _aboutPhone.text = '${about['phone'] ?? ''}';
+      _aboutRubikaUrl.text = '${about['rubikaUrl'] ?? ''}';
+      _aboutInstagramUrl.text = '${about['instagramUrl'] ?? ''}';
+      _aboutPhysicalAddress.text = '${about['physicalAddress'] ?? ''}';
+      _aboutMapUrl.text = '${about['mapUrl'] ?? ''}';
+      _aboutInitialized = true;
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      sectionTitle('دربارهٔ ما و راه‌های تماس'),
+      const Padding(
+        padding: EdgeInsets.only(top: 3, bottom: 12),
+        child: Text('این اطلاعات در صفحهٔ «دربارهٔ ما»ی سایت نمایش داده می‌شود. برای حذف هر مورد، کادرش را خالی بگذار.', style: TextStyle(color: Color(0xFF74686C), fontSize: 12, height: 1.7)),
+      ),
+      Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        TextField(controller: _aboutAddress, minLines: 2, maxLines: 4, maxLength: 500, decoration: const InputDecoration(labelText: 'نشانی فروشگاه', hintText: 'نشانی پستی یا آدرس دفتر')),
+        const SizedBox(height: 10),
+        TextField(controller: _aboutPhone, keyboardType: TextInputType.phone, textDirection: TextDirection.ltr, maxLength: 40, decoration: const InputDecoration(labelText: 'شمارهٔ تماس', hintText: 'مثلاً ۰۲۱۱۲۳۴۵۶۷۸')),
+        const SizedBox(height: 10),
+        TextField(controller: _aboutRubikaUrl, keyboardType: TextInputType.url, textDirection: TextDirection.ltr, maxLength: 500, decoration: const InputDecoration(labelText: 'لینک کانال روبیکا', hintText: 'https://rubika.ir/...', helperText: 'در سایت کنار این لینک، نشان روبیکا نمایش داده می‌شود.')),
+        const SizedBox(height: 10),
+        TextField(controller: _aboutInstagramUrl, keyboardType: TextInputType.url, textDirection: TextDirection.ltr, maxLength: 500, decoration: const InputDecoration(labelText: 'لینک یا نام کاربری اینستاگرام', hintText: 'https://instagram.com/... یا @username')),
+        const SizedBox(height: 10),
+        TextField(controller: _aboutPhysicalAddress, minLines: 2, maxLines: 4, maxLength: 500, decoration: const InputDecoration(labelText: 'نشانی خرید حضوری', hintText: 'آدرس شعبه یا محل مراجعه')),
+        const SizedBox(height: 10),
+        TextField(controller: _aboutMapUrl, keyboardType: TextInputType.url, textDirection: TextDirection.ltr, maxLength: 500, decoration: const InputDecoration(labelText: 'لینک لوکیشن روی نقشه', hintText: 'لینک اشتراک‌گذاری‌شده از نقشه')),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: _saving ? null : () => _run(() async {
+            await ref.read(adminApiProvider).updateStoreAbout({
+              'address': _aboutAddress.text.trim(),
+              'phone': _aboutPhone.text.trim(),
+              'rubikaUrl': _aboutRubikaUrl.text.trim(),
+              'instagramUrl': _aboutInstagramUrl.text.trim(),
+              'physicalAddress': _aboutPhysicalAddress.text.trim(),
+              'mapUrl': _aboutMapUrl.text.trim(),
+            });
+            _aboutInitialized = false;
+          }, 'اطلاعات دربارهٔ ما ذخیره شد'),
+          icon: const Icon(Icons.save_outlined),
+          label: const Text('ذخیرهٔ اطلاعات دربارهٔ ما'),
         ),
       ]))),
     ]);

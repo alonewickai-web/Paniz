@@ -424,9 +424,54 @@ class AdminApi {
   Future<JsonMap> siteVisitAnalytics() async =>
       _data(await dio.get('admin/analytics/site-visits'));
 
-  Future<JsonMap> financeReport(String range) async => _data(
-    await dio.get('admin/analytics/finance', queryParameters: {'range': range}),
-  );
+  Future<JsonMap> seoAnalytics({
+    String range = '28',
+    String? from,
+    String? to,
+  }) async => _data(await dio.get(
+    'admin/analytics/seo',
+    queryParameters: {
+      'range': range,
+      if (from != null) 'from': from,
+      if (to != null) 'to': to,
+    },
+  ));
+
+  Future<String> seoAnalyticsCsv({
+    String range = '28',
+    String type = 'products',
+    String? from,
+    String? to,
+    String? category,
+  }) async {
+    final response = await dio.get<String>(
+      'admin/analytics/seo/export.csv',
+      queryParameters: {
+        'range': range,
+        'type': type,
+        if (from != null) 'from': from,
+        if (to != null) 'to': to,
+        if (category != null) 'category': category,
+      },
+      options: Options(responseType: ResponseType.plain),
+    );
+    return response.data ?? '';
+  }
+
+  Future<Uint8List> seoAnalyticsXlsx({String range = '28', String type = 'products', String? from, String? to, String? category}) async {
+    final response = await dio.get<List<int>>(
+      'admin/analytics/seo/export.xlsx',
+      queryParameters: {'range': range, 'type': type,
+        if (from != null) 'from': from,
+        if (to != null) 'to': to,
+        if (category != null) 'category': category},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data ?? <int>[]);
+  }
+
+  Future<JsonMap> financeReport(String range) async =>
+      _data(await dio.get('admin/analytics/finance', queryParameters: {'range': range}));
 
   Future<JsonMap> customers({
     int page = 1,
@@ -555,6 +600,9 @@ class AdminApi {
 
   Future<JsonMap> updateStoreLogo(String? logoPath) async =>
       _data(await dio.patch('admin/store/logo', data: {'logoPath': logoPath}));
+
+  Future<JsonMap> updateStoreAbout(JsonMap about) async =>
+      _data(await dio.patch('admin/store/about', data: about));
 
   Future<List<JsonMap>> adminSupportTickets() async =>
       _list(_payload(await dio.get('admin/support/tickets')));

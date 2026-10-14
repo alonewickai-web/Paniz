@@ -72,7 +72,26 @@ export default function CartPage() {
   }, [cartPayload, ready]);
 
   function changeQuantity(key: string, amount: number) {
-    setCart((items) => items.map((line) => line.key === key ? { ...line, quantity: Math.max(1, Math.min(10, line.quantity + amount)) } : line));
+    setCart((items) => items.map((line) => {
+      if (line.key !== key) return line;
+      const product = catalog[line.productSlug ?? ""];
+      const variant = product?.variants.find((item) => item.id === line.variantId);
+      const availableQuantity = variant?.availableQuantity;
+      if (amount > 0) {
+        const maxQuantity = availableQuantity === undefined ? 0 : Math.min(10, availableQuantity);
+        if (availableQuantity === undefined || line.quantity >= maxQuantity) {
+          return line;
+        }
+        return {
+          ...line,
+          quantity: Math.min(line.quantity + amount, maxQuantity),
+        };
+      }
+      return {
+        ...line,
+        quantity: Math.max(1, line.quantity + amount),
+      };
+    }));
   }
 
   function removeLine(key: string) {
@@ -102,7 +121,7 @@ export default function CartPage() {
                       <Link href={product ? `/products/${product.slug}` : "/products"}><strong>{product?.name || quoted?.productName || "محصول انتخاب‌شده"}</strong></Link>
                       <span>{line.color} · سایز {line.size}{variant?.availableQuantity !== undefined && variant.availableQuantity < 4 ? ` · موجودی ${new Intl.NumberFormat("fa-IR").format(variant.availableQuantity)}` : ""}</span>
                       <b>{formatToman(quoted?.unitPriceToman ?? line.unitPrice ?? 0)}</b>
-                      <div className="store-quantity"><button type="button" onClick={() => changeQuantity(line.key, -1)} disabled={line.quantity <= 1} aria-label="کم‌کردن تعداد"><Minus size={15} /></button><span>{new Intl.NumberFormat("fa-IR").format(line.quantity)}</span><button type="button" onClick={() => changeQuantity(line.key, 1)} disabled={line.quantity >= 10} aria-label="زیادکردن تعداد"><Plus size={15} /></button></div>
+                      <div className="store-quantity"><button type="button" onClick={() => changeQuantity(line.key, -1)} disabled={line.quantity <= 1} aria-label="کم‌کردن تعداد"><Minus size={15} /></button><span>{new Intl.NumberFormat("fa-IR").format(line.quantity)}</span><button type="button" onClick={() => changeQuantity(line.key, 1)} disabled={!variant || line.quantity >= Math.min(10, variant.availableQuantity)} aria-label="زیادکردن تعداد"><Plus size={15} /></button></div>
                     </div>
                     <strong className="store-cart-line-total">{formatToman((quoted?.unitPriceToman ?? line.unitPrice ?? 0) * line.quantity)}</strong>
                     <button className="store-remove-line" type="button" onClick={() => removeLine(line.key)} aria-label="حذف از سبد"><Trash2 size={18} /></button>

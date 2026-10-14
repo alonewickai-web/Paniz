@@ -8,6 +8,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
   Matches,
   Max,
   MaxLength,
@@ -121,6 +122,21 @@ export class CreateAdminProductDto {
   @IsString()
   @MaxLength(8_000)
   careInstructions?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  seoTitle?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  seoDescription?: string;
+
+  @IsOptional()
+  @IsUrl({ protocols: ["https"], require_protocol: true })
+  @MaxLength(500)
+  seoCanonicalUrl?: string;
 
   @IsOptional()
   @IsString()

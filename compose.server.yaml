@@ -66,6 +66,7 @@ services:
       args:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?Run ops/create-server-env.sh first}
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?Run ops/create-server-env.sh first}
+        NEXT_PUBLIC_GA4_MEASUREMENT_ID: ${NEXT_PUBLIC_GA4_MEASUREMENT_ID:-}
     restart: unless-stopped
     expose:
       - "3000"

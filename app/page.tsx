@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import {
-  ArrowDownLeft,
   ArrowLeft,
   ArrowRight,
   Check,
@@ -45,6 +44,8 @@ type Product = {
   available?: boolean;
   variants?: ProductVariantOption[];
 };
+
+const PRODUCTS_PER_HOME_PAGE = 20;
 
 type ProductVariantOption = {
   id: string;
@@ -278,7 +279,9 @@ export default function Home() {
   const [catalogSource, setCatalogSource] = useState<"loading" | "demo" | "api" | "error">(() =>
     process.env.NODE_ENV === "production" ? "loading" : "demo",
   );
+  const [hasDiscounts, setHasDiscounts] = useState(false);
   const [catalogReloadKey, setCatalogReloadKey] = useState(0);
+  const [catalogPage, setCatalogPage] = useState(1);
   const [storefrontConfig, setStorefrontConfig] = useState<StorefrontConfig>({ theme: "rose", sections: [], banners: [] });
   const [bannerIndex, setBannerIndex] = useState(0);
   const [outgoingBanner, setOutgoingBanner] = useState<StorefrontConfig["banners"][number] | null>(null);
@@ -312,9 +315,10 @@ export default function Home() {
     async function loadCatalog() {
       if (process.env.NODE_ENV === "production") setCatalogSource("loading");
       try {
-        const [productResponse, categoryResponse] = await Promise.all([
+        const [productResponse, categoryResponse, saleResponse] = await Promise.all([
           fetch(`${apiBase}/products?page=1&pageSize=48`, { signal: controller.signal, cache: "no-store" }),
           fetch(`${apiBase}/categories`, { signal: controller.signal, cache: "no-store" }),
+          fetch(`${apiBase}/products?onSale=true&page=1&pageSize=1`, { signal: controller.signal, cache: "no-store" }).catch(() => null),
         ]);
         if (!productResponse.ok || !categoryResponse.ok) throw new Error("Catalog API is unavailable");
 
@@ -346,7 +350,9 @@ export default function Home() {
             image: item.image?.path || hint?.image || products[0].image,
             imageAlt: item.image?.alt || hint?.imageAlt || item.name,
             images: item.images,
-            badge: hint?.badge ?? (discount > 0 ? `${discount}٪ تخفیف` : undefined),
+            badge: discount > 0
+              ? `${discount}٪ تخفیف`
+              : hint?.badge && !hint.badge.includes("تخفیف") ? hint.badge : undefined,
             colors: item.colors.length ? item.colors : hint?.colors ?? [],
             sizes: item.sizes.length ? item.sizes : hint?.sizes ?? [],
             variants: item.variants,
@@ -372,6 +378,13 @@ export default function Home() {
         if (!controller.signal.aborted) {
           setCatalogProducts(mappedProducts);
           setCatalogCategories(mappedCategories);
+          const salePayload = saleResponse?.ok
+            ? await saleResponse.json() as { data?: unknown[]; meta?: { total?: number } }
+            : null;
+          setHasDiscounts(
+            (salePayload?.meta?.total ?? salePayload?.data?.length ?? 0) > 0 ||
+            mappedProducts.some((product) => (product.previousPrice ?? 0) > product.price),
+          );
           setCatalogSource("api");
         }
 
@@ -389,6 +402,7 @@ export default function Home() {
         if (process.env.NODE_ENV === "production") {
           setCatalogProducts([]);
           setCatalogCategories([categories[0]]);
+          setHasDiscounts(false);
           setCatalogSource("error");
         } else {
           setCatalogProducts(products);
@@ -494,6 +508,13 @@ export default function Home() {
     return filtered;
   }, [activeCategory, catalogProducts, favorites, favoritesOnly, query, sortBy]);
 
+  const catalogPageCount = Math.max(1, Math.ceil(visibleProducts.length / PRODUCTS_PER_HOME_PAGE));
+  const currentCatalogPage = Math.min(catalogPage, catalogPageCount);
+  const pageProducts = useMemo(
+    () => visibleProducts.slice((currentCatalogPage - 1) * PRODUCTS_PER_HOME_PAGE, currentCatalogPage * PRODUCTS_PER_HOME_PAGE),
+    [currentCatalogPage, visibleProducts],
+  );
+
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const activeBanner = storefrontConfig.banners.length
     ? storefrontConfig.banners[bannerIndex % storefrontConfig.banners.length]
@@ -592,16 +613,19 @@ export default function Home() {
 
     const key = variant?.id ?? `${product.id}-${size}-${color}`;
     const existing = cart.find((line) => line.key === key);
-    if (variant && existing && existing.quantity >= variant.availableQuantity) {
-      setToast("موجودی این تنوع به پایان رسیده است");
+    const maxQuantity = variant ? Math.min(10, variant.availableQuantity) : 10;
+    if (existing && existing.quantity >= maxQuantity) {
+      setToast("حداکثر تعداد قابل سفارش از این تنوع ۱۰ عدد یا موجودی انبار است");
       return;
     }
 
     setCart((current) => {
-      if (current.some((line) => line.key === key)) {
-        return current.map((line) =>
-          line.key === key ? { ...line, quantity: line.quantity + 1 } : line,
-        );
+      const line = current.find((item) => item.key === key);
+      if (line) {
+        if (line.quantity >= maxQuantity) return current;
+        return current.map((item) => item.key === key
+          ? { ...item, quantity: Math.min(maxQuantity, item.quantity + 1) }
+          : item);
       }
       return [...current, {
         key,
@@ -626,7 +650,7 @@ export default function Home() {
           const product = catalogProducts.find((item) => item.id === line.productId);
           const variant = product?.variants?.find((item) => item.id === line.variantId);
           const requested = Math.max(0, line.quantity + change);
-          const quantity = variant ? Math.min(requested, variant.availableQuantity) : requested;
+          const quantity = variant ? Math.min(requested, 10, variant.availableQuantity) : Math.min(requested, 10);
           return { ...line, quantity };
         })
         .filter((line) => line.quantity > 0),
@@ -636,17 +660,20 @@ export default function Home() {
   function chooseCategory(category: string) {
     setActiveCategory(category);
     setFavoritesOnly(false);
+    setCatalogPage(1);
     document.getElementById("products")?.scrollIntoView({ behavior: "smooth" });
   }
 
   function showFavorites() {
     setFavoritesOnly(true);
     setActiveCategory("همه محصولات");
+    setCatalogPage(1);
     document.getElementById("products")?.scrollIntoView({ behavior: "smooth" });
   }
 
   return (
     <main>
+      <div dangerouslySetInnerHTML={{ __html: `<a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=8163840&Code=q40hSNzyifJ0X5ZXlM8OUaHEgFcpzbdG'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=8163840&Code=q40hSNzyifJ0X5ZXlM8OUaHEgFcpzbdG' alt='' style='cursor:pointer' code='q40hSNzyifJ0X5ZXlM8OUaHEgFcpzbdG'></a>` }} />
       <div className="announcement-bar">
         <Sparkles size={15} aria-hidden="true" />
         <span>کالکشن‌های تازه و انتخاب‌های دوست‌داشتنی پانیذ</span>
@@ -655,7 +682,7 @@ export default function Home() {
 
       <header className="site-header">
         <div className="header-main page-shell">
-          <button className="icon-button mobile-menu" onClick={() => document.getElementById("categories")?.scrollIntoView({ behavior: "smooth" })} aria-label="رفتن به دسته‌بندی‌ها">
+          <button className="icon-button mobile-menu" onClick={() => document.getElementById("products")?.scrollIntoView({ behavior: "smooth" })} aria-label="رفتن به محصولات">
             <Menu size={23} />
           </button>
           <a className="brand" href="#top" aria-label="صفحه اصلی پانیذ">
@@ -668,7 +695,7 @@ export default function Home() {
             inputRef={searchRef}
             wrapperClassName="header-search-autocomplete"
             value={query}
-            onChange={setQuery}
+            onChange={(value) => { setQuery(value); setCatalogPage(1); }}
             shortcut="Ctrl K"
           />
 
@@ -698,12 +725,12 @@ export default function Home() {
 
         <nav className="desktop-nav page-shell" aria-label="ناوبری اصلی">
           <a className="nav-link active" href="#top">خانه</a>
-          <button className="nav-link" onClick={() => chooseCategory("همه محصولات")}>همه محصولات</button>
-          {catalogCategories.filter((category) => category.name !== "همه محصولات").slice(0, 5).map((category) =>
-            <button className="nav-link" key={category.slug ?? category.name} onClick={() => chooseCategory(category.name)}>{category.name}</button>,
+          <Link className="nav-link" href="/products">همه محصولات</Link>
+          {catalogCategories.filter((category) => category.name !== "همه محصولات" && category.slug).slice(0, 5).map((category) =>
+            <Link className="nav-link" key={category.slug} href={`/products?category=${encodeURIComponent(category.slug!)}`}>{category.name}</Link>,
           )}
-          <button className="nav-link nav-offer" onClick={() => chooseCategory("همه محصولات")}>تخفیف‌های دوست‌داشتنی</button>
-          <a className="nav-link nav-help" href="#footer">راهنمای خرید</a>
+          {hasDiscounts && <Link className="nav-link nav-offer" href="/products?onSale=true">تخفیف‌ها</Link>}
+          <Link className="nav-link nav-help" href="/help/faq">راهنمای خرید</Link>
         </nav>
       </header>
 
@@ -740,29 +767,6 @@ export default function Home() {
           </div>
         </section>}
 
-        {sectionIsActive("categories") && <section className="categories-section" aria-labelledby="categories-title" id="categories" style={{ order: sectionOrder("categories", 1) }}>
-          <div className="section-heading category-heading">
-            <div><span className="section-kicker">از کمدت شروع کنیم</span><h2 id="categories-title">دسته‌بندی‌های محبوب</h2></div>
-            <button className="text-link" onClick={() => chooseCategory("همه محصولات")}>مشاهده همه <ArrowLeft size={16} /></button>
-          </div>
-          <div className="category-list">
-            {catalogCategories.map((category) => (
-              <button
-                className={`category-item ${category.tone} ${activeCategory === category.name ? "chosen" : ""}`}
-                key={category.name}
-                onClick={() => chooseCategory(category.name)}
-                aria-pressed={activeCategory === category.name}
-              >
-                <span className="category-image-wrap">
-                  <StoreImage src={category.image} alt="" fill sizes="100px" />
-                  <span className="category-arrow"><ArrowDownLeft size={15} /></span>
-                </span>
-                <span>{category.name}</span>
-              </button>
-            ))}
-          </div>
-        </section>}
-
         {sectionIsActive("products") && <section className="products-section" id="products" aria-labelledby="products-title" style={{ order: sectionOrder("products", 2) }}>
           <div className="section-heading products-heading">
             <div>
@@ -773,7 +777,7 @@ export default function Home() {
             <label className="sort-control">
               <SlidersHorizontal size={17} />
               <span className="sr-only">مرتب‌سازی محصولات</span>
-              <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+              <select value={sortBy} onChange={(event) => { setSortBy(event.target.value); setCatalogPage(1); }}>
                 <option value="newest">جدیدترین</option>
                 <option value="popular">محبوب‌ترین</option>
                 <option value="price-low">ارزان‌ترین</option>
@@ -792,6 +796,7 @@ export default function Home() {
                 onClick={() => {
                   setActiveCategory(category);
                   setFavoritesOnly(false);
+                  setCatalogPage(1);
                 }}
               >
                 {category}
@@ -819,7 +824,7 @@ export default function Home() {
             </div>
           ) : visibleProducts.length > 0 ? (
             <div className="product-grid">
-              {visibleProducts.map((product) => {
+              {pageProducts.map((product) => {
                 const productUrl = product.slug ? `/products/${encodeURIComponent(product.slug)}` : null;
                 return <article className="product-card" key={product.id}>
                   <div className="product-image-area">
@@ -872,19 +877,15 @@ export default function Home() {
               <span>محصولات بعد از ثبت در فروشگاه اینجا نمایش داده می‌شوند.</span>
             </div>
           ) : (
-            <div className="empty-state"><Search size={28} /><strong>چیزی پیدا نکردیم</strong><span>یه عبارت دیگه رو امتحان کن یا فیلترها رو بردار.</span><button onClick={() => { setQuery(""); setActiveCategory("همه محصولات"); setFavoritesOnly(false); }}>نمایش همه محصولات</button></div>
+            <div className="empty-state"><Search size={28} /><strong>چیزی پیدا نکردیم</strong><span>یه عبارت دیگه رو امتحان کن یا فیلترها رو بردار.</span><button onClick={() => { setQuery(""); setActiveCategory("همه محصولات"); setFavoritesOnly(false); setCatalogPage(1); }}>نمایش همه محصولات</button></div>
           )}
 
-          <div className="load-more-wrap"><span>{catalogSource === "loading" ? "در حال دریافت فهرست محصولات…" : catalogSource === "error" ? "فهرست محصولات در دسترس نیست" : `${money(visibleProducts.length)} محصول از ${money(catalogProducts.length)}`}</span><Link className="outline-button" href="/products">دیدن همه محصولات <ArrowLeft size={17} /></Link></div>
+          {catalogSource !== "loading" && catalogSource !== "error" && catalogPageCount > 1 && <nav className="store-pagination home-product-pagination" aria-label="صفحه‌های محصولات">
+            {Array.from({ length: catalogPageCount }, (_, index) => index + 1).map((page) => <button key={page} type="button" aria-current={page === currentCatalogPage ? "page" : undefined} className={page === currentCatalogPage ? "active" : ""} onClick={() => { setCatalogPage(page); document.getElementById("products")?.scrollIntoView({ behavior: "smooth" }); }}>{new Intl.NumberFormat("fa-IR").format(page)}</button>)}
+          </nav>}
         </section>}
 
-        {sectionIsActive("story") && <section className="story-banner" aria-label="پیشنهاد پانیذ" style={{ order: sectionOrder("story", 3) }}>
-          <div className="story-art"><span className="story-orb" /><StoreImage src={catalogProducts[2]?.image ?? products[2].image} alt="" fill sizes="35vw" /></div>
-          <div className="story-copy"><span className="section-kicker">یک انتخاب کوچک، یک حس تازه</span><h2>برای خودت<br />یه چیز <em>قشنگ</em> بردار</h2><p>با انتخاب‌های دوست‌داشتنی پانیذ، حال خوب رو به روزمرگی‌هات اضافه کن.</p><button className="button-primary" onClick={() => chooseCategory("همه محصولات")}>انتخاب من <ArrowLeft size={18} /></button></div>
-          <div className="story-stamp"><span>با عشق</span><Heart size={19} fill="currentColor" /></div>
-        </section>}
-
-        {sectionIsActive("benefits") && <section className="benefits-strip" aria-label="خدمات پانیذ" style={{ order: sectionOrder("benefits", 4) }}>
+        {sectionIsActive("benefits") && <section className="benefits-strip" aria-label="خدمات پانیذ" style={{ order: sectionOrder("benefits", 3) }}>
           <div className="benefit"><span className="benefit-icon mint-icon"><ShoppingBag size={20} /></span><div><strong>خرید آسوده</strong><span>قیمت و موجودی از فروشگاه بررسی می‌شود</span></div></div>
           <span className="benefit-separator" />
           <div className="benefit"><span className="benefit-icon peach-icon"><ArrowRight size={20} /></span><div><strong>روش‌های ارسال</strong><span>هزینه پس از واردکردن نشانی مشخص می‌شود</span></div></div>
@@ -973,7 +974,8 @@ export default function Home() {
               <div className="cart-lines">{cart.map((line) => {
                 const product = catalogProducts.find((item) => item.id === line.productId);
                 if (!product) return null;
-                return <div className="cart-line" key={line.key}><div className="cart-line-image"><StoreImage src={product.image} alt={product.imageAlt} fill sizes="90px" /></div><div className="cart-line-info"><strong>{product.name}</strong><span>{line.color} · سایز {line.size}</span><b>{money(line.unitPrice ?? product.price)} <small>تومان</small></b><div className="quantity-control"><button onClick={() => updateQuantity(line.key, -1)} aria-label="کم‌کردن تعداد"><Minus size={13} /></button><span>{money(line.quantity)}</span><button onClick={() => updateQuantity(line.key, 1)} aria-label="زیادکردن تعداد"><Plus size={13} /></button></div></div><button className="remove-line" onClick={() => updateQuantity(line.key, -line.quantity)} aria-label="حذف محصول"><X size={16} /></button></div>;
+                const variant = product.variants?.find((item) => item.id === line.variantId);
+                return <div className="cart-line" key={line.key}><div className="cart-line-image"><StoreImage src={product.image} alt={product.imageAlt} fill sizes="90px" /></div><div className="cart-line-info"><strong>{product.name}</strong><span>{line.color} · سایز {line.size}</span><b>{money(line.unitPrice ?? product.price)} <small>تومان</small></b><div className="quantity-control"><button onClick={() => updateQuantity(line.key, -1)} aria-label="کم‌کردن تعداد"><Minus size={13} /></button><span>{money(line.quantity)}</span><button onClick={() => updateQuantity(line.key, 1)} disabled={line.quantity >= Math.min(10, variant?.availableQuantity ?? 0)} aria-label="زیادکردن تعداد"><Plus size={13} /></button></div></div><button className="remove-line" onClick={() => updateQuantity(line.key, -line.quantity)} aria-label="حذف محصول"><X size={16} /></button></div>;
               })}</div>
               <div className="cart-summary"><div><span>جمع سفارش</span><strong>{money(cartTotal)} <small>تومان</small></strong></div><div className="shipping-note"><Check size={16} /> هزینهٔ ارسال بعد از دریافت نشانی محاسبه می‌شود</div><Link className="button-primary checkout-button" href="/checkout">ادامهٔ خرید <ArrowLeft size={17} /></Link><Link className="continue-shopping" href="/cart">مشاهدهٔ سبد کامل</Link></div>
             </> : <div className="cart-empty"><span><ShoppingBag size={30} /></span><strong>سبدت هنوز خالیه</strong><p>یه گشتی بزن، شاید چیزی دلت رو برد.</p><button className="button-primary" onClick={() => setCartOpen(false)}>دیدن محصولات <ArrowLeft size={17} /></button></div>}

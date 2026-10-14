@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, Check, MapPin, Plus, ShieldCheck } from "lucide-react";
 import { StorefrontShell } from "../components/storefront-shell";
 import { apiBaseUrl, formatToman } from "../lib/catalog";
 import { CustomerApiError, customerApi, type CustomerAddress, type CustomerProfile } from "../lib/customer-api";
 import { useStorefront } from "../lib/storefront-state";
 import iranGeography from "../data/iran-geography.json";
+import { trackGa4, trackGa4Purchase } from "../lib/ga4";
 
 const AddressLocationPicker = dynamic(
   () => import("../components/address-location-picker").then((module) => module.AddressLocationPicker),
@@ -60,6 +61,24 @@ export default function CheckoutPage() {
   const cartPayload = useMemo(() => JSON.stringify(cart.map((line) => ({ variantId: line.variantId, quantity: line.quantity }))), [cart]);
   const quoteInputKey = useMemo(() => JSON.stringify({ cart: cartPayload, coupon: appliedCoupon }), [cartPayload, appliedCoupon]);
   const quote = quoteResult?.key === quoteInputKey ? quoteResult.quote : null;
+  const trackedCheckoutKey = useRef("");
+
+  useEffect(() => {
+    if (!quote || trackedCheckoutKey.current === quoteInputKey) return;
+    trackedCheckoutKey.current = quoteInputKey;
+    trackGa4("begin_checkout", {
+      currency: "IRR",
+      value: Math.round(Math.max(0, quote.subtotalToman - quote.discountToman) * 10),
+      coupon: quote.couponCode || undefined,
+      items: quote.items.map((item) => ({
+        item_id: item.variantId,
+        item_name: item.productName,
+        item_variant: `${item.color} / ${item.size}`,
+        price: Math.round(item.unitPriceToman * 10),
+        quantity: item.quantity,
+      })),
+    });
+  }, [quote, quoteInputKey]);
 
   useEffect(() => {
     if (!ready) return;
@@ -151,6 +170,23 @@ export default function CheckoutPage() {
         headers: { "Idempotency-Key": idempotencyKey },
         body: JSON.stringify({ addressId: selectedAddressId, customerNote, ...(appliedCoupon ? { couponCode: appliedCoupon } : {}), items: cart.map((line) => ({ variantId: line.variantId, quantity: line.quantity })) }),
       });
+      if (created.paymentStatus === "paid") {
+        trackGa4Purchase(
+          created.orderNumber,
+          created.totalToman,
+          created.shippingToman,
+          cart.map((line) => {
+            const unitPriceToman = line.unitPrice ?? quote.items.find((item) => item.variantId === line.variantId)?.unitPriceToman;
+            return {
+              item_id: line.variantId || line.productSlug || line.key,
+              item_name: line.productSlug || "محصول پانیذ",
+              item_variant: [line.color, line.size].filter(Boolean).join(" / "),
+              ...(unitPriceToman !== undefined ? { price: Math.round(unitPriceToman * 10) } : {}),
+              quantity: line.quantity,
+            };
+          }),
+        );
+      }
       setOrder(created);
       window.sessionStorage.removeItem("panizstyle-order-attempt");
       setCart([]);

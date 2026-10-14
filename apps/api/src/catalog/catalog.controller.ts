@@ -54,6 +54,12 @@ export class CatalogController {
     return this.catalogService.suggestProducts(query.q);
   }
 
+  @Get("products/redirects/:slug")
+  @ApiOperation({ summary: "مسیر دائمی آدرس قدیمی محصول" })
+  productSlugRedirect(@Param("slug") slug: string) {
+    return this.catalogService.productSlugRedirect(slug);
+  }
+
   @Get("products/:slug")
   @ApiOperation({ summary: "دریافت جزئیات محصول منتشرشده با slug" })
   @ApiOkResponse({ description: "جزئیات محصول، تصاویر و تنوع‌های فعال" })

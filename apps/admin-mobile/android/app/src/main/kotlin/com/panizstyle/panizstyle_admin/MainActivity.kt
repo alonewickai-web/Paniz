@@ -32,6 +32,9 @@ class MainActivity : FlutterFragmentActivity() {
     private var pendingNotificationId: String? = null
     private val apkPickerRequest = 8401
     private val notificationPermissionRequest = 8402
+    private val reportExportRequest = 8403
+    private var reportExportResult: MethodChannel.Result? = null
+    private var reportExportBytes: ByteArray? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -120,6 +123,32 @@ class MainActivity : FlutterFragmentActivity() {
                         else -> result.notImplemented()
                     }
                 } catch (error: Exception) { result.error("UPDATE_ERROR", error.message, null) }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "paniz/admin-reports")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "saveReport") { result.notImplemented(); return@setMethodCallHandler }
+                if (reportExportResult != null) { result.error("EXPORT_BUSY", "پنجرهٔ ذخیرهٔ گزارش هنوز باز است.", null); return@setMethodCallHandler }
+                val bytes = call.argument<ByteArray>("bytes")
+                val filename = call.argument<String>("filename") ?: "paniz-report.csv"
+                val mimeType = call.argument<String>("mimeType") ?: "text/csv"
+                if (bytes == null || bytes.size > 20 * 1024 * 1024 || !Regex("^[A-Za-z0-9._-]+\\.(csv|xlsx)$").matches(filename)) {
+                    result.error("INVALID_REPORT", "فایل گزارش معتبر نیست.", null)
+                    return@setMethodCallHandler
+                }
+                try {
+                    reportExportResult = result
+                    reportExportBytes = bytes
+                    startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = mimeType
+                        putExtra(Intent.EXTRA_TITLE, filename)
+                    }, reportExportRequest)
+                } catch (error: Exception) {
+                    reportExportResult = null
+                    reportExportBytes = null
+                    result.error("EXPORT_FAILED", "ذخیرهٔ گزارش باز نشد.", null)
+                }
             }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "paniz/admin-biometric")
@@ -242,6 +271,24 @@ class MainActivity : FlutterFragmentActivity() {
     @Deprecated("Android compatibility callback")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == reportExportRequest) {
+            val result = reportExportResult ?: return
+            val bytes = reportExportBytes
+            reportExportResult = null
+            reportExportBytes = null
+            val uri = data?.data
+            if (resultCode != RESULT_OK || uri == null || bytes == null) { result.success(false); return }
+            Thread {
+                try {
+                    contentResolver.openOutputStream(uri, "w")?.use { it.write(bytes) }
+                        ?: throw IllegalArgumentException("فایل قابل نوشتن نیست.")
+                    runOnUiThread { result.success(true) }
+                } catch (error: Exception) {
+                    runOnUiThread { result.error("EXPORT_FAILED", "ذخیرهٔ گزارش انجام نشد.", null) }
+                }
+            }.start()
+            return
+        }
         if (requestCode != apkPickerRequest) return
         val result = pickerResult ?: return
         pickerResult = null
