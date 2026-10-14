@@ -1065,7 +1065,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     const directory = this.backupDirectory();
     await mkdir(directory, { recursive: true });
     const stamp = iranJalaliBackupStamp(new Date());
-    const filename = `paniz-mysql-${stamp.date}-${stamp.time}.sql`;
+    const filename = `paniz-mysql-${stamp.date} ${stamp.time}.sql`;
     const outputPath = join(directory, filename);
     const temporaryPath = `${outputPath}.partial-${randomUUID()}`;
     const args = [
@@ -1086,7 +1086,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     await rename(temporaryPath, outputPath);
     const sameDay = await readdir(directory).catch(() => [] as string[]);
     await Promise.all(sameDay
-      .filter((name) => name.startsWith(`paniz-mysql-${stamp.date} `) && name !== filename && /^paniz-mysql-[\d-]+ [\d:]+\.sql$/.test(name))
+      .filter((name) => (name.startsWith(`paniz-mysql-${stamp.date} `) || name.startsWith(`paniz-mysql-${stamp.date}-`)) && name !== filename && /^paniz-mysql-[\d-]+(?: |-)[\d:]+\.sql$/.test(name))
       .map((name) => rm(join(directory, name), { force: true })));
     const metadata = await stat(outputPath);
     return { filename, createdAt: metadata.mtime.toISOString(), sizeBytes: metadata.size, path: outputPath };
@@ -1095,7 +1095,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   private async listBackupFiles() {
     const directory = this.backupDirectory();
     const names = await readdir(directory).catch(() => [] as string[]);
-    const files = await Promise.all(names.filter((name) => /^paniz-mysql-[\d-]+ [\d:]+\.sql$/.test(name)).map(async (filename) => {
+    const files = await Promise.all(names.filter((name) => /^paniz-mysql-[\d-]+(?: |-)[\d:]+\.sql$/.test(name)).map(async (filename) => {
       const metadata = await stat(join(directory, filename));
       return { filename, createdAt: metadata.mtime.toISOString(), sizeBytes: metadata.size };
     }));
