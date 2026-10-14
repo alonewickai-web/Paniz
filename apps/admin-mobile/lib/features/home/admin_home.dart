@@ -39,6 +39,7 @@ class AdminHome extends ConsumerStatefulWidget {
 class _AdminHomeState extends ConsumerState<AdminHome> {
   int _index = 0;
   final List<int> _tabHistory = <int>[];
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   static const _titles = ['خانه', 'محصولات', 'سفارش‌ها', 'گزارش‌ها'];
   static const _icons = [
@@ -92,6 +93,11 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
 
   Future<void> _handleBack() async {
     if (!mounted) return;
+    final scaffold = _scaffoldKey.currentState;
+    if (scaffold?.isDrawerOpen == true) {
+      scaffold!.closeDrawer();
+      return;
+    }
     if (_tabHistory.isNotEmpty) {
       setState(() => _index = _tabHistory.removeLast());
       return;
@@ -161,6 +167,7 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
         if (!didPop) _handleBack();
       },
       child: Scaffold(
+        key: _scaffoldKey,
         drawer: _buildDrawer(),
         appBar: AppBar(
           leading: Builder(

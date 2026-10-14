@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -183,27 +182,12 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     }
   }
 
-  Future<void> _reorderProductColors(JsonMap product) async {
-    final rawVariants = product['variants'];
-    if (rawVariants is! List) return;
-    final seen = <String>{};
-    final colors = <JsonMap>[];
-    for (final raw in rawVariants.whereType<Map>()) {
-      final variant = Map<String, dynamic>.from(raw);
-      final key = normalizeProductColorText('${variant['colorName'] ?? ''}');
-      if (key.isNotEmpty && seen.add(key)) colors.add(variant);
-    }
-    if (colors.length < 2) {
-      showAppMessage(context, 'برای مرتب‌سازی، دست‌کم دو رنگ لازم است.');
-      return;
-    }
-    final ordered = await showDialog<List<JsonMap>>(
-      context: context,
-      builder: (_) => _ReorderProductColorsDialog(colors: colors),
-    );
-    if (ordered == null || !mounted) return;
+  Future<void> _saveProductColorOrder(
+    JsonMap product,
+    List<JsonMap> orderedColors,
+  ) async {
     try {
-      for (final entry in ordered.indexed) {
+      for (final entry in orderedColors.indexed) {
         await ref.read(adminApiProvider).updateVariant('${entry.$2['id']}', {
           'colorSortOrder': entry.$1,
         });
@@ -213,6 +197,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     } catch (error) {
       if (mounted)
         showAppMessage(context, AdminApi.friendlyError(error), error: true);
+      rethrow;
     }
   }
 
@@ -473,8 +458,9 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                                 (variant) =>
                                     _adjustVariantInventory(product, variant),
                             onAddVariant: () => _addVariant(product),
-                            onReorderColors:
-                                () => _reorderProductColors(product),
+                            onSaveColorOrder:
+                                (colors) =>
+                                    _saveProductColorOrder(product, colors),
                             onAddImage: () => _addImage(product),
                             onEditImage: (image) => _editImage(product, image),
                             onDeleteImage:
@@ -523,7 +509,7 @@ class _ProductCard extends ConsumerWidget {
     required this.onEditVariant,
     required this.onAdjustVariant,
     required this.onAddVariant,
-    required this.onReorderColors,
+    required this.onSaveColorOrder,
     required this.onAddImage,
     required this.onEditImage,
     required this.onDeleteImage,
@@ -539,7 +525,7 @@ class _ProductCard extends ConsumerWidget {
   final ValueChanged<JsonMap> onEditVariant;
   final ValueChanged<JsonMap> onAdjustVariant;
   final VoidCallback onAddVariant;
-  final VoidCallback onReorderColors;
+  final Future<void> Function(List<JsonMap> orderedColors) onSaveColorOrder;
   final VoidCallback onAddImage;
   final ValueChanged<JsonMap> onEditImage;
   final ValueChanged<JsonMap> onDeleteImage;
@@ -565,15 +551,6 @@ class _ProductCard extends ConsumerWidget {
                 .toList()
             : const <JsonMap>[];
     final status = '${product['status'] ?? ''}';
-    final colorCount =
-        variants
-            .map(
-              (variant) =>
-                  normalizeProductColorText('${variant['colorName'] ?? ''}'),
-            )
-            .where((name) => name.isNotEmpty)
-            .toSet()
-            .length;
     final imagePath = images
         .map((image) => '${image['imagePath'] ?? ''}'.trim())
         .firstWhere((path) => path.isNotEmpty, orElse: () => '');
@@ -660,15 +637,6 @@ class _ProductCard extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 6),
-          if (colorCount > 1)
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TextButton.icon(
-                onPressed: can('products.edit') ? onReorderColors : null,
-                icon: const Icon(Icons.swap_vert_rounded, size: 18),
-                label: const Text('مرتب‌سازی رنگ‌ها'),
-              ),
-            ),
           Row(
             children: [
               Expanded(
@@ -716,83 +684,15 @@ class _ProductCard extends ConsumerWidget {
             onMakePrimary: onMakePrimaryImage,
           ),
           const SizedBox(height: 8),
-          ...variants.map(
-            (variant) => Column(
-              children: [
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  leading: Container(
-                    width: 22,
-                    height: 22,
-                    decoration: BoxDecoration(
-                      color: _productColorFromHex(
-                        variant['colorHex'],
-                        Theme.of(context).colorScheme.surfaceContainerHighest,
-                      ),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.outlineVariant,
-                      ),
-                    ),
-                  ),
-                  title: Text(
-                    '${variant['colorName'] ?? ''} · ${variant['sizeLabel'] ?? ''}  (${variant['sku'] ?? ''})',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  subtitle: Text(
-                    '${toman(variant['priceToman'] ?? 0)} · قابل‌فروش ${persianNumber(variant['availableQuantity'] ?? 0)} · رزرو ${persianNumber(variant['reservedQuantity'] ?? 0)}${variant['isActive'] == true ? '' : ' · غیرفعال'}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: Wrap(
-                    spacing: 0,
-                    children: [
-                      IconButton(
-                        tooltip: 'ویرایش همهٔ مشخصات تنوع',
-                        onPressed:
-                            can('products.edit') && can('products.change_price')
-                                ? () => onEditVariant(variant)
-                                : null,
-                        icon: Icon(
-                          Icons.edit_outlined,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'اصلاح موجودی این تنوع',
-                        onPressed:
-                            can('products.change_stock')
-                                ? () => onAdjustVariant(variant)
-                                : null,
-                        icon: Icon(
-                          Icons.inventory_2_outlined,
-                          color: Theme.of(context).colorScheme.tertiary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsetsDirectional.only(
-                    start: 40,
-                    bottom: 8,
-                  ),
-                  child: _ActiveStateSwitch(
-                    title: 'وضعیت این تنوع',
-                    value: variant['isActive'] == true,
-                    onChanged:
-                        can('products.edit')
-                            ? (active) => onToggleVariant(variant, active)
-                            : null,
-                  ),
-                ),
-                const Divider(height: 8),
-              ],
-            ),
+          _ProductVariantsSection(
+            variants: variants,
+            canEdit: can('products.edit'),
+            canEditPrice: can('products.edit') && can('products.change_price'),
+            canAdjustStock: can('products.change_stock'),
+            onSaveColorOrder: onSaveColorOrder,
+            onEditVariant: onEditVariant,
+            onAdjustVariant: onAdjustVariant,
+            onToggleVariant: onToggleVariant,
           ),
         ],
       ),
@@ -800,63 +700,355 @@ class _ProductCard extends ConsumerWidget {
   }
 }
 
-class _ReorderProductColorsDialog extends StatefulWidget {
-  const _ReorderProductColorsDialog({required this.colors});
-  final List<JsonMap> colors;
+class _ProductColorGroup {
+  _ProductColorGroup({
+    required this.key,
+    required this.name,
+    required this.hex,
+    required this.variants,
+  });
 
-  @override
-  State<_ReorderProductColorsDialog> createState() =>
-      _ReorderProductColorsDialogState();
+  final String key;
+  final String name;
+  final Object? hex;
+  final List<JsonMap> variants;
+
+  JsonMap get representative => variants.first;
 }
 
-class _ReorderProductColorsDialogState
-    extends State<_ReorderProductColorsDialog> {
-  late final List<JsonMap> _colors = List<JsonMap>.from(widget.colors);
+List<_ProductColorGroup> _groupProductColors(List<JsonMap> variants) {
+  final groups = <_ProductColorGroup>[];
+  final indices = <String, int>{};
+  for (final variant in variants) {
+    final name = '${variant['colorName'] ?? ''}'.trim();
+    final normalized = normalizeProductColorText(name);
+    final key = normalized.isEmpty ? 'بدون رنگ' : normalized;
+    final existingIndex = indices[key];
+    if (existingIndex == null) {
+      indices[key] = groups.length;
+      groups.add(
+        _ProductColorGroup(
+          key: key,
+          name: name.isEmpty ? 'بدون رنگ' : name,
+          hex: variant['colorHex'],
+          variants: [variant],
+        ),
+      );
+    } else {
+      groups[existingIndex].variants.add(variant);
+    }
+  }
+  return groups;
+}
+
+class _ProductVariantsSection extends StatefulWidget {
+  const _ProductVariantsSection({
+    required this.variants,
+    required this.canEdit,
+    required this.canEditPrice,
+    required this.canAdjustStock,
+    required this.onSaveColorOrder,
+    required this.onEditVariant,
+    required this.onAdjustVariant,
+    required this.onToggleVariant,
+  });
+
+  final List<JsonMap> variants;
+  final bool canEdit;
+  final bool canEditPrice;
+  final bool canAdjustStock;
+  final Future<void> Function(List<JsonMap> orderedColors) onSaveColorOrder;
+  final ValueChanged<JsonMap> onEditVariant;
+  final ValueChanged<JsonMap> onAdjustVariant;
+  final void Function(JsonMap variant, bool active) onToggleVariant;
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('ترتیب نمایش رنگ‌ها'),
-    content: SizedBox(
-      width: 380,
-      height: math.min(440, 76.0 * _colors.length),
-      child: ReorderableListView.builder(
-        itemCount: _colors.length,
-        onReorderItem:
-            (oldIndex, newIndex) => setState(() {
-              final item = _colors.removeAt(oldIndex);
-              _colors.insert(newIndex, item);
-            }),
-        itemBuilder: (context, index) {
-          final color = _colors[index];
-          return ListTile(
-            key: ValueKey('${color['colorName']}'),
-            leading: CircleAvatar(
-              backgroundColor: _productColorFromHex(
-                color['colorHex'],
-                Theme.of(context).colorScheme.surfaceContainerHighest,
+  State<_ProductVariantsSection> createState() =>
+      _ProductVariantsSectionState();
+}
+
+class _ProductVariantsSectionState extends State<_ProductVariantsSection> {
+  late List<_ProductColorGroup> _groups = _groupProductColors(widget.variants);
+  bool _reorderingColors = false;
+  bool _savingOrder = false;
+
+  @override
+  void didUpdateWidget(covariant _ProductVariantsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_reorderingColors && !_savingOrder) {
+      _groups = _groupProductColors(widget.variants);
+    }
+  }
+
+  Future<void> _saveOrder() async {
+    setState(() => _savingOrder = true);
+    try {
+      await widget.onSaveColorOrder(
+        _groups.map((group) => group.representative).toList(),
+      );
+      if (mounted) setState(() => _reorderingColors = false);
+    } catch (_) {
+      // The parent shows the API error; keep reorder mode open so it can be retried.
+    } finally {
+      if (mounted) setState(() => _savingOrder = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.variants.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'رنگ‌ها و سایزها (${persianNumber(widget.variants.length)} تنوع)',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
-            title: Text('${color['colorName'] ?? ''}'),
-            subtitle: Text('ردیف ${persianNumber(index + 1)}'),
-            trailing: ReorderableDragStartListener(
-              index: index,
-              child: const Icon(Icons.drag_handle_rounded),
+            if (_groups.length > 1 && widget.canEdit && !_reorderingColors)
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _reorderingColors = true),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+                icon: const Icon(Icons.swap_vert_rounded, size: 18),
+                label: const Text('مرتب‌سازی رنگ‌ها'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        if (_reorderingColors) ...[
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: colorScheme.outlineVariant),
             ),
-          );
-        },
-      ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('لغو'),
-      ),
-      FilledButton(
-        onPressed: () => Navigator.pop(context, _colors),
-        child: const Text('ذخیرهٔ ترتیب'),
-      ),
-    ],
-  );
+            child: Column(
+              children: [
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    'دستگیرهٔ کنار هر رنگ را بگیر و آن را به جایگاه دلخواه بکش.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ReorderableListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  buildDefaultDragHandles: false,
+                  itemCount: _groups.length,
+                  onReorderItem: (oldIndex, newIndex) {
+                    if (oldIndex == newIndex) return;
+                    setState(() {
+                      final group = _groups.removeAt(oldIndex);
+                      _groups.insert(newIndex, group);
+                    });
+                  },
+                  itemBuilder: (context, index) {
+                    final group = _groups[index];
+                    final sizes = group.variants
+                        .map((variant) => '${variant['sizeLabel'] ?? ''}')
+                        .where((size) => size.trim().isNotEmpty)
+                        .toSet()
+                        .join('، ');
+                    return Card(
+                      key: ValueKey('product-color-${group.key}'),
+                      margin: const EdgeInsets.symmetric(vertical: 3),
+                      child: ListTile(
+                        minLeadingWidth: 34,
+                        leading: CircleAvatar(
+                          radius: 17,
+                          backgroundColor: colorScheme.secondaryContainer,
+                          child: Text(
+                            persianNumber(index + 1),
+                            style: TextStyle(
+                              color: colorScheme.onSecondaryContainer,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        title: Row(
+                          children: [
+                            Container(
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: _productColorFromHex(
+                                  group.hex,
+                                  colorScheme.surfaceContainerHighest,
+                                ),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: colorScheme.outlineVariant,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                group.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        subtitle: Text(
+                          'سایزها: ${sizes.isEmpty ? '—' : sizes} · ${persianNumber(group.variants.length)} تنوع',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: ReorderableDragStartListener(
+                          index: index,
+                          child: SizedBox(
+                            width: 48,
+                            height: 48,
+                            child: Icon(
+                              Icons.drag_handle_rounded,
+                              color: colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed:
+                            _savingOrder
+                                ? null
+                                : () => setState(() {
+                                  _reorderingColors = false;
+                                  _groups = _groupProductColors(
+                                    widget.variants,
+                                  );
+                                }),
+                        child: const Text('لغو'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _savingOrder ? null : _saveOrder,
+                        icon:
+                            _savingOrder
+                                ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                                : const Icon(Icons.check_rounded, size: 18),
+                        label: Text(
+                          _savingOrder ? 'در حال ذخیره' : 'ذخیرهٔ ترتیب',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ] else
+          ...widget.variants.map((variant) => _variantTile(context, variant)),
+      ],
+    );
+  }
+
+  Widget _variantTile(BuildContext context, JsonMap variant) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          leading: Container(
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              color: _productColorFromHex(
+                variant['colorHex'],
+                colorScheme.surfaceContainerHighest,
+              ),
+              shape: BoxShape.circle,
+              border: Border.all(color: colorScheme.outlineVariant),
+            ),
+          ),
+          title: Text(
+            '${variant['colorName'] ?? ''} · ${variant['sizeLabel'] ?? ''}  (${variant['sku'] ?? ''})',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            '${toman(variant['priceToman'] ?? 0)} · قابل‌فروش ${persianNumber(variant['availableQuantity'] ?? 0)} · رزرو ${persianNumber(variant['reservedQuantity'] ?? 0)}${variant['isActive'] == true ? '' : ' · غیرفعال'}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: Wrap(
+            spacing: 0,
+            children: [
+              IconButton(
+                tooltip: 'ویرایش همهٔ مشخصات تنوع',
+                onPressed:
+                    widget.canEditPrice
+                        ? () => widget.onEditVariant(variant)
+                        : null,
+                icon: Icon(Icons.edit_outlined, color: colorScheme.primary),
+              ),
+              IconButton(
+                tooltip: 'اصلاح موجودی این تنوع',
+                onPressed:
+                    widget.canAdjustStock
+                        ? () => widget.onAdjustVariant(variant)
+                        : null,
+                icon: Icon(
+                  Icons.inventory_2_outlined,
+                  color: colorScheme.tertiary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsetsDirectional.only(start: 40, bottom: 8),
+          child: _ActiveStateSwitch(
+            title: 'وضعیت این تنوع',
+            value: variant['isActive'] == true,
+            onChanged:
+                widget.canEdit
+                    ? (active) => widget.onToggleVariant(variant, active)
+                    : null,
+          ),
+        ),
+        const Divider(height: 8),
+      ],
+    );
+  }
 }
 
 class _ProductImageCarousel extends StatefulWidget {
