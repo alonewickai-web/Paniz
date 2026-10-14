@@ -158,6 +158,9 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     if (!Number.isFinite(discountValue) || discountValue <= 0 || (discountType === "percent" && discountValue > 100)) {
       throw badInput("Discount value is outside its allowed range.");
     }
+    if (discountType === "fixed" && !Number.isSafeInteger(discountValue)) {
+      throw badInput("Fixed discounts must be a whole number of toman.");
+    }
     const minOrderToman = integerBigInt(input.minOrderToman ?? 0, "minOrderToman");
     const maxDiscountToman = input.maxDiscountToman === null || input.maxDiscountToman === undefined || input.maxDiscountToman === ""
       ? null : integerBigInt(input.maxDiscountToman, "maxDiscountToman");

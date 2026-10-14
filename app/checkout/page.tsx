@@ -33,7 +33,7 @@ const emptyAddress = (phone = "", recipientName = ""): AddressForm => ({ title: 
 
 export default function CheckoutPage() {
   const { cart, setCart, ready } = useStorefront();
-  const [quote, setQuote] = useState<Quote | null>(null);
+  const [quoteResult, setQuoteResult] = useState<{ key: string; quote: Quote } | null>(null);
   const [quoteError, setQuoteError] = useState("");
   const [loadingQuote, setLoadingQuote] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -51,6 +51,8 @@ export default function CheckoutPage() {
   const [couponDraft, setCouponDraft] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState("");
   const cartPayload = useMemo(() => JSON.stringify(cart.map((line) => ({ variantId: line.variantId, quantity: line.quantity }))), [cart]);
+  const quoteInputKey = useMemo(() => JSON.stringify({ cart: cartPayload, coupon: appliedCoupon }), [cartPayload, appliedCoupon]);
+  const quote = quoteResult?.key === quoteInputKey ? quoteResult.quote : null;
 
   useEffect(() => {
     if (!ready) return;
@@ -75,9 +77,11 @@ export default function CheckoutPage() {
   }, [ready]);
 
   useEffect(() => {
-    if (!ready || !cart.length) { setQuote(null); setQuoteError(""); return; }
+    if (!ready || !cart.length) { setQuoteResult(null); setQuoteError(""); setLoadingQuote(false); return; }
     const controller = new AbortController();
     if (cart.some((line) => !line.variantId)) {
+      setQuoteResult(null);
+      setLoadingQuote(false);
       setQuoteError("یکی از انتخاب‌های سبد قدیمی است؛ آن را حذف و دوباره اضافه کن.");
       return () => controller.abort();
     }
@@ -89,15 +93,15 @@ export default function CheckoutPage() {
     }).then(async (response) => {
       const payload = await response.json();
       if (!response.ok) throw new Error(readError(payload));
-      setQuote(payload.data as Quote);
+      if (!controller.signal.aborted) setQuoteResult({ key: quoteInputKey, quote: payload.data as Quote });
     }).catch((error: unknown) => {
       if (!controller.signal.aborted) {
         setQuoteError(error instanceof Error ? error.message : "بررسی سبد خرید انجام نشد.");
-        setQuote(null);
+        setQuoteResult(null);
       }
     }).finally(() => { if (!controller.signal.aborted) setLoadingQuote(false); });
     return () => controller.abort();
-  }, [cartPayload, ready, appliedCoupon]);
+  }, [cartPayload, ready, appliedCoupon, quoteInputKey]);
 
   async function saveAddress(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSavingAddress(true); setAddressError("");
@@ -119,12 +123,13 @@ export default function CheckoutPage() {
     event.preventDefault(); setSubmitError("");
     if (!profile) { setSubmitError("برای ثبت سفارش ابتدا وارد حساب کاربری شو."); return; }
     if (!selectedAddressId) { setSubmitError("یک نشانی ذخیره‌شده برای تحویل انتخاب کن."); return; }
-    if (!quote || quoteError) { setSubmitError("اول قیمت و موجودی سبد را دوباره بررسی کن."); return; }
+    if (!quote || loadingQuote || quoteError || quote.couponCode !== (appliedCoupon || null)) { setSubmitError("اول قیمت، موجودی و اعتبار کد تخفیف را دوباره بررسی کن."); return; }
     setSubmitting(true);
-    let previousAttempt: { cart: string; key: string } | null = null;
-    try { previousAttempt = JSON.parse(window.sessionStorage.getItem("panizstyle-order-attempt") || "null") as { cart: string; key: string } | null; } catch { previousAttempt = null; }
-    const idempotencyKey = previousAttempt?.cart === cartPayload ? previousAttempt.key : createIdempotencyKey();
-    window.sessionStorage.setItem("panizstyle-order-attempt", JSON.stringify({ cart: cartPayload, key: idempotencyKey }));
+    const orderRequest = JSON.stringify({ cart: cartPayload, coupon: appliedCoupon || null, addressId: selectedAddressId, customerNote: customerNote.trim() || null });
+    let previousAttempt: { request: string; key: string } | null = null;
+    try { previousAttempt = JSON.parse(window.sessionStorage.getItem("panizstyle-order-attempt") || "null") as { request: string; key: string } | null; } catch { previousAttempt = null; }
+    const idempotencyKey = previousAttempt?.request === orderRequest ? previousAttempt.key : createIdempotencyKey();
+    window.sessionStorage.setItem("panizstyle-order-attempt", JSON.stringify({ request: orderRequest, key: idempotencyKey }));
     try {
       const created = await customerApi<CreatedOrder>("/orders", {
         method: "POST",
@@ -135,6 +140,9 @@ export default function CheckoutPage() {
       window.sessionStorage.removeItem("panizstyle-order-attempt");
       setCart([]);
     } catch (reason) {
+      if (reason instanceof CustomerApiError && (reason.code === "IDEMPOTENCY_KEY_REUSED" || reason.code === "IDEMPOTENCY_KEY_ALREADY_USED")) {
+        window.sessionStorage.removeItem("panizstyle-order-attempt");
+      }
       setSubmitError(reason instanceof Error ? reason.message : "ثبت سفارش انجام نشد؛ دوباره تلاش کن.");
     } finally { setSubmitting(false); }
   }
@@ -147,7 +155,7 @@ export default function CheckoutPage() {
         <nav className="store-breadcrumb" aria-label="مسیر صفحه"><Link href="/">خانه</Link><span>/</span><Link href="/cart">سبد خرید</Link><span>/</span><span>تسویه‌حساب</span></nav>
         {order ? <section className="store-order-success" role="status">
           <span className="store-success-icon"><Check size={28} /></span><span className="section-kicker">درخواست خرید ثبت شد</span><h1>سفارش {order.orderNumber}</h1>
-          <p>موجودی انتخاب‌هایت تا {order.reservationExpiresAt ? new Date(order.reservationExpiresAt).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" }) : "۱۵ دقیقه"} رزرو شد.</p>
+          <p>مبلغ نهایی سفارش: <strong>{formatToman(order.totalToman)}</strong> · موجودی انتخاب‌هایت تا {order.reservationExpiresAt ? new Date(order.reservationExpiresAt).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" }) : "۱۵ دقیقه"} رزرو شد.</p>
           <div className="store-payment-notice"><ShieldCheck size={20} /><span><strong>سفارش ثبت شد اما پرداخت بانکی هنوز فعال نیست.</strong><small>درگاه پرداخت و هزینهٔ ارسال در تنظیمات فروشگاه تعریف نشده‌اند؛ مبلغ فعلی فقط جمع کالاهاست و پرداخت نهایی بعد از اتصال این سرویس‌ها انجام می‌شود.</small></span></div>
           <div className="store-success-actions"><Link className="button-primary" href="/account">مشاهدهٔ سفارش‌ها</Link><Link className="outline-button" href="/products">بازگشت به فروشگاه</Link></div>
         </section> : !cart.length ? <div className="store-empty-page"><h1>سبد خرید خالی است</h1><p>برای ادامه، ابتدا محصولی به سبدت اضافه کن.</p><Link className="button-primary" href="/products">دیدن محصولات</Link></div> : (
@@ -190,7 +198,6 @@ export default function CheckoutPage() {
                   <form className="store-form-section customer-checkout-note" onSubmit={(event) => void submitOrder(event)}>
                     <label className="store-field"><span>یادداشت برای فروشگاه <small>(اختیاری)</small></span><textarea maxLength={1000} rows={2} value={customerNote} onChange={(event) => setCustomerNote(event.target.value)} /></label>
                     <div className="store-payment-notice"><ShieldCheck size={20} /><span><strong>درگاه پرداخت هنوز به فروشگاه متصل نشده است.</strong><small>ثبت سفارش در این مرحله، پرداخت بانکی انجام نمی‌دهد و سفارش در انتظار پرداخت می‌ماند.</small></span></div>
-                    {quoteError && <p className="store-inline-error" role="alert">{quoteError}</p>}
                     {submitError && <p className="store-inline-error" role="alert">{submitError}</p>}
                     <button className="button-primary store-submit-order" type="submit" disabled={submitting || loadingQuote || !quote || Boolean(quoteError) || !selectedAddressId}>{submitting ? "در حال ثبت…" : "ثبت سفارش"}<ArrowLeft size={18} /></button>
                   </form>
@@ -198,14 +205,15 @@ export default function CheckoutPage() {
               </div>
               <aside className="store-order-summary store-checkout-summary"><h2>خلاصهٔ انتخاب‌ها</h2>
                 {(quote?.items ?? []).map((item) => <div className="store-checkout-item" key={item.variantId}><span>{item.productName}<small>{item.color} · {item.size} · {new Intl.NumberFormat("fa-IR").format(item.quantity)} عدد</small></span><strong>{formatToman(item.lineTotalToman)}</strong></div>)}
-                <form className="store-coupon-form" onSubmit={(event) => { event.preventDefault(); setQuoteError(""); setAppliedCoupon(couponDraft.trim().toUpperCase()); }}>
+                <form className="store-coupon-form" onSubmit={(event) => { event.preventDefault(); setSubmitError(""); const code = couponDraft.trim().toUpperCase(); if (code !== appliedCoupon) { setQuoteError(""); setAppliedCoupon(code); } }}>
                   <label className="store-field"><span>کد تخفیف</span><input dir="ltr" maxLength={64} value={couponDraft} onChange={(event) => setCouponDraft(event.target.value)} placeholder="مثلاً PANI20" /></label>
                   <button className="outline-button" type="submit" disabled={!couponDraft.trim() || loadingQuote}>اعمال کد</button>
                   {appliedCoupon && <button className="customer-text-button" type="button" onClick={() => { setAppliedCoupon(""); setCouponDraft(""); setQuoteError(""); }}>حذف کد</button>}
                 </form>
-                <div><span>جمع کالاها</span><strong>{formatToman(quote?.subtotalToman ?? 0)}</strong></div><div><span>{quote?.shippingLabel || "هزینهٔ ارسال"}</span><strong>{quote?.shippingConfigured ? quote.shippingToman === 0 ? "رایگان" : formatToman(quote.shippingToman ?? 0) : "تنظیم نشده"}</strong></div>
+                {quoteError && <p className="store-inline-error" role="alert">{quoteError}</p>}
+                <div><span>جمع کالاها</span><strong>{quote ? formatToman(quote.subtotalToman) : loadingQuote ? "در حال بررسی…" : "—"}</strong></div><div><span>{quote?.shippingLabel || "هزینهٔ ارسال"}</span><strong>{quote ? quote.shippingConfigured ? quote.shippingToman === 0 ? "رایگان" : formatToman(quote.shippingToman ?? 0) : "تنظیم نشده" : "—"}</strong></div>
                 {Boolean(quote?.discountToman) && <div><span>تخفیف {quote?.couponCode}</span><strong>- {formatToman(quote?.discountToman ?? 0)}</strong></div>}
-                <div className="store-summary-total"><span>مبلغ نهایی</span><strong>{quote?.totalToman === null || quote?.totalToman === undefined ? "پس از تنظیم ارسال" : formatToman(quote.totalToman)}</strong></div>
+                <div className="store-summary-total"><span>مبلغ نهایی</span><strong>{!quote ? loadingQuote ? "در حال بررسی…" : "—" : quote.totalToman === null ? "پس از تنظیم ارسال" : formatToman(quote.totalToman)}</strong></div>
                 {loadingQuote && <small className="store-loading-note">در حال بررسی قیمت و موجودی…</small>}
                 <Link className="store-back-link" href="/cart">بازگشت و ویرایش سبد</Link>
               </aside>

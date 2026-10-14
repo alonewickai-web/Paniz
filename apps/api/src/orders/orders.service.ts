@@ -106,11 +106,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    const existing = await this.prisma.order.findUnique({ where: { idempotencyKey } });
+    const existing = await this.findExistingIdempotentOrder(customerId, input, idempotencyKey);
     if (existing) {
-      if (existing.customerId !== customerId) {
-        throw new ConflictException({ code: "IDEMPOTENCY_KEY_ALREADY_USED", message: "این شناسهٔ ثبت سفارش قبلاً استفاده شده است." });
-      }
       return this.toCreatedOrder(existing);
     }
 
@@ -247,11 +244,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
       return this.toCreatedOrder(order);
     } catch (error) {
-      const duplicate = await this.prisma.order.findUnique({ where: { idempotencyKey } });
+      const duplicate = await this.findExistingIdempotentOrder(customerId, input, idempotencyKey);
       if (duplicate) {
-        if (duplicate.customerId !== customerId) {
-          throw new ConflictException({ code: "IDEMPOTENCY_KEY_ALREADY_USED", message: "این شناسهٔ ثبت سفارش قبلاً استفاده شده است." });
-        }
         return this.toCreatedOrder(duplicate);
       }
       throw error;
@@ -390,8 +384,16 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     if (!/^[A-Z0-9_-]{3,64}$/.test(code)) throw new BadRequestException({ code: "COUPON_INVALID", message: "کد تخفیف معتبر نیست." });
     const coupon = await db.coupon.findUnique({ where: { code }, include: { products: true, categories: true } });
     const now = new Date();
-    if (!coupon || !coupon.isActive || (coupon.startsAt && coupon.startsAt > now) || (coupon.endsAt && coupon.endsAt < now)) {
+    if (!coupon || !coupon.isActive || (coupon.startsAt && coupon.startsAt > now) || (coupon.endsAt && coupon.endsAt <= now)) {
       throw new BadRequestException({ code: "COUPON_UNAVAILABLE", message: "کد تخفیف معتبر یا فعال نیست." });
+    }
+    const discountValue = Number(coupon.discountValue);
+    if (!Number.isFinite(discountValue)
+      || discountValue <= 0
+      || (coupon.discountType === "percent" && discountValue > 100)
+      || (coupon.discountType === "fixed" && !Number.isSafeInteger(discountValue))
+      || (coupon.discountType !== "percent" && coupon.discountType !== "fixed")) {
+      throw new BadRequestException({ code: "COUPON_UNAVAILABLE", message: "تنظیمات این کد تخفیف معتبر نیست." });
     }
     if (subtotalToman < coupon.minOrderToman) throw new BadRequestException({ code: "COUPON_MINIMUM_NOT_MET", message: "مبلغ سبد خرید به حداقل لازم برای این کد نمی‌رسد." });
     const productIds = new Set(coupon.products.map((item) => item.productId.toString()));
@@ -418,11 +420,44 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       }
     }
     let discountToman = coupon.discountType === "percent"
-      ? eligibleSubtotal * BigInt(Math.round(Number(coupon.discountValue) * 100)) / 10_000n
-      : BigInt(Math.round(Number(coupon.discountValue)));
+      ? eligibleSubtotal * BigInt(Math.round(discountValue * 100)) / 10_000n
+      : BigInt(discountValue);
     if (coupon.maxDiscountToman !== null && discountToman > coupon.maxDiscountToman) discountToman = coupon.maxDiscountToman;
     if (discountToman > eligibleSubtotal) discountToman = eligibleSubtotal;
     return { id: coupon.id, code: coupon.code, discountToman };
+  }
+
+  private async findExistingIdempotentOrder(
+    customerId: bigint,
+    input: CreateCustomerOrderDto,
+    idempotencyKey: string,
+  ) {
+    const existing = await this.prisma.order.findUnique({
+      where: { idempotencyKey },
+      include: { items: { select: { variantId: true, quantity: true } } },
+    });
+    if (!existing) return null;
+    if (existing.customerId !== customerId) {
+      throw new ConflictException({ code: "IDEMPOTENCY_KEY_ALREADY_USED", message: "این شناسهٔ ثبت سفارش قبلاً استفاده شده است." });
+    }
+
+    const requestedItems = new Map<string, number>();
+    for (const item of input.items) {
+      requestedItems.set(item.variantId, (requestedItems.get(item.variantId) ?? 0) + item.quantity);
+    }
+    const sameItems = existing.items.length === requestedItems.size
+      && existing.items.every((item) => item.variantId !== null
+        && requestedItems.get(item.variantId.toString()) === item.quantity);
+    const sameAddress = existing.addressId !== null && existing.addressId.toString() === input.addressId;
+    const sameCoupon = existing.couponCodeSnapshot === (input.couponCode?.trim().toUpperCase() || null);
+    const sameNote = existing.customerNote === (input.customerNote?.trim() || null);
+    if (!sameItems || !sameAddress || !sameCoupon || !sameNote) {
+      throw new ConflictException({
+        code: "IDEMPOTENCY_KEY_REUSED",
+        message: "این تلاش ثبت سفارش با اطلاعات متفاوت تکرار شده است؛ صفحه را تازه‌سازی و دوباره تلاش کن.",
+      });
+    }
+    return existing;
   }
 
   private async releaseExpiredReservations(): Promise<void> {
