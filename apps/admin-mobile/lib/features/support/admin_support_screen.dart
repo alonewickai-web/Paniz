@@ -58,7 +58,7 @@ class _AdminSupportScreenState extends ConsumerState<AdminSupportScreen> with Si
   ]);
 }
 
-String _ticketStatus(String value) => switch (value) { 'waiting_customer' => 'منتظر پاسخ مشتری', 'closed' => 'بسته‌شده', _ => 'در حال پیگیری' };
+String _ticketStatus(String value) => switch (value) { 'waiting_customer' => 'منتظر پاسخ مشتری', 'closed' => 'تیکت بسته شد', _ => 'در حال پیگیری' };
 class _TicketConversation extends ConsumerStatefulWidget {
   const _TicketConversation({required this.ticket});
   final JsonMap ticket;
@@ -71,9 +71,32 @@ class _TicketConversationState extends ConsumerState<_TicketConversation> {
   final _picker = ImagePicker();
   XFile? _image;
   bool _busy = false;
+  late String _status = '${widget.ticket['status'] ?? 'open'}';
+  bool get _closed => _status == 'closed';
   List<JsonMap> get _messages => (widget.ticket['messages'] as List? ?? const []).whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
   @override
   void dispose() { _text.dispose(); super.dispose(); }
+
+  Future<void> _closeTicket() async {
+    if (_busy || _closed) return;
+    final confirmed = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(
+      title: const Text('بستن تیکت؟'),
+      content: const Text('پس از بستن، مشتری دیگر نمی‌تواند در این گفت‌وگو پیام بفرستد و وضعیت بسته‌شدن را در حسابش می‌بیند.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('انصراف')),
+        FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('بستن تیکت')),
+      ],
+    ));
+    if (confirmed != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(adminApiProvider).closeSupportTicket('${widget.ticket['id']}');
+      if (!mounted) return;
+      setState(() => _status = 'closed');
+      showAppMessage(context, 'تیکت بسته شد.');
+    } catch (error) { if (mounted) showAppMessage(context, AdminApi.friendlyError(error), error: true); }
+    finally { if (mounted) setState(() => _busy = false); }
+  }
 
   Future<void> _chooseImage() async {
     final image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 82, maxWidth: 1800);
@@ -82,7 +105,7 @@ class _TicketConversationState extends ConsumerState<_TicketConversation> {
 
   Future<void> _send() async {
     final body = _text.text.trim();
-    if (_busy || (body.isEmpty && _image == null)) return;
+    if (_busy || _closed || (body.isEmpty && _image == null)) return;
     setState(() => _busy = true);
     try {
       String? imagePath;
@@ -101,6 +124,8 @@ class _TicketConversationState extends ConsumerState<_TicketConversation> {
     final customer = widget.ticket['customer'] is Map ? Map<String, dynamic>.from(widget.ticket['customer'] as Map) : <String, dynamic>{};
     return Scaffold(appBar: AppBar(title: Text('${widget.ticket['subject'] ?? 'پشتیبانی'}', maxLines: 1, overflow: TextOverflow.ellipsis)), body: Column(children: [
       ListTile(leading: const Icon(Icons.person_outline), title: Text('${customer['fullName'] ?? 'مشتری'}'), subtitle: Text('${customer['phone'] ?? ''}')),
+      if (_closed) Container(width: double.infinity, margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: context.paniz.primarySoft, borderRadius: BorderRadius.circular(12)), child: const Text('این تیکت بسته شد.', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w800)))
+      else Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 8), child: Align(alignment: AlignmentDirectional.centerEnd, child: OutlinedButton.icon(onPressed: _busy ? null : _closeTicket, icon: const Icon(Icons.lock_outline_rounded), label: const Text('بستن تیکت')))),
       const Divider(height: 1),
       Expanded(child: ListView(padding: const EdgeInsets.all(14), children: _messages.map((message) {
         final isAdmin = message['senderType'] == 'admin';
@@ -108,8 +133,11 @@ class _TicketConversationState extends ConsumerState<_TicketConversation> {
         return Align(alignment: isAdmin ? Alignment.centerLeft : Alignment.centerRight, child: Container(width: double.infinity, constraints: const BoxConstraints(maxWidth: 420), margin: const EdgeInsets.only(bottom: 10), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: isAdmin ? context.paniz.primarySoft : Theme.of(context).colorScheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(16)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(isAdmin ? 'پشتیبان پانیذ' : 'مشتری', style: TextStyle(fontSize: 10, color: context.paniz.primary, fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text('${message['body'] ?? ''}'), if (path != null) Padding(padding: const EdgeInsets.only(top: 8), child: ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(AdminApi.imageUrl(path), height: 180, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Text('تصویر در دسترس نیست')))), const SizedBox(height: 4), Text(_time('${message['createdAt']}'), style: TextStyle(fontSize: 10, color: context.paniz.muted))])));
       }).toList())),
       SafeArea(top: false, child: Padding(padding: const EdgeInsets.all(10), child: Column(children: [
-        if (_image != null) Row(children: [const Icon(Icons.image_outlined), Expanded(child: Text(_image!.name, maxLines: 1, overflow: TextOverflow.ellipsis)), IconButton(onPressed: () => setState(() => _image = null), icon: const Icon(Icons.close_rounded))]),
-        Row(children: [IconButton(tooltip: 'پیوست تصویر', onPressed: _busy ? null : _chooseImage, icon: const Icon(Icons.attach_file_rounded)), Expanded(child: TextField(controller: _text, maxLines: 3, minLines: 1, decoration: const InputDecoration(hintText: 'پاسخ به مشتری…', border: OutlineInputBorder()))), const SizedBox(width: 8), IconButton.filled(onPressed: _busy ? null : _send, icon: _busy ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send_rounded))]),
+        if (_closed) const Text('این تیکت بسته شد؛ امکان ارسال پیام جدید وجود ندارد.')
+        else ...[
+          if (_image != null) Row(children: [const Icon(Icons.image_outlined), Expanded(child: Text(_image!.name, maxLines: 1, overflow: TextOverflow.ellipsis)), IconButton(onPressed: () => setState(() => _image = null), icon: const Icon(Icons.close_rounded))]),
+          Row(children: [IconButton(tooltip: 'پیوست تصویر', onPressed: _busy ? null : _chooseImage, icon: const Icon(Icons.attach_file_rounded)), Expanded(child: TextField(controller: _text, maxLines: 3, minLines: 1, decoration: const InputDecoration(hintText: 'پاسخ به مشتری…', border: OutlineInputBorder()))), const SizedBox(width: 8), IconButton.filled(onPressed: _busy ? null : _send, icon: _busy ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send_rounded))]),
+        ],
       ]))),
     ]));
   }

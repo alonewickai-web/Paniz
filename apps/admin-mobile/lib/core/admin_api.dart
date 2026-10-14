@@ -559,6 +559,10 @@ class AdminApi {
   Future<List<JsonMap>> adminSupportTickets() async =>
       _list(_payload(await dio.get('admin/support/tickets')));
 
+  Future<JsonMap> closeSupportTicket(String id) async => _data(
+    await dio.patch('admin/support/tickets/$id/close'),
+  );
+
   Future<List<JsonMap>> adminReturns() async =>
       _list(_payload(await dio.get('admin/support/returns')));
 

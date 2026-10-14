@@ -62,12 +62,14 @@ export class SupportService {
 
   async customerReply(customerId: bigint, ticketIdText: string, input: SupportMessageDto) {
     const ticketId = parseId(ticketIdText);
-    const ticket = await this.prisma.customerSupportTicket.findFirst({ where: { id: ticketId, customerId }, select: { id: true } });
+    const ticket = await this.prisma.customerSupportTicket.findFirst({ where: { id: ticketId, customerId }, select: { id: true, status: true } });
     if (!ticket) throw new NotFoundException({ code: "SUPPORT_TICKET_NOT_FOUND", message: "گفت‌وگوی پشتیبانی پیدا نشد." });
-    await this.prisma.$transaction([
-      this.prisma.customerSupportMessage.create({ data: { ticketId, senderType: "customer", customerId, body: input.body.trim(), imagePath: input.imagePath ?? null } }),
-      this.prisma.customerSupportTicket.update({ where: { id: ticketId }, data: { status: "open", lastMessageAt: new Date() } }),
-    ]);
+    if (ticket.status === "closed") throw new ConflictException({ code: "SUPPORT_TICKET_CLOSED", message: "این تیکت بسته شده است و امکان ارسال پیام ندارد." });
+    await this.prisma.$transaction(async (transaction) => {
+      await transaction.customerSupportMessage.create({ data: { ticketId, senderType: "customer", customerId, body: input.body.trim(), imagePath: input.imagePath ?? null } });
+      const updated = await transaction.customerSupportTicket.updateMany({ where: { id: ticketId, customerId, status: { not: "closed" } }, data: { status: "open", lastMessageAt: new Date() } });
+      if (updated.count === 0) throw new ConflictException({ code: "SUPPORT_TICKET_CLOSED", message: "این تیکت بسته شده است و امکان ارسال پیام ندارد." });
+    });
     await this.notifications.notifyOwners({ type: "customer_message", title: "پیام تازه در پشتیبانی", body: input.body.trim().slice(0, 350), entityType: "support_ticket", entityId: ticketId });
     return { data: { sent: true } };
   }
@@ -106,14 +108,30 @@ export class SupportService {
 
   async adminReply(adminId: bigint, ticketIdText: string, input: SupportMessageDto) {
     const ticketId = parseId(ticketIdText);
-    const ticket = await this.prisma.customerSupportTicket.findUnique({ where: { id: ticketId }, select: { id: true, customerId: true } });
+    const ticket = await this.prisma.customerSupportTicket.findUnique({ where: { id: ticketId }, select: { id: true, customerId: true, status: true } });
     if (!ticket) throw new NotFoundException({ code: "SUPPORT_TICKET_NOT_FOUND", message: "گفت‌وگوی پشتیبانی پیدا نشد." });
-    await this.prisma.$transaction([
-      this.prisma.customerSupportMessage.create({ data: { ticketId, senderType: "admin", adminId, body: input.body.trim(), imagePath: input.imagePath ?? null } }),
-      this.prisma.customerSupportTicket.update({ where: { id: ticketId }, data: { status: "waiting_customer", lastMessageAt: new Date() } }),
-    ]);
+    if (ticket.status === "closed") throw new ConflictException({ code: "SUPPORT_TICKET_CLOSED", message: "این تیکت بسته شده است و امکان ارسال پیام ندارد." });
+    await this.prisma.$transaction(async (transaction) => {
+      await transaction.customerSupportMessage.create({ data: { ticketId, senderType: "admin", adminId, body: input.body.trim(), imagePath: input.imagePath ?? null } });
+      const updated = await transaction.customerSupportTicket.updateMany({ where: { id: ticketId, status: { not: "closed" } }, data: { status: "waiting_customer", lastMessageAt: new Date() } });
+      if (updated.count === 0) throw new ConflictException({ code: "SUPPORT_TICKET_CLOSED", message: "این تیکت بسته شده است و امکان ارسال پیام ندارد." });
+    });
     await this.push.notifyCustomer(ticket.customerId, "پاسخ پشتیبانی پانیذ", input.body.trim().slice(0, 160), "/account#support");
     return { data: { sent: true } };
+  }
+
+  async closeTicket(ticketIdText: string) {
+    const ticketId = parseId(ticketIdText);
+    const ticket = await this.prisma.customerSupportTicket.findUnique({ where: { id: ticketId }, select: { id: true, customerId: true, subject: true } });
+    if (!ticket) throw new NotFoundException({ code: "SUPPORT_TICKET_NOT_FOUND", message: "گفت‌وگوی پشتیبانی پیدا نشد." });
+    const updated = await this.prisma.customerSupportTicket.updateMany({
+      where: { id: ticketId, status: { not: "closed" } },
+      data: { status: "closed", lastMessageAt: new Date() },
+    });
+    if (updated.count > 0) {
+      await this.push.notifyCustomer(ticket.customerId, "تیکت بسته شد", `درخواست «${ticket.subject}» بسته شد.`, "/account#support");
+    }
+    return { data: { status: "closed", alreadyClosed: updated.count === 0 } };
   }
 
   async adminReturns() {

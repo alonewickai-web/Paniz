@@ -455,6 +455,7 @@ html[data-theme="dark"] .customer-feedback-success { background: #1c3027; border
 .customer-ticket { overflow: hidden; border: 1px solid var(--line); border-radius: 13px; }
 .customer-ticket-heading { display: flex; justify-content: space-between; gap: 10px; padding: 12px 14px; background: var(--rose-soft); }
 .customer-ticket-heading > span { color: var(--muted); font-size: 11px; }
+.customer-ticket-closed { margin: 0 12px; padding: 10px 12px; border-radius: 10px; color: var(--muted); background: var(--surface-soft); font-size: 12px; line-height: 1.8; }
 .customer-ticket ol { display: grid; gap: 9px; margin: 0; padding: 12px; list-style: none; }
 .customer-ticket ol li { max-width: 90%; padding: 10px 12px; border-radius: 12px; background: var(--surface-soft); }
 .customer-ticket ol li.from-support { margin-inline-end: auto; border-start-start-radius: 3px; }

@@ -29,6 +29,13 @@ export class AdminSupportController {
     return this.support.adminReply(request.admin!.id, id, body);
   }
 
+  @Patch("tickets/:id/close")
+  @RequireAdminPermission("customers.message")
+  @ApiOperation({ summary: "بستن گفت‌وگوی پشتیبانی و اطلاع به مشتری" })
+  closeTicket(@Param("id") id: string) {
+    return this.support.closeTicket(id);
+  }
+
   @Post("uploads/image")
   @UseInterceptors(FileInterceptor("file", {
     storage: diskStorage({ destination: supportImageRoot(), filename: (_request, file, callback) => {
