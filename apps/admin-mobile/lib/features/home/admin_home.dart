@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/admin_api.dart';
 import '../../core/admin_avatar.dart';
-import '../../core/admin_network_image.dart';
 import '../auth/profile_screen.dart';
 import '../staff/staff_management_screen.dart';
 import '../activity/audit_log_screen.dart';
@@ -145,9 +144,6 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
   @override
   Widget build(BuildContext context) {
     final dashboard = ref.watch(dashboardProvider);
-    final storeBranding =
-        ref.watch(publicStoreConfigurationProvider).asData?.value;
-    final storeLogoPath = storeBranding?['logoPath'] as String?;
     final newOrders = dashboard.maybeWhen(
       data: _newOrderCount,
       orElse: () => 0,
@@ -183,12 +179,11 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: AdminNetworkImage(
-                  imagePath: storeLogoPath,
+                child: Image.asset(
+                  'assets/branding/paniz-logo.jpg',
                   width: 36,
                   height: 36,
                   fit: BoxFit.cover,
-                  placeholderColor: context.paniz.primarySoft,
                 ),
               ),
               const SizedBox(width: 10),

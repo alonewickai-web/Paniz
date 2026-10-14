@@ -105,14 +105,21 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
     final current = '${data['theme'] ?? 'rose'}';
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       sectionTitle('نشان فروشگاه'),
-      const Padding(padding: EdgeInsets.only(top: 4, bottom: 10), child: Text('تصویر نشان در سربرگ سایت و کنار منوی برنامهٔ مدیریت نمایش داده می‌شود.', style: TextStyle(color: Color(0xFF74686C), fontSize: 12))),
-      AdminImagePickerField(
-        label: 'تصویر لوگوی پانیذ',
-        aspectRatio: 1,
-        imagePath: data['logoPath'] as String?,
-        onChanged: (path) => _run(() async {
-          await ref.read(adminApiProvider).updateStoreLogo(path);
-        }, path == null ? 'نشان فروشگاه پاک شد' : 'نشان فروشگاه ذخیره شد'),
+      const Padding(padding: EdgeInsets.only(top: 4, bottom: 10), child: Text('نشان اصلی پانیذ در سایت و برنامهٔ مدیریت نمایش داده می‌شود.', style: TextStyle(color: Color(0xFF74686C), fontSize: 12))),
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset('assets/branding/paniz-logo.jpg', width: 76, height: 76, fit: BoxFit.cover),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(child: Text('لوگوی رسمی فروشگاه پانیذ', style: TextStyle(fontWeight: FontWeight.w700))),
+            ],
+          ),
+        ),
       ),
       const SizedBox(height: 18),
       sectionTitle('قالب‌های آمادهٔ سایت'),

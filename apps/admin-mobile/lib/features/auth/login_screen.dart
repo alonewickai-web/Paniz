@@ -58,11 +58,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Center(
-                        child: Container(
-                          width: 68,
-                          height: 68,
-                          decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: .42), borderRadius: BorderRadius.circular(22)),
-                          child: Icon(Icons.storefront_rounded, color: Theme.of(context).colorScheme.primary, size: 31),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(22),
+                          child: Image.asset(
+                            'assets/branding/paniz-logo.jpg',
+                            width: 68,
+                            height: 68,
+                            fit: BoxFit.cover,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 18),

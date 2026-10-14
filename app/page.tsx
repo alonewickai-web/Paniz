@@ -659,7 +659,7 @@ export default function Home() {
             <Menu size={23} />
           </button>
           <a className="brand" href="#top" aria-label="صفحه اصلی پانیذ">
-            <span className="brand-mark">پ</span>
+            <img className="brand-image" src="/paniz-logo.jpg" alt="" />
             <span className="brand-word">پانیذ</span>
           </a>
 
@@ -897,7 +897,7 @@ export default function Home() {
 
       <footer className="site-footer" id="footer">
         <div className="footer-inner page-shell">
-          <div className="footer-brand"><a className="brand" href="#top"><span className="brand-mark">پ</span><span className="brand-word">پانیذ</span></a><p>پانیذ؛ برای روزهایی که می‌خوای خودت باشی.</p></div>
+          <div className="footer-brand"><a className="brand" href="#top"><img className="brand-image" src="/paniz-logo.jpg" alt="" /><span className="brand-word">پانیذ</span></a><p>پانیذ؛ برای روزهایی که می‌خوای خودت باشی.</p></div>
           <div><strong>راهنمای خرید</strong><Link href="/help/shipping">روش‌های ارسال</Link><Link href="/policies/returns">شرایط تعویض</Link><Link href="/help/faq">سؤالات پرتکرار</Link></div>
           <div><strong>همراه پانیذ</strong><Link href="/about">دربارهٔ ما</Link><Link href="/contact">تماس با ما</Link><Link href="/policies/privacy">حریم خصوصی</Link></div>
           <div className="newsletter"><strong>خبرهای خوب رو از دست نده</strong><span>خبرنامه بعد از اتصال سرویس اطلاع‌رسانی فعال می‌شود.</span></div>

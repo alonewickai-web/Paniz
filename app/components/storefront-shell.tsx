@@ -13,7 +13,6 @@ export function StorefrontHeader() {
   const pathname = usePathname();
   const count = cart.reduce((total, line) => total + line.quantity, 0);
   const [categoryLinks, setCategoryLinks] = useState<{ name: string; slug: string }[]>([]);
-  const [logoPath, setLogoPath] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState("");
 
   useEffect(() => {
@@ -36,24 +35,13 @@ export function StorefrontHeader() {
     return () => window.removeEventListener("popstate", updateCategory);
   }, [pathname]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    void fetch(`${apiBaseUrl()}/storefront/config`, { cache: "no-store", signal: controller.signal })
-      .then((response) => response.ok ? response.json() as Promise<{ data?: { logoPath?: string | null } }> : null)
-      .then((payload) => { if (!controller.signal.aborted && payload?.data) setLogoPath(payload.data.logoPath || null); })
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, []);
-
-  const logoUrl = logoPath ? new URL(logoPath, new URL(apiBaseUrl()).origin).toString() : null;
-
   return (
     <>
       <div className="announcement-bar">انتخاب‌های دوست‌داشتنی برای روزهای پیشِ رو</div>
       <header className="site-header">
         <div className="header-main page-shell">
           <Link className="brand" href="/" aria-label="صفحهٔ اصلی پانیذ">
-            {logoUrl ? <img className="brand-image" src={logoUrl} alt="" /> : <span className="brand-mark">پ</span>}<span className="brand-word">پانیذ</span>
+            <img className="brand-image" src="/paniz-logo.jpg" alt="" /><span className="brand-word">پانیذ</span>
           </Link>
           <ProductSearchAutocomplete id="store-search" wrapperClassName="header-search-autocomplete" />
           <div className="header-actions">
@@ -84,7 +72,7 @@ export function StorefrontFooter() {
   return (
     <footer className="site-footer store-footer">
       <div className="footer-inner page-shell">
-        <div className="footer-brand"><Link className="brand" href="/"><span className="brand-mark">پ</span><span className="brand-word">پانیذ</span></Link><p>پانیذ؛ برای روزهایی که می‌خوای خودت باشی.</p></div>
+        <div className="footer-brand"><Link className="brand" href="/"><img className="brand-image" src="/paniz-logo.jpg" alt="" /><span className="brand-word">پانیذ</span></Link><p>پانیذ؛ برای روزهایی که می‌خوای خودت باشی.</p></div>
         <div><strong>راهنمای خرید</strong><Link href="/help/shipping">روش‌های ارسال</Link><Link href="/policies/returns">تعویض و مرجوعی</Link><Link href="/help/faq">پرسش‌های پرتکرار</Link></div>
         <div><strong>همراه پانیذ</strong><Link href="/about">دربارهٔ ما</Link><Link href="/contact">تماس با ما</Link><Link href="/policies/privacy">حریم خصوصی</Link></div>
       </div>
