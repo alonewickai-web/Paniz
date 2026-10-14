@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Search, SlidersHorizontal, X } from "lucide-react";
 import { StorefrontShell } from "./storefront-shell";
 import { StoreProductCard } from "./store-product-card";
 import { apiBaseUrl, type ProductListPayload, type StoreCategory, type StoreProduct } from "../lib/catalog";
@@ -22,12 +22,25 @@ type Filters = {
   page: number;
 };
 
+function normalizePrice(value: string) {
+  return value
+    .replace(/[۰-۹٠-٩]/g, (digit) => {
+      const code = digit.charCodeAt(0);
+      return String(code - (code >= 0x06f0 ? 0x06f0 : 0x0660));
+    })
+    .replace(/\D/g, "");
+}
+
+function formatPrice(value: string) {
+  return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
 function readFilters(params: URLSearchParams): Filters {
   return {
     q: params.get("q") ?? "",
     category: params.get("category") ?? "",
-    minPrice: params.get("minPrice") ?? "",
-    maxPrice: params.get("maxPrice") ?? "",
+    minPrice: normalizePrice(params.get("minPrice") ?? ""),
+    maxPrice: normalizePrice(params.get("maxPrice") ?? ""),
     size: params.get("size") ?? "",
     color: params.get("color") ?? "",
     inStock: params.get("inStock") === "true",
@@ -107,6 +120,31 @@ export function ProductsExplorer() {
     setFilters((current) => ({ ...current, [key]: value, ...(key === "page" ? {} : { page: 1 }) }));
   }
 
+  function changePrice(key: "minPrice" | "maxPrice", input: HTMLInputElement) {
+    const digits = normalizePrice(input.value);
+    const selectionStart = input.selectionStart ?? input.value.length;
+    const digitsBeforeCursor = normalizePrice(input.value.slice(0, selectionStart)).length;
+    change(key, digits);
+
+    window.requestAnimationFrame(() => {
+      let cursor = 0;
+      let digitsSeen = 0;
+      const formatted = formatPrice(digits);
+      while (cursor < formatted.length && digitsSeen < digitsBeforeCursor) {
+        if (/\d/.test(formatted[cursor])) digitsSeen += 1;
+        cursor += 1;
+      }
+      input.setSelectionRange(cursor, cursor);
+    });
+  }
+
+  function stepPrice(key: "minPrice" | "maxPrice", delta: 100_000 | -100_000) {
+    const current = filters[key];
+    if (!current && delta < 0) return;
+    const next = BigInt(current || "0") + BigInt(delta);
+    change(key, next < 0n ? "0" : next.toString());
+  }
+
   function clearFilters() {
     setFilters({ q: "", category: "", minPrice: "", maxPrice: "", size: "", color: "", inStock: false, onSale: false, sort: "newest", page: 1 });
   }
@@ -128,7 +166,7 @@ export function ProductsExplorer() {
             <aside className="store-filter-panel" aria-label="فیلتر محصولات">
               <div className="store-filter-title"><strong><SlidersHorizontal size={17} /> فیلترها</strong>{hasFilters && <button onClick={clearFilters}>پاک‌کردن</button>}</div>
               <label className="store-field"><span>دسته‌بندی</span><select value={filters.category} onChange={(event) => change("category", event.target.value)}><option value="">همهٔ دسته‌ها</option>{categoryOptions.map((category) => <option key={category.slug} value={category.slug}>{category.name}</option>)}</select></label>
-              <fieldset className="store-filter-group"><legend>بازهٔ قیمت <small>(تومان)</small></legend><div className="store-price-fields"><label><span className="sr-only">حداقل قیمت</span><input inputMode="numeric" type="number" min="0" placeholder="از" value={filters.minPrice} onChange={(event) => change("minPrice", event.target.value)} /></label><label><span className="sr-only">حداکثر قیمت</span><input inputMode="numeric" type="number" min="0" placeholder="تا" value={filters.maxPrice} onChange={(event) => change("maxPrice", event.target.value)} /></label></div></fieldset>
+              <fieldset className="store-filter-group"><legend>بازهٔ قیمت <small>(تومان)</small></legend><div className="store-price-fields"><label><span className="sr-only">حداقل قیمت</span><div className="store-price-input"><input inputMode="numeric" type="text" placeholder="از" value={formatPrice(filters.minPrice)} onChange={(event) => changePrice("minPrice", event.currentTarget)} /><span className="store-price-stepper"><button type="button" aria-label="افزایش حداقل قیمت، ۱۰۰ هزار تومان" onClick={() => stepPrice("minPrice", 100_000)}><ChevronUp size={13} /></button><button type="button" aria-label="کاهش حداقل قیمت، ۱۰۰ هزار تومان" onClick={() => stepPrice("minPrice", -100_000)}><ChevronDown size={13} /></button></span></div></label><label><span className="sr-only">حداکثر قیمت</span><div className="store-price-input"><input inputMode="numeric" type="text" placeholder="تا" value={formatPrice(filters.maxPrice)} onChange={(event) => changePrice("maxPrice", event.currentTarget)} /><span className="store-price-stepper"><button type="button" aria-label="افزایش حداکثر قیمت، ۱۰۰ هزار تومان" onClick={() => stepPrice("maxPrice", 100_000)}><ChevronUp size={13} /></button><button type="button" aria-label="کاهش حداکثر قیمت، ۱۰۰ هزار تومان" onClick={() => stepPrice("maxPrice", -100_000)}><ChevronDown size={13} /></button></span></div></label></div></fieldset>
               <label className="store-field"><span>سایز</span><input value={filters.size} placeholder="مثلاً M یا ۳۸" onChange={(event) => change("size", event.target.value)} /></label>
               <label className="store-field"><span>رنگ</span><input value={filters.color} placeholder="مثلاً یاسی" onChange={(event) => change("color", event.target.value)} /></label>
               <label className="store-check"><input type="checkbox" checked={filters.inStock} onChange={(event) => change("inStock", event.target.checked)} /><span>فقط کالاهای موجود</span></label>

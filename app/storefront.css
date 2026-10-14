@@ -22,6 +22,11 @@
 .store-filter-group legend small { color: var(--muted); font-weight: 400; }
 .store-price-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .store-price-fields input { text-align: center; }
+.store-price-input { position: relative; }
+.store-price-input input { padding-inline-start: 34px; }
+.store-price-stepper { position: absolute; inset-inline-start: 4px; top: 4px; bottom: 4px; display: grid; width: 25px; grid-template-rows: 1fr 1fr; }
+.store-price-stepper button { display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; }
+.store-price-stepper button:hover { background: var(--rose-light); color: var(--rose); }
 .store-check { display: flex; align-items: center; gap: 9px; color: #5d565d; font-size: 13px; cursor: pointer; }
 .store-check input { width: 17px; height: 17px; accent-color: var(--rose); }
 .store-catalog-results { min-width: 0; }
