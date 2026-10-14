@@ -141,8 +141,8 @@ export function ProductsExplorer() {
   function stepPrice(key: "minPrice" | "maxPrice", delta: 100_000 | -100_000) {
     const current = filters[key];
     if (!current && delta < 0) return;
-    const next = BigInt(current || "0") + BigInt(delta);
-    change(key, next < 0n ? "0" : next.toString());
+    const next = Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Number(current || "0") + delta));
+    change(key, String(Math.trunc(next)));
   }
 
   function clearFilters() {
