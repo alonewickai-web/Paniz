@@ -17,6 +17,12 @@ const AddressLocationPicker = dynamic(
 
 type Quote = { items: { variantId: string; productName: string; color: string; size: string; quantity: number; unitPriceToman: number; lineTotalToman: number }[]; subtotalToman: number; discountToman: number; couponCode: string | null; shippingToman: number | null; shippingLabel: string | null; totalToman: number | null; shippingConfigured: boolean; paymentConfigured: boolean };
 type CreatedOrder = { orderNumber: string; status: string; paymentStatus: string; totalToman: number; shippingToman: number; reservationExpiresAt: string | null; shippingConfigured: boolean; paymentConfigured: boolean };
+class CheckoutQuoteError extends Error {
+  constructor(message: string, readonly code: string | null) {
+    super(message);
+    this.name = "CheckoutQuoteError";
+  }
+}
 type AddressForm = {
   title: string; recipientName: string; recipientPhone: string; province: string; city: string;
   street: string; alley: string; plaqueNumber: string; floor: string; unit: string; backupPhone: string;
@@ -35,6 +41,7 @@ export default function CheckoutPage() {
   const { cart, setCart, ready } = useStorefront();
   const [quoteResult, setQuoteResult] = useState<{ key: string; quote: Quote } | null>(null);
   const [quoteError, setQuoteError] = useState("");
+  const [couponError, setCouponError] = useState("");
   const [loadingQuote, setLoadingQuote] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -92,12 +99,18 @@ export default function CheckoutPage() {
       signal: controller.signal, cache: "no-store",
     }).then(async (response) => {
       const payload = await response.json();
-      if (!response.ok) throw new Error(readError(payload));
+      if (!response.ok) throw new CheckoutQuoteError(readError(payload), readErrorCode(payload));
       if (!controller.signal.aborted) setQuoteResult({ key: quoteInputKey, quote: payload.data as Quote });
     }).catch((error: unknown) => {
       if (!controller.signal.aborted) {
-        setQuoteError(error instanceof Error ? error.message : "بررسی سبد خرید انجام نشد.");
-        setQuoteResult(null);
+        if (appliedCoupon && error instanceof CheckoutQuoteError && error.code?.startsWith("COUPON_")) {
+          setCouponError(error.message);
+          setQuoteError("");
+          setAppliedCoupon("");
+        } else {
+          setQuoteError(error instanceof Error ? error.message : "بررسی سبد خرید انجام نشد.");
+          setQuoteResult(null);
+        }
       }
     }).finally(() => { if (!controller.signal.aborted) setLoadingQuote(false); });
     return () => controller.abort();
@@ -205,11 +218,12 @@ export default function CheckoutPage() {
               </div>
               <aside className="store-order-summary store-checkout-summary"><h2>خلاصهٔ انتخاب‌ها</h2>
                 {(quote?.items ?? []).map((item) => <div className="store-checkout-item" key={item.variantId}><span>{item.productName}<small>{item.color} · {item.size} · {new Intl.NumberFormat("fa-IR").format(item.quantity)} عدد</small></span><strong>{formatToman(item.lineTotalToman)}</strong></div>)}
-                <form className="store-coupon-form" onSubmit={(event) => { event.preventDefault(); setSubmitError(""); const code = couponDraft.trim().toUpperCase(); if (code !== appliedCoupon) { setQuoteError(""); setAppliedCoupon(code); } }}>
-                  <label className="store-field"><span>کد تخفیف</span><input dir="ltr" maxLength={64} value={couponDraft} onChange={(event) => setCouponDraft(event.target.value)} placeholder="مثلاً PANI20" /></label>
+                <form className="store-coupon-form" onSubmit={(event) => { event.preventDefault(); setSubmitError(""); setCouponError(""); const code = couponDraft.trim().toUpperCase(); if (code !== appliedCoupon) { setQuoteError(""); setAppliedCoupon(code); } }}>
+                  <label className="store-field"><span>کد تخفیف</span><input dir="ltr" maxLength={64} value={couponDraft} onChange={(event) => { setCouponDraft(event.target.value); setCouponError(""); }} placeholder="مثلاً PANI20" /></label>
                   <button className="outline-button" type="submit" disabled={!couponDraft.trim() || loadingQuote}>اعمال کد</button>
-                  {appliedCoupon && <button className="customer-text-button" type="button" onClick={() => { setAppliedCoupon(""); setCouponDraft(""); setQuoteError(""); }}>حذف کد</button>}
+                  {appliedCoupon && <button className="customer-text-button" type="button" onClick={() => { setAppliedCoupon(""); setCouponDraft(""); setQuoteError(""); setCouponError(""); }}>حذف کد</button>}
                 </form>
+                {couponError && <p className="store-inline-error" role="alert">{couponError}</p>}
                 {quoteError && <p className="store-inline-error" role="alert">{quoteError}</p>}
                 <div><span>جمع کالاها</span><strong>{quote ? formatToman(quote.subtotalToman) : loadingQuote ? "در حال بررسی…" : "—"}</strong></div><div><span>{quote?.shippingLabel || "هزینهٔ ارسال"}</span><strong>{quote ? quote.shippingConfigured ? quote.shippingToman === 0 ? "رایگان" : formatToman(quote.shippingToman ?? 0) : "تنظیم نشده" : "—"}</strong></div>
                 {Boolean(quote?.discountToman) && <div><span>تخفیف {quote?.couponCode}</span><strong>- {formatToman(quote?.discountToman ?? 0)}</strong></div>}
@@ -242,4 +256,11 @@ function readError(payload: unknown): string {
     if (value.error?.message) return value.error.message;
   }
   return "قیمت یا موجودی یکی از کالاها تغییر کرده؛ سبد را بررسی کن.";
+}
+
+function readErrorCode(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const value = payload as { code?: unknown; error?: { code?: unknown } };
+  if (typeof value.error?.code === "string") return value.error.code;
+  return typeof value.code === "string" ? value.code : null;
 }
