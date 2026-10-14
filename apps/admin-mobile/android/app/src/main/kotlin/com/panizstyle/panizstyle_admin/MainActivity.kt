@@ -1,13 +1,16 @@
 package com.panizstyle.panizstyle_admin
 
 import android.content.Intent
+import android.Manifest
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.Settings
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterFragmentActivity
@@ -18,9 +21,32 @@ import java.security.MessageDigest
 import java.util.UUID
 
 class MainActivity : FlutterFragmentActivity() {
+    companion object {
+        const val EXTRA_NOTIFICATION_ID = "paniz.notification.id"
+    }
+
     private var pickerResult: MethodChannel.Result? = null
     private var biometricResult: MethodChannel.Result? = null
+    private var notificationPermissionResult: MethodChannel.Result? = null
+    private var notificationChannel: MethodChannel? = null
+    private var pendingNotificationId: String? = null
     private val apkPickerRequest = 8401
+    private val notificationPermissionRequest = 8402
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        pendingNotificationId = intent?.getStringExtra(EXTRA_NOTIFICATION_ID)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val id = intent.getStringExtra(EXTRA_NOTIFICATION_ID)?.trim().orEmpty()
+        if (id.isNotEmpty()) {
+            pendingNotificationId = id
+            notificationChannel?.invokeMethod("notificationOpened", id)
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -106,6 +132,77 @@ class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        notificationChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "paniz/admin-notifications")
+        notificationChannel?.setMethodCallHandler { call, result ->
+                try {
+                    when (call.method) {
+                        "takePendingNotification" -> {
+                            result.success(pendingNotificationId)
+                            pendingNotificationId = null
+                        }
+                        "requestPermission" -> requestNotificationPermission(result)
+                        "hasPermission" -> result.success(canShowNotifications())
+                        "startMonitoring" -> {
+                            val apiBaseUrl = call.argument<String>("apiBaseUrl")?.trim().orEmpty()
+                            val accessToken = call.argument<String>("accessToken")?.trim().orEmpty()
+                            val deviceId = call.argument<String>("deviceId")?.trim().orEmpty()
+                            val parsedApi = Uri.parse(apiBaseUrl)
+                            if (parsedApi.scheme != "https" || parsedApi.host.isNullOrBlank()) throw IllegalArgumentException("نشانی امن سرور اعلان معتبر نیست.")
+                            if (accessToken.length < 32 || !deviceId.matches(Regex("^[0-9a-fA-F-]{36}$"))) throw IllegalArgumentException("نشست یا شناسهٔ دستگاه معتبر نیست.")
+                            NotificationMonitorService.start(
+                                this,
+                                apiBaseUrl,
+                                accessToken,
+                                deviceId,
+                                call.argument<Boolean>("soundEnabled") ?: false,
+                                call.argument<Boolean>("vibrationEnabled") ?: true,
+                            )
+                            result.success(true)
+                        }
+                        "stopMonitoring" -> {
+                            NotificationMonitorService.stop(this)
+                            result.success(true)
+                        }
+                        else -> result.notImplemented()
+                    }
+                } catch (error: Exception) {
+                    result.error("NOTIFICATION_MONITOR_ERROR", error.message ?: "سرویس اعلان اجرا نشد.", null)
+                }
+            }
+    }
+
+    private fun requestNotificationPermission(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            result.success(canShowNotifications())
+            return
+        }
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            result.success(canShowNotifications())
+            return
+        }
+        if (notificationPermissionResult != null) {
+            result.error("NOTIFICATION_PERMISSION_BUSY", "درخواست اجازهٔ اعلان دیگری در حال انجام است.", null)
+            return
+        }
+        notificationPermissionResult = result
+        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), notificationPermissionRequest)
+    }
+
+    @Deprecated("Android compatibility callback")
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != notificationPermissionRequest) return
+        val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED && canShowNotifications()
+        notificationPermissionResult?.success(granted)
+        notificationPermissionResult = null
+    }
+
+    private fun canShowNotifications(): Boolean {
+        val notificationsEnabled = NotificationManagerCompat.from(this).areNotificationsEnabled()
+        val runtimePermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        return notificationsEnabled && runtimePermissionGranted
     }
 
     private fun authenticateBiometric(result: MethodChannel.Result) {

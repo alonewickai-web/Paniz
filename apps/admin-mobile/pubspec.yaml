@@ -1,7 +1,7 @@
 name: panizstyle_admin
 description: PanizStyle store management app
 publish_to: none
-version: 1.0.19+2026109008
+version: 1.0.20+2026109009
 
 environment:
   sdk: '>=3.7.0 <4.0.0'

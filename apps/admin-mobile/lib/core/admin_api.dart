@@ -1,7 +1,8 @@
-import 'dart:typed_data';
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/services.dart';
 
 typedef JsonMap = Map<String, dynamic>;
 
@@ -63,9 +64,30 @@ class AdminApi {
   final FlutterSecureStorage _storage;
   late final Dio dio;
   static const _tokenKey = 'panizstyle.admin.access-token';
+  static const _notificationDeviceKey = 'paniz.admin.notification-device-id';
+  static const _notificationChannel = MethodChannel(
+    'paniz/admin-notifications',
+  );
 
   Future<bool> hasSavedSession() async =>
       (await _storage.read(key: _tokenKey))?.isNotEmpty == true;
+
+  Future<String> notificationDeviceId() async {
+    final saved = await _storage.read(key: _notificationDeviceKey);
+    if (saved != null && RegExp(r'^[0-9a-f-]{36}$').hasMatch(saved))
+      return saved;
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final hex =
+        bytes.map((value) => value.toRadixString(16).padLeft(2, '0')).join();
+    final id =
+        '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
+    await _storage.write(key: _notificationDeviceKey, value: id);
+    return id;
+  }
+
   static const _webBaseUrl = String.fromEnvironment(
     'PANIZ_WEB_BASE_URL',
     defaultValue: 'https://panizstyle.ir/',
@@ -153,6 +175,7 @@ class AdminApi {
 
   Future<void> logout() async {
     try {
+      await stopNotificationMonitoring();
       await dio.post('admin/auth/logout');
     } finally {
       await clearSession();
@@ -160,6 +183,7 @@ class AdminApi {
   }
 
   Future<void> clearSession() async {
+    await stopNotificationMonitoring();
     dio.options.headers.remove('Authorization');
     await _storage.delete(key: _tokenKey);
   }
@@ -293,6 +317,81 @@ class AdminApi {
   Future<JsonMap> adminNotifications() async =>
       _envelope(await dio.get('admin/notifications'));
 
+  Future<JsonMap> notificationPreferences() async =>
+      _data(await dio.get('admin/notifications/preferences'));
+
+  Future<JsonMap> updateNotificationPreferences(JsonMap values) async =>
+      _data(await dio.patch('admin/notifications/preferences', data: values));
+
+  Future<JsonMap> registerNotificationDevice(String deviceId) async => _data(
+    await dio.post(
+      'admin/notifications/devices',
+      data: {'deviceId': deviceId, 'deviceName': 'PANIZ Admin · Android'},
+    ),
+  );
+
+  Future<List<JsonMap>> notificationDevices() async =>
+      _list(_payload(await dio.get('admin/notifications/devices')));
+
+  Future<void> revokeNotificationDevice(String deviceId) async {
+    await dio.delete('admin/notifications/devices/$deviceId');
+  }
+
+  Future<bool> requestNotificationPermission() async =>
+      await _notificationChannel.invokeMethod<bool>('requestPermission') ??
+      false;
+
+  Future<bool> hasNotificationPermission() async =>
+      await _notificationChannel.invokeMethod<bool>('hasPermission') ?? false;
+
+  Future<void> startNotificationMonitoring({
+    required String deviceId,
+    required bool soundEnabled,
+    required bool vibrationEnabled,
+  }) async {
+    final token = await _storage.read(key: _tokenKey);
+    if (token == null || token.isEmpty) {
+      throw const AdminApiException(
+        'برای فعال‌کردن اعلان‌ها دوباره وارد حساب شوید.',
+      );
+    }
+    await _notificationChannel.invokeMethod<void>('startMonitoring', {
+      'apiBaseUrl': dio.options.baseUrl,
+      'accessToken': token,
+      'deviceId': deviceId,
+      'soundEnabled': soundEnabled,
+      'vibrationEnabled': vibrationEnabled,
+    });
+  }
+
+  Future<void> stopNotificationMonitoring() async {
+    try {
+      await _notificationChannel.invokeMethod<void>('stopMonitoring');
+    } on PlatformException {
+      /* Service may already be stopped. */
+    } catch (_) {
+      /* Native service may be unavailable on non-Android builds. */
+    }
+  }
+
+  Future<void> resumeNotificationMonitoringIfEnabled() async {
+    try {
+      final preferences = await notificationPreferences();
+      if (preferences['backgroundMonitoringEnabled'] != true ||
+          !await hasNotificationPermission())
+        return;
+      final deviceId = await notificationDeviceId();
+      await registerNotificationDevice(deviceId);
+      await startNotificationMonitoring(
+        deviceId: deviceId,
+        soundEnabled: preferences['soundEnabled'] == true,
+        vibrationEnabled: preferences['vibrationEnabled'] != false,
+      );
+    } catch (_) {
+      // Do not block sign-in or session restoration on background notification setup.
+    }
+  }
+
   Future<void> markAdminNotificationRead(String id) async {
     await dio.patch('admin/notifications/$id/read');
   }
@@ -307,18 +406,27 @@ class AdminApi {
   Future<List<JsonMap>> adminChatMessages(String contactId) async =>
       _list(_payload(await dio.get('admin/chat/messages/$contactId')));
 
-  Future<JsonMap> sendAdminChat({String? recipientAdminId, required String body, bool broadcast = false}) async =>
-      _data(await dio.post('admin/chat/messages', data: {
+  Future<JsonMap> sendAdminChat({
+    String? recipientAdminId,
+    required String body,
+    bool broadcast = false,
+  }) async => _data(
+    await dio.post(
+      'admin/chat/messages',
+      data: {
         if (recipientAdminId != null) 'recipientAdminId': recipientAdminId,
         'body': body,
         'broadcast': broadcast,
-      }));
+      },
+    ),
+  );
 
   Future<JsonMap> siteVisitAnalytics() async =>
       _data(await dio.get('admin/analytics/site-visits'));
 
-  Future<JsonMap> financeReport(String range) async =>
-      _data(await dio.get('admin/analytics/finance', queryParameters: {'range': range}));
+  Future<JsonMap> financeReport(String range) async => _data(
+    await dio.get('admin/analytics/finance', queryParameters: {'range': range}),
+  );
 
   Future<JsonMap> customers({
     int page = 1,
@@ -454,17 +562,36 @@ class AdminApi {
   Future<List<JsonMap>> adminReturns() async =>
       _list(_payload(await dio.get('admin/support/returns')));
 
-  Future<JsonMap> replyToSupportTicket(String id, String body, {String? imagePath}) async =>
-      _data(await dio.post('admin/support/tickets/$id/messages', data: {'body': body, if (imagePath != null) 'imagePath': imagePath}));
+  Future<JsonMap> replyToSupportTicket(
+    String id,
+    String body, {
+    String? imagePath,
+  }) async => _data(
+    await dio.post(
+      'admin/support/tickets/$id/messages',
+      data: {'body': body, if (imagePath != null) 'imagePath': imagePath},
+    ),
+  );
 
-  Future<JsonMap> updateReturnRequest(String id, String status, String note) async =>
-      _data(await dio.patch('admin/support/returns/$id', data: {'status': status, 'adminNote': note}));
+  Future<JsonMap> updateReturnRequest(
+    String id,
+    String status,
+    String note,
+  ) async => _data(
+    await dio.patch(
+      'admin/support/returns/$id',
+      data: {'status': status, 'adminNote': note},
+    ),
+  );
 
   Future<JsonMap> uploadSupportImage(Uint8List bytes, String filename) async =>
       _uploadTo('admin/support/uploads/image', bytes, filename);
 
-  Future<JsonMap> uploadReturnReceipt(String id, Uint8List bytes, String filename) async =>
-      _uploadTo('admin/support/returns/$id/receipt', bytes, filename);
+  Future<JsonMap> uploadReturnReceipt(
+    String id,
+    Uint8List bytes,
+    String filename,
+  ) async => _uploadTo('admin/support/returns/$id/receipt', bytes, filename);
 
   Future<JsonMap> updateStoreTheme(String theme) async =>
       _data(await dio.patch('admin/store/theme', data: {'theme': theme}));
@@ -602,7 +729,11 @@ class AdminApi {
     return _uploadTo('admin/uploads/product-image', bytes, filename);
   }
 
-  Future<JsonMap> _uploadTo(String path, Uint8List bytes, String filename) async {
+  Future<JsonMap> _uploadTo(
+    String path,
+    Uint8List bytes,
+    String filename,
+  ) async {
     final extension = filename.split('.').last.toLowerCase();
     final mediaType = switch (extension) {
       'jpg' || 'jpeg' => 'image/jpeg',

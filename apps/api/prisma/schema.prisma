@@ -25,6 +25,9 @@ model AdminUser {
   updatedStoreSettings  StoreSetting[]
   auditLogs             AdminAuditLog[]
   sessions              AdminSession[]
+  notificationDevices   AdminNotificationDevice[]
+  notificationPreferences AdminNotificationPreference?
+  notificationSocketTickets AdminNotificationSocketTicket[]
   permissions           AdminUserPermission[]    @relation("AdminPermissionOwner")
   permissionsGranted    AdminUserPermission[]    @relation("AdminPermissionGrantor")
   smsCampaigns          SmsCampaign[]
@@ -84,6 +87,7 @@ model AdminNotification {
   readAt      DateTime? @map("read_at") @db.DateTime(3)
   createdAt   DateTime  @default(now()) @map("created_at") @db.DateTime(3)
   admin       AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  deliveries  AdminNotificationDelivery[]
 
   @@index([adminId, readAt, createdAt], map: "ix_admin_notifications_unread_created")
   @@map("admin_notifications")
@@ -120,6 +124,82 @@ model AdminPushDevice {
   @@map("admin_push_devices")
 }
 
+model AdminNotificationDevice {
+  id                 BigInt                         @id @default(autoincrement()) @db.UnsignedBigInt
+  adminId            BigInt                         @map("admin_id") @db.UnsignedBigInt
+  sessionId          BigInt                         @map("session_id") @db.UnsignedBigInt
+  deviceId           String                         @map("device_id") @db.VarChar(64)
+  deviceName         String                         @default("مدیر اندروید") @map("device_name") @db.VarChar(120)
+  platform           String                         @default("android") @db.VarChar(16)
+  lastSeenAt         DateTime?                      @map("last_seen_at") @db.DateTime(3)
+  lastNotificationId BigInt                         @default(0) @map("last_notification_id") @db.UnsignedBigInt
+  revokedAt          DateTime?                      @map("revoked_at") @db.DateTime(3)
+  createdAt          DateTime                       @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime                       @updatedAt @map("updated_at") @db.DateTime(3)
+  admin              AdminUser                      @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  session            AdminSession                   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  deliveries         AdminNotificationDelivery[]
+  socketTickets      AdminNotificationSocketTicket[]
+
+  @@unique([adminId, deviceId], map: "uq_admin_notification_devices_admin_device")
+  @@index([adminId, revokedAt, lastSeenAt], map: "ix_admin_notification_devices_active")
+  @@index([sessionId, revokedAt], map: "ix_admin_notification_devices_session")
+  @@map("admin_notification_devices")
+}
+
+model AdminNotificationPreference {
+  adminId                     BigInt   @id @map("admin_id") @db.UnsignedBigInt
+  newOrdersEnabled            Boolean  @default(true) @map("new_orders_enabled")
+  paymentsEnabled             Boolean  @default(true) @map("payments_enabled")
+  lowStockEnabled             Boolean  @default(true) @map("low_stock_enabled")
+  securityAlertsEnabled       Boolean  @default(true) @map("security_alerts_enabled")
+  serverAlertsEnabled         Boolean  @default(true) @map("server_alerts_enabled")
+  customerMessagesEnabled     Boolean  @default(true) @map("customer_messages_enabled")
+  adminMessagesEnabled        Boolean  @default(true) @map("admin_messages_enabled")
+  appUpdatesEnabled           Boolean  @default(true) @map("app_updates_enabled")
+  soundEnabled                Boolean  @default(false) @map("sound_enabled")
+  vibrationEnabled            Boolean  @default(true) @map("vibration_enabled")
+  backgroundMonitoringEnabled Boolean  @default(false) @map("background_monitoring_enabled")
+  updatedAt                   DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+  admin                       AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@map("admin_notification_preferences")
+}
+
+model AdminNotificationDelivery {
+  id             BigInt                  @id @default(autoincrement()) @db.UnsignedBigInt
+  notificationId BigInt                  @map("notification_id") @db.UnsignedBigInt
+  deviceId       BigInt                  @map("device_id") @db.UnsignedBigInt
+  status         String                  @default("sent") @db.VarChar(20)
+  attempts       Int                     @default(1) @db.UnsignedInt
+  lastAttemptAt  DateTime                @default(now()) @map("last_attempt_at") @db.DateTime(3)
+  deliveredAt    DateTime?               @map("delivered_at") @db.DateTime(3)
+  createdAt      DateTime                @default(now()) @map("created_at") @db.DateTime(3)
+  notification   AdminNotification       @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  device         AdminNotificationDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, deviceId], map: "uq_admin_notification_deliveries_notification_device")
+  @@index([deviceId, status, createdAt], map: "ix_admin_notification_deliveries_device_status")
+  @@map("admin_notification_deliveries")
+}
+
+model AdminNotificationSocketTicket {
+  id         BigInt                  @id @default(autoincrement()) @db.UnsignedBigInt
+  adminId    BigInt                  @map("admin_id") @db.UnsignedBigInt
+  deviceId   BigInt                  @map("device_id") @db.UnsignedBigInt
+  sessionId  BigInt                  @map("session_id") @db.UnsignedBigInt
+  tokenHash  String                  @unique(map: "uq_admin_notification_socket_tickets_hash") @map("token_hash") @db.Char(64)
+  expiresAt  DateTime                @map("expires_at") @db.DateTime(3)
+  consumedAt DateTime?               @map("consumed_at") @db.DateTime(3)
+  createdAt  DateTime                @default(now()) @map("created_at") @db.DateTime(3)
+  admin      AdminUser               @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  device     AdminNotificationDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  session    AdminSession            @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt, consumedAt], map: "ix_admin_notification_socket_tickets_expiry")
+  @@map("admin_notification_socket_tickets")
+}
+
 model AdminSession {
   id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
   adminId    BigInt    @map("admin_id") @db.UnsignedBigInt
@@ -129,6 +209,8 @@ model AdminSession {
   lastUsedAt DateTime? @map("last_used_at") @db.DateTime(3)
   createdAt  DateTime  @default(now()) @map("created_at") @db.DateTime(3)
   admin      AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  notificationDevices AdminNotificationDevice[]
+  notificationSocketTickets AdminNotificationSocketTicket[]
 
   @@index([adminId, expiresAt], map: "ix_admin_sessions_admin_expiry")
   @@index([expiresAt], map: "ix_admin_sessions_expiry")

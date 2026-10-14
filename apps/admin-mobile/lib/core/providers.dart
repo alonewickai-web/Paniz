@@ -24,7 +24,8 @@ class AuthController extends AsyncNotifier<AdminIdentity?> {
 
   Future<bool> _authenticateWithBiometrics() async {
     try {
-      return await _biometricChannel.invokeMethod<bool>('authenticate') ?? false;
+      return await _biometricChannel.invokeMethod<bool>('authenticate') ??
+          false;
     } on PlatformException {
       return false;
     }
@@ -39,6 +40,7 @@ class AuthController extends AsyncNotifier<AdminIdentity?> {
       if (!unlocked) return null;
     }
     final admin = await api.restoreSession();
+    if (admin != null) unawaited(api.resumeNotificationMonitoringIfEnabled());
     return admin;
   }
 
@@ -55,9 +57,12 @@ class AuthController extends AsyncNotifier<AdminIdentity?> {
       await _storage.write(key: _biometricKey, value: 'false');
       return false;
     }
-    final available = await _biometricChannel.invokeMethod<bool>('isAvailable') ?? false;
+    final available =
+        await _biometricChannel.invokeMethod<bool>('isAvailable') ?? false;
     if (!available) {
-      throw const AdminApiException('روی این دستگاه اثر انگشت یا زیست‌سنجی فعالی پیدا نشد.');
+      throw const AdminApiException(
+        'روی این دستگاه اثر انگشت یا زیست‌سنجی فعالی پیدا نشد.',
+      );
     }
     final confirmed = await _authenticateWithBiometrics();
     if (confirmed) await _storage.write(key: _biometricKey, value: 'true');
@@ -65,8 +70,10 @@ class AuthController extends AsyncNotifier<AdminIdentity?> {
   }
 
   Future<void> login(String username, String password) async {
-    final admin = await ref.read(adminApiProvider).login(username, password);
+    final api = ref.read(adminApiProvider);
+    final admin = await api.login(username, password);
     state = AsyncData(admin);
+    unawaited(api.resumeNotificationMonitoringIfEnabled());
   }
 
   Future<void> logout() async {
@@ -86,7 +93,6 @@ class AuthController extends AsyncNotifier<AdminIdentity?> {
     final admin = await ref.read(adminApiProvider).restoreSession();
     state = AsyncData(admin);
   }
-
 }
 
 final biometricEnabledProvider = FutureProvider<bool>((ref) async {
@@ -130,9 +136,10 @@ final dashboardProvider = FutureProvider.autoDispose<JsonMap>(
 final siteVisitAnalyticsProvider = FutureProvider.autoDispose<JsonMap>(
   (ref) => ref.watch(adminApiProvider).siteVisitAnalytics(),
 );
-final financeReportProvider = FutureProvider.autoDispose.family<JsonMap, String>(
-  (ref, range) => ref.watch(adminApiProvider).financeReport(range),
-);
+final financeReportProvider = FutureProvider.autoDispose
+    .family<JsonMap, String>(
+      (ref, range) => ref.watch(adminApiProvider).financeReport(range),
+    );
 final storeConfigurationProvider = FutureProvider.autoDispose<JsonMap>(
   (ref) => ref.watch(adminApiProvider).storeConfiguration(),
 );
@@ -151,7 +158,10 @@ final ordersProvider = FutureProvider.autoDispose<List<JsonMap>>(
   (ref) => ref.watch(adminApiProvider).orders(),
 );
 final adminNotificationsProvider = FutureProvider.autoDispose<JsonMap>((ref) {
-  final timer = Timer.periodic(const Duration(seconds: 30), (_) => ref.invalidateSelf());
+  final timer = Timer.periodic(
+    const Duration(seconds: 30),
+    (_) => ref.invalidateSelf(),
+  );
   ref.onDispose(timer.cancel);
   return ref.watch(adminApiProvider).adminNotifications();
 });

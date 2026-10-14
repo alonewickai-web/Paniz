@@ -145,6 +145,10 @@ export class AdminAuthService implements OnModuleInit {
         where: { id: request.adminSessionId, revokedAt: null },
         data: { revokedAt: new Date() },
       }),
+      this.prisma.adminNotificationDevice.updateMany({
+        where: { sessionId: request.adminSessionId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
       this.prisma.adminAuditLog.create({
         data: { adminId: request.admin!.id, action: "admin.logout", entityType: "admin_session", details: { sessionId: request.adminSessionId!.toString() } },
       }),

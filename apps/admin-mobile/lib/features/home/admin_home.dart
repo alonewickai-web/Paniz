@@ -12,6 +12,7 @@ import '../activity/audit_log_screen.dart';
 import '../../core/paniz_theme.dart';
 import '../../core/providers.dart';
 import '../notifications/notification_inbox_screen.dart';
+import '../notifications/notification_settings_screen.dart';
 import '../chat/admin_chat_screen.dart';
 import '../support/admin_support_screen.dart';
 import '../updates/app_update_screen.dart';
@@ -36,9 +37,48 @@ class AdminHome extends ConsumerStatefulWidget {
 }
 
 class _AdminHomeState extends ConsumerState<AdminHome> {
+  static const _notificationChannel = MethodChannel(
+    'paniz/admin-notifications',
+  );
   int _index = 0;
   final List<int> _tabHistory = <int>[];
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _notificationChannel.setMethodCallHandler((call) async {
+      if (call.method == 'notificationOpened') {
+        _openNotification('${call.arguments ?? ''}');
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final id = await _notificationChannel.invokeMethod<String>(
+          'takePendingNotification',
+        );
+        if (id != null && id.isNotEmpty) _openNotification(id);
+      } on PlatformException {
+        // The app can still show the full notification inbox from its menu.
+      } on MissingPluginException {
+        // The app can still show the full notification inbox from its menu.
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationChannel.setMethodCallHandler(null);
+    super.dispose();
+  }
+
+  void _openNotification(String id) {
+    if (!mounted) return;
+    _pushTool(
+      'اعلان‌ها',
+      NotificationInboxScreen(initialNotificationId: id.isEmpty ? null : id),
+    );
+  }
 
   static const _titles = ['خانه', 'محصولات', 'سفارش‌ها', 'گزارش‌ها'];
   static const _icons = [
@@ -582,6 +622,16 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
                       ),
                 ),
                 _drawerHeading('حساب و ظاهر برنامه'),
+                _drawerTile(
+                  'اعلان‌ها و دستگاه‌ها',
+                  Icons.notifications_active_outlined,
+                  detail: 'مدیریت اعلان و اتصال پس‌زمینه',
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'اعلان‌ها و دستگاه‌ها',
+                        const NotificationSettingsScreen(),
+                      ),
+                ),
                 _drawerTile(
                   'پروفایل من',
                   Icons.person_outline,

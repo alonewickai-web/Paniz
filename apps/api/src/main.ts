@@ -10,6 +10,7 @@ import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module";
 import { uploadRoot } from "./uploads/upload-storage";
+import { AdminNotificationGateway } from "./admin-notifications/admin-notification.gateway";
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
@@ -60,6 +61,7 @@ async function bootstrap(): Promise<void> {
   }
 
   app.enableShutdownHooks();
+  await app.get(AdminNotificationGateway).attach(app.getHttpServer());
   await app.listen(config.get<number>("PORT", 4000), "0.0.0.0");
 }
 
