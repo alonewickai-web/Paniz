@@ -13,20 +13,23 @@ import { StoreThemeSync } from "./components/store-theme-sync";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
-  title: "پانیذ | پوشاکی برای حال خوب تو",
+  title: "فروشگاه پانیذ",
+  applicationName: "فروشگاه پانیذ",
   description:
-    "جدیدترین لباس‌های زنانه، ست‌های راحتی و پوشاک روزمره را با تجربه‌ای ساده و دوست‌داشتنی در پانیذ پیدا کن.",
+    "فروشگاه پانیذ برای خرید آنلاین لباس زنانه، پوشاک زنانه و ست زنانه؛ مدل‌های متنوع پوشاک پانیذ را ببین و استایل دلخواهت را انتخاب کن.",
+  keywords: ["فروشگاه پانیذ", "پوشاک پانیذ", "پانیذ", "فروشگاه لباس", "لباس زنانه", "پوشاک زنانه", "ست زنانه"],
   robots: {
     index: true,
     follow: true,
     googleBot: { index: true, follow: true, "max-image-preview": "large" },
   },
   openGraph: {
-    title: "پانیذ | پوشاکی برای حال خوب تو",
-    description: "استایل تازه‌ات را از پانیذ پیدا کن.",
+    title: "فروشگاه پانیذ",
+    description: "خرید آنلاین لباس زنانه، پوشاک زنانه و ست زنانه از فروشگاه پانیذ.",
     locale: "fa_IR",
     type: "website",
-    siteName: "پانیذ",
+    siteName: "فروشگاه پانیذ",
+    url: "/",
   },
 };
 
@@ -34,6 +37,14 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: "#fff9f6",
+};
+
+const websiteStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "فروشگاه پانیذ",
+  alternateName: "پانیذ",
+  url: siteUrl("/"),
 };
 
 async function getStoreTheme(): Promise<string> {
@@ -58,7 +69,10 @@ export default async function RootLayout({
   const theme = await getStoreTheme();
   return (
     <html lang="fa" dir="rtl" data-theme={theme}>
-      <body><StorefrontProvider><StoreThemeSync /><SiteVisitTracker />{children}</StorefrontProvider></body>
+      <body>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteStructuredData) }} />
+        <StorefrontProvider><StoreThemeSync /><SiteVisitTracker />{children}</StorefrontProvider>
+      </body>
     </html>
   );
 }
