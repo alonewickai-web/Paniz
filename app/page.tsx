@@ -90,58 +90,11 @@ type StorefrontConfig = {
   sections: { sectionKey: string; title: string | null; isActive: boolean; sortOrder: number }[];
   banners: {
     id: string;
-    title: string;
-    description: string | null;
+    altText: string;
     imagePath: string;
-    targetUrl: string | null;
-    eyebrowText: string | null;
-    buttonLabel: string | null;
-    buttonSideText: string | null;
-    stickerLabel: string | null;
-    stickerText: string | null;
     backgroundColor: string | null;
   }[];
 };
-
-function getBannerTextColors(backgroundColor?: string | null) {
-  if (!backgroundColor || !/^#[0-9a-fA-F]{6}$/.test(backgroundColor)) {
-    return { text: "#2c272a", muted: "#685e60", accent: "#c72e52" };
-  }
-
-  const channel = (offset: number) =>
-    Number.parseInt(backgroundColor.slice(offset, offset + 2), 16) / 255;
-  const linear = (value: number) =>
-    value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-  const luminance =
-    0.2126 * linear(channel(1)) +
-    0.7152 * linear(channel(3)) +
-    0.0722 * linear(channel(5));
-
-  return luminance > 0.18
-    ? { text: "#29262a", muted: "#51474a", accent: "#ad1f43" }
-    : { text: "#ffffff", muted: "#f3e9ec", accent: "#ffd1db" };
-}
-
-function openBannerTarget(target: string | null | undefined, fallback: () => void) {
-  const value = target?.trim();
-  if (!value) {
-    fallback();
-    return;
-  }
-
-  try {
-    const destination = new URL(value, window.location.origin);
-    if (!["http:", "https:"].includes(destination.protocol)) {
-      fallback();
-    } else if (destination.origin === window.location.origin) {
-      window.location.assign(destination.href);
-    } else {
-      window.open(destination.href, "_blank", "noopener,noreferrer");
-    }
-  } catch {
-    fallback();
-  }
-}
 
 const products: Product[] = [
   {
@@ -329,6 +282,7 @@ export default function Home() {
   const [storefrontConfig, setStorefrontConfig] = useState<StorefrontConfig>({ theme: "rose", sections: [], banners: [] });
   const [bannerIndex, setBannerIndex] = useState(0);
   const [outgoingBanner, setOutgoingBanner] = useState<StorefrontConfig["banners"][number] | null>(null);
+  const [failedBannerImageKey, setFailedBannerImageKey] = useState<string | null>(null);
   const [bannerHovered, setBannerHovered] = useState(false);
   const [bannerFocused, setBannerFocused] = useState(false);
   const [query, setQuery] = useState("");
@@ -544,7 +498,9 @@ export default function Home() {
   const activeBanner = storefrontConfig.banners.length
     ? storefrontConfig.banners[bannerIndex % storefrontConfig.banners.length]
     : null;
-  const bannerTextColors = getBannerTextColors(activeBanner?.backgroundColor);
+  const bannerImageKey = activeBanner ? `${activeBanner.id}:${activeBanner.imagePath}` : "default-banner";
+  const bannerAltText = activeBanner?.altText?.trim() || "فروشگاه پوشاک زنانه پانیذ";
+  const bannerImagePath = activeBanner?.imagePath || "/images/paniz-sage.webp";
   const sectionIsActive = (key: string) => storefrontConfig.sections.find((section) => section.sectionKey === key)?.isActive ?? true;
   const sectionOrder = (key: string, fallback: number) => storefrontConfig.sections.find((section) => section.sectionKey === key)?.sortOrder ?? fallback;
   const cartTotal = cart.reduce((sum, line) => {
@@ -752,61 +708,35 @@ export default function Home() {
       </header>
 
       <div className="page-shell page-content" id="top">
-        {sectionIsActive("hero") && <section className="hero" aria-labelledby="hero-title"
+        {sectionIsActive("hero") && <section className="hero" aria-roledescription="کاروسل بنر" aria-labelledby="hero-title"
           onMouseEnter={() => setBannerHovered(true)}
           onMouseLeave={() => setBannerHovered(false)}
           onFocusCapture={() => setBannerFocused(true)}
           onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setBannerFocused(false); }}
           style={{
-          order: sectionOrder("hero", 0),
-          ...(activeBanner?.backgroundColor ? {
-            background: activeBanner.backgroundColor,
-            "--hero-text-color": bannerTextColors.text,
-            "--hero-muted-color": bannerTextColors.muted,
-            "--hero-accent-color": bannerTextColors.accent,
-          } : {}),
-        } as CSSProperties}>
-          <div className="hero-copy">
-            <span className="eyebrow"><span className="eyebrow-dot" /> {activeBanner?.eyebrowText || (activeBanner ? "پیشنهاد تازهٔ پانیذ" : "کالکشن تازهٔ پانیذ")}</span>
-            <h1 id="hero-title">{activeBanner?.title ?? <>هر روز،<br />با <em>حالِ خوب</em> بپوش</>}</h1>
-            <p>{activeBanner?.description || "لباس‌هایی برای روزهای پرجنب‌وجوش و لحظه‌های آرام تو. راحت، خوش‌دوخت و دوست‌داشتنی."}</p>
-            <div className="hero-buttons">
-              <button className="button-primary" onClick={() =>
-                openBannerTarget(activeBanner?.targetUrl, () => chooseCategory("همه محصولات"))
-              }>
-                {activeBanner?.buttonLabel || "دیدن محصولات"} <ArrowLeft size={18} />
-              </button>
-              <span className="hero-note"><span className="note-line" /> {activeBanner?.buttonSideText || "انتخاب‌هایی از جنس خودت"}</span>
-            </div>
-            <div className="hero-proof">
-              <div className="avatar-stack" aria-hidden="true">
-                <StoreImage src={catalogProducts[4]?.image ?? products[4].image} alt="" width={34} height={34} />
-                <StoreImage src={catalogProducts[2]?.image ?? products[2].image} alt="" width={34} height={34} />
-                <StoreImage src={catalogProducts[0]?.image ?? products[0].image} alt="" width={34} height={34} />
-              </div>
-              <div><strong>۴.۹ از ۵</strong><span>از دلِ تجربهٔ شما</span></div>
-              <span className="hero-proof-stars" aria-label="۵ ستاره"><Star /><Star /><Star /><Star /><Star /></span>
-            </div>
-          </div>
-          <div className="hero-visual" aria-label={storefrontConfig.banners.length > 1 ? `بنر ${new Intl.NumberFormat("fa-IR").format(bannerIndex + 1)} از ${new Intl.NumberFormat("fa-IR").format(storefrontConfig.banners.length)}` : "بنر فروشگاه"} onPointerDown={(event) => { bannerPointerStart.current = event.clientX; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerUp={(event) => finishBannerSwipe(event.clientX)} onPointerCancel={() => { bannerPointerStart.current = null; }}>
-            <div className="hero-image-wrap">
-              <PageFlipImage
-                src={activeBanner?.imagePath || "/images/paniz-sage.webp"}
-                alt={activeBanner?.title || "استایل زنانهٔ تازه و راحت از کالکشن پانیذ"}
-                outgoing={outgoingBanner ? { src: outgoingBanner.imagePath, alt: outgoingBanner.title } : null}
-                direction="next"
-                priority
-                sizes="(max-width: 760px) 92vw, 55vw"
-                className="hero-image"
-              />
+            order: sectionOrder("hero", 0),
+            backgroundColor: activeBanner?.backgroundColor || "#FCE4DB",
+          }}>
+          <h1 id="hero-title" className="sr-only">فروشگاه پانیذ</h1>
+          <div className="hero-visual" role="group" aria-label={storefrontConfig.banners.length > 1 ? `بنر ${new Intl.NumberFormat("fa-IR").format((bannerIndex % storefrontConfig.banners.length) + 1)} از ${new Intl.NumberFormat("fa-IR").format(storefrontConfig.banners.length)}` : "بنر فروشگاه"} onPointerDown={(event) => { bannerPointerStart.current = event.clientX; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerUp={(event) => finishBannerSwipe(event.clientX)} onPointerCancel={() => { bannerPointerStart.current = null; }}>
+            <div className="hero-image-wrap" style={{ backgroundColor: activeBanner?.backgroundColor || "#FCE4DB" }}>
+              {failedBannerImageKey === bannerImageKey
+                ? <div className="hero-banner-fallback" role="img" aria-label={bannerAltText}>{bannerAltText}</div>
+                : <PageFlipImage
+                    src={bannerImagePath}
+                    alt={bannerAltText}
+                    outgoing={outgoingBanner ? { src: outgoingBanner.imagePath, alt: outgoingBanner.altText || "" } : null}
+                    direction="next"
+                    priority
+                    sizes="(max-width: 760px) 100vw, 1200px"
+                    className="hero-image"
+                    onError={() => setFailedBannerImageKey(bannerImageKey)}
+                  />}
             </div>
             {storefrontConfig.banners.length > 1 && <div className="hero-pagination" aria-label="صفحه‌های بنر">
               <span aria-live="polite">{new Intl.NumberFormat("fa-IR").format((bannerIndex % storefrontConfig.banners.length) + 1)} / {new Intl.NumberFormat("fa-IR").format(storefrontConfig.banners.length)}</span>
               <div>{storefrontConfig.banners.map((banner, index) => <button key={banner.id} type="button" aria-label={`رفتن به بنر ${new Intl.NumberFormat("fa-IR").format(index + 1)}`} aria-current={index === bannerIndex % storefrontConfig.banners.length ? "true" : undefined} className={index === bannerIndex % storefrontConfig.banners.length ? "is-active" : ""} onClick={() => showBanner(index)} />)}</div>
             </div>}
-            <div className="hero-sticker"><span>{activeBanner?.stickerLabel || "حس خوب"}</span><strong>{activeBanner?.stickerText || <>از همین‌جا<br />شروع می‌شه</>}</strong><Sparkles size={18} /></div>
-            <div className="hero-tag"><span className="tag-line" /><span>برای روزهای خودت</span></div>
-            <div className="hero-orbit" aria-hidden="true" />
           </div>
         </section>}
 

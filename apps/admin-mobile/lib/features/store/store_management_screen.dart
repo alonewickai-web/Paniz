@@ -314,7 +314,7 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
       sectionTitle('آرشیو بنرها (${archivedBanners.length})'),
       const Padding(padding: EdgeInsets.only(top: 3, bottom: 10), child: Text('بنرهای این بخش در سایت نمایش داده نمی‌شوند و هر زمان بخواهی می‌توانی آن‌ها را بازگردانی کنی.', style: TextStyle(color: Color(0xFF74686C), fontSize: 12))),
       if (archivedBanners.isEmpty) const _EmptyState(label: 'آرشیو خالی است. بنرهایی که از سایت حذف کنی اینجا نگه‌داری می‌شوند.'),
-      ...archivedBanners.map((banner) => _bannerCard(banner)),
+      ...archivedBanners.map((banner) => _bannerCard(banner, archived: true)),
     ]);
   }
 
@@ -322,12 +322,18 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
         clipBehavior: Clip.antiAlias,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           if ('${banner['imagePath'] ?? ''}'.isNotEmpty)
-            SizedBox(height: 130, width: double.infinity, child: Image.network(
-              AdminApi.imageUrl('${banner['imagePath']}'), fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFFF4E8E9), child: Center(child: Icon(Icons.image_not_supported_outlined))),
+            AspectRatio(aspectRatio: 16 / 9, child: ColoredBox(
+              color: _bannerColorValue('${banner['backgroundColor'] ?? '#FCE4DB'}'),
+              child: Image.network(
+                AdminApi.imageUrl('${banner['imagePath']}'), fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Center(child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text('${banner['altText'] ?? banner['title'] ?? ''}', textAlign: TextAlign.center),
+                )),
+              ),
             )),
           ListTile(
-            title: Text('${banner['title'] ?? ''}'),
+            title: Text('${banner['altText'] ?? banner['title'] ?? ''}'),
             subtitle: Text(archived ? 'در آرشیو' : (banner['isActive'] == true ? 'فعال' : 'غیرفعال')),
             trailing: archived
                 ? IconButton.filledTonal(
@@ -367,7 +373,7 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
   }
 
   Future<void> _archiveBanner(JsonMap banner) async {
-    final confirmed = await _confirm('بنر «${banner['title']}» از سایت برداشته و در آرشیو همین صفحه نگه‌داری شود؟');
+    final confirmed = await _confirm('بنر «${banner['altText'] ?? banner['title'] ?? ''}» از سایت برداشته و در آرشیو همین صفحه نگه‌داری شود؟');
     if (!confirmed || !mounted) return;
     await _run(() async => ref.read(adminApiProvider).archiveBanner('${banner['id']}'), 'بنر به آرشیو منتقل شد');
   }
@@ -524,61 +530,21 @@ class _BannerDialog extends StatefulWidget {
 
 class _BannerDialogState extends State<_BannerDialog> {
   final _form = GlobalKey<FormState>();
-  late final _title = TextEditingController(
-    text: '${widget.existing?['title'] ?? ''}',
-  );
-  late final _description = TextEditingController(
-    text: '${widget.existing?['description'] ?? ''}',
-  );
-  late final _eyebrow = TextEditingController(
-    text: '${widget.existing?['eyebrowText'] ?? 'کالکشن تازهٔ پانیذ'}',
-  );
-  late final _buttonLabel = TextEditingController(
-    text: '${widget.existing?['buttonLabel'] ?? 'دیدن محصولات'}',
-  );
-  late final _buttonSideText = TextEditingController(
-    text: '${widget.existing?['buttonSideText'] ?? 'انتخاب‌هایی از جنس خودت'}',
-  );
-  late final _stickerLabel = TextEditingController(
-    text: '${widget.existing?['stickerLabel'] ?? 'حس خوب'}',
-  );
-  late final _stickerText = TextEditingController(
-    text: '${widget.existing?['stickerText'] ?? 'از همین‌جا\nشروع می‌شه'}',
-  );
-  late final _target = TextEditingController(
-    text: '${widget.existing?['targetUrl'] ?? ''}',
-  );
-  late final _starts = TextEditingController(
-    text: '${widget.existing?['startsAt'] ?? ''}',
-  );
-  late final _ends = TextEditingController(
-    text: '${widget.existing?['endsAt'] ?? ''}',
+  late final _altText = TextEditingController(
+    text: (widget.existing?['altText'] ?? widget.existing?['title'] ?? '').toString(),
   );
   late final _colorSearch = TextEditingController();
   String? _imagePath;
   late String _backgroundColor;
   bool _imageError = false;
-  bool _active = true;
 
   @override
   void initState() {
     super.initState();
     _imagePath = _optionalPath(widget.existing?['imagePath']);
-    _active = widget.existing?['isActive'] != false;
     final savedColor = '${widget.existing?['backgroundColor'] ?? ''}';
-    _backgroundColor =
-        _isBannerHex(savedColor) ? savedColor.toUpperCase() : '#FCE4DB';
-    for (final field in [
-      _title,
-      _description,
-      _eyebrow,
-      _buttonLabel,
-      _buttonSideText,
-      _stickerLabel,
-      _stickerText,
-    ]) {
-      field.addListener(_refreshPreview);
-    }
+    _backgroundColor = _isBannerHex(savedColor) ? savedColor.toUpperCase() : '#FCE4DB';
+    _altText.addListener(_refreshPreview);
   }
 
   void _refreshPreview() {
@@ -587,94 +553,44 @@ class _BannerDialogState extends State<_BannerDialog> {
 
   @override
   void dispose() {
-    for (final item in [
-      _title,
-      _description,
-      _eyebrow,
-      _buttonLabel,
-      _buttonSideText,
-      _stickerLabel,
-      _stickerText,
-      _target,
-      _starts,
-      _ends,
-      _colorSearch,
-    ]) {
-      item.dispose();
-    }
+    _altText.dispose();
+    _colorSearch.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: Text(widget.existing == null ? 'بنر جدید' : 'ویرایش بنر'),
+    title: Text(widget.existing == null ? 'بنر تصویری جدید' : 'ویرایش بنر تصویری'),
     content: SizedBox(
       width: 450,
       child: Form(
         key: _form,
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _livePreview(),
-              const SizedBox(height: 18),
-              sectionTitle('متن‌های بنر'),
-              _textField(_eyebrow, 'متن بالای عنوان'),
-              _textField(_title, 'عنوان اصلی بنر', required: true, maxLines: 2),
-              _textField(_description, 'توضیح زیر عنوان', maxLines: 3),
-              _textField(_buttonLabel, 'متن دکمهٔ بنر'),
-              _textField(_buttonSideText, 'متن کنار دکمه'),
-              _textField(
-                _target,
-                'نشانی مقصد دکمه (مثلاً /products)',
-                ltr: true,
-              ),
-              const SizedBox(height: 4),
-              sectionTitle('نوشته‌های دایره'),
-              _textField(_stickerLabel, 'متن کوچک دایره'),
-              _textField(_stickerText, 'متن اصلی دایره', maxLines: 2),
-              const SizedBox(height: 4),
-              sectionTitle('پس‌زمینهٔ بنر'),
-              _colorPicker(),
-              const SizedBox(height: 14),
-              sectionTitle('تصویر و زمان‌بندی'),
-              AdminImagePickerField(
-                label: 'تصویر بنر',
-                imagePath: _imagePath,
-                aspectRatio: 1.45,
-                errorText:
-                    _imageError ? 'برای ثبت بنر یک تصویر انتخاب کن.' : null,
-                onChanged:
-                    (value) => setState(() {
-                      _imagePath = value;
-                      _imageError = false;
-                    }),
-              ),
-              _textField(
-                _starts,
-                'شروع زمان‌بندی (اختیاری، ISO-8601)',
-                ltr: true,
-              ),
-              _textField(
-                _ends,
-                'پایان زمان‌بندی (اختیاری، ISO-8601)',
-                ltr: true,
-              ),
-              SwitchListTile(
-                value: _active,
-                onChanged: (value) => setState(() => _active = value),
-                title: const Text('بنر فعال باشد'),
-              ),
-            ],
-          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            _livePreview(),
+            const SizedBox(height: 16),
+            AdminImagePickerField(
+              label: 'تصویر بنر افقی (۱۶:۹)',
+              imagePath: _imagePath,
+              aspectRatio: 16 / 9,
+              lockAspectRatio: true,
+              errorText: _imageError ? 'برای ثبت بنر یک تصویر انتخاب کن.' : null,
+              onChanged: (value) => setState(() {
+                _imagePath = value;
+                _imageError = false;
+              }),
+            ),
+            const SizedBox(height: 12),
+            _textField(_altText, 'متن جایگزین تصویر (Alt)', required: true, maxLines: 2),
+            const SizedBox(height: 4),
+            sectionTitle('رنگ پس‌زمینه'),
+            _colorPicker(),
+          ]),
         ),
       ),
     ),
     actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('انصراف'),
-      ),
+      TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
       FilledButton(
         onPressed: () {
           if (_imagePath == null) {
@@ -683,37 +599,9 @@ class _BannerDialogState extends State<_BannerDialog> {
           }
           if (!_form.currentState!.validate()) return;
           Navigator.pop(context, <String, dynamic>{
-            'title': _title.text.trim(),
-            'description':
-                _description.text.trim().isEmpty
-                    ? null
-                    : _description.text.trim(),
+            'altText': _altText.text.trim(),
             'imagePath': _imagePath,
-            'targetUrl':
-                _target.text.trim().isEmpty ? null : _target.text.trim(),
-            'eyebrowText':
-                _eyebrow.text.trim().isEmpty ? null : _eyebrow.text.trim(),
-            'buttonLabel':
-                _buttonLabel.text.trim().isEmpty
-                    ? null
-                    : _buttonLabel.text.trim(),
-            'buttonSideText':
-                _buttonSideText.text.trim().isEmpty
-                    ? null
-                    : _buttonSideText.text.trim(),
-            'stickerLabel':
-                _stickerLabel.text.trim().isEmpty
-                    ? null
-                    : _stickerLabel.text.trim(),
-            'stickerText':
-                _stickerText.text.trim().isEmpty
-                    ? null
-                    : _stickerText.text.trim(),
             'backgroundColor': _backgroundColor,
-            'startsAt':
-                _starts.text.trim().isEmpty ? null : _starts.text.trim(),
-            'endsAt': _ends.text.trim().isEmpty ? null : _ends.text.trim(),
-            'isActive': _active,
           });
         },
         child: const Text('ذخیره'),
@@ -722,210 +610,37 @@ class _BannerDialogState extends State<_BannerDialog> {
   );
 
   Widget _livePreview() {
-    final background = _bannerColorValue(_backgroundColor);
-    final textColor =
-        background.computeLuminance() > 0.48
-            ? const Color(0xFF29262A)
-            : Colors.white;
-    final title =
-        _title.text.trim().isEmpty
-            ? 'هر روز، با حالِ خوب بپوش'
-            : _title.text.trim();
     final imagePath = _imagePath;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        sectionTitle('پیش‌نمایش زنده'),
-        Container(
-          height: 340,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: background,
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Column(
-            children: [
-              Expanded(
-                flex: 5,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (imagePath != null)
-                      Image.network(
-                        AdminApi.imageUrl(imagePath),
-                        fit: BoxFit.contain,
-                        errorBuilder:
-                            (_, __, ___) => _previewImagePlaceholder(),
-                      )
-                    else
-                      _previewImagePlaceholder(),
-                    Positioned(
-                      left: 10,
-                      top: 10,
-                      child: Container(
-                        width: 78,
-                        height: 78,
-                        padding: const EdgeInsets.all(6),
-                        decoration: const BoxDecoration(
-                          color: Color(0xF7FFFAF7),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              _bannerPreviewText(_stickerLabel.text, 'حس خوب'),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 8,
-                                color: Color(0xFF9C555F),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _stickerText.text.trim().isEmpty
-                                  ? 'از همین‌جا\nشروع می‌شه'
-                                  : _stickerText.text.trim(),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 9,
-                                height: 1.2,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF514044),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      left: 10,
-                      bottom: 9,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 9,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: .88),
-                          borderRadius: BorderRadius.circular(22),
-                        ),
-                        child: Text(
-                          _bannerPreviewText(
-                            _eyebrow.text,
-                            'کالکشن تازهٔ پانیذ',
-                          ),
-                          style: const TextStyle(
-                            fontSize: 9,
-                            color: Color(0xFF9C555F),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                flex: 6,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(13, 8, 13, 11),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: Align(
-                          alignment: AlignmentDirectional.topEnd,
-                          child: Text(
-                            title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.right,
-                            style: TextStyle(
-                              color: textColor,
-                              fontSize: 18,
-                              height: 1.2,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ),
-                      Text(
-                        _description.text.trim().isEmpty
-                            ? 'لباس‌هایی برای روزهای پرجنب‌وجوش و لحظه‌های آرام تو.'
-                            : _description.text.trim(),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                          color: textColor.withValues(alpha: .78),
-                          fontSize: 10,
-                          height: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 7),
-                      Row(
-                        children: [
-                          FilledButton.icon(
-                            onPressed: null,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFFC72E52),
-                              disabledBackgroundColor: const Color(0xFFC72E52),
-                              foregroundColor: Colors.white,
-                              disabledForegroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 9,
-                                vertical: 5,
-                              ),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            icon: const Icon(
-                              Icons.arrow_back_rounded,
-                              size: 14,
-                            ),
-                            label: Text(
-                              _buttonLabel.text.trim().isEmpty
-                                  ? 'دیدن محصولات'
-                                  : _buttonLabel.text.trim(),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 9),
-                            ),
-                          ),
-                          const SizedBox(width: 7),
-                          Expanded(
-                            child: Text(
-                              _buttonSideText.text.trim().isEmpty
-                                  ? 'انتخاب‌هایی از جنس خودت'
-                                  : _buttonSideText.text.trim(),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.right,
-                              style: TextStyle(
-                                color: textColor.withValues(alpha: .75),
-                                fontSize: 8,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+    final altText = _altText.text.trim();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      sectionTitle('پیش‌نمایش بنر سایت'),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: ColoredBox(
+            color: _bannerColorValue(_backgroundColor),
+            child: imagePath == null
+                ? _bannerPreviewFallback(altText)
+                : Image.network(
+                    AdminApi.imageUrl(imagePath),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _bannerPreviewFallback(altText),
                   ),
-                ),
-              ),
-            ],
           ),
         ),
-      ],
-    );
+      ),
+    ]);
   }
 
-  Widget _previewImagePlaceholder() => const ColoredBox(
-    color: Color(0x18FFFFFF),
-    child: Center(
-      child: Icon(Icons.image_outlined, size: 36, color: Color(0x88765E62)),
+  Widget _bannerPreviewFallback(String text) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(14),
+      child: Text(
+        text.isEmpty ? 'متن جایگزین تصویر اینجا نمایش داده می‌شود' : text,
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
     ),
   );
 
@@ -1308,9 +1023,6 @@ String _normalizeBannerColorSearch(String value) => value
     .replaceAll('آ', 'ا')
     .replaceAll('‌', ' ')
     .replaceAll(RegExp(r'\s+'), ' ');
-
-String _bannerPreviewText(String value, String fallback) =>
-    value.trim().isEmpty ? fallback : value.trim();
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState({required this.label});

@@ -25,6 +25,7 @@ class AdminImagePickerField extends ConsumerStatefulWidget {
     this.onFileSizeChanged,
     this.label = 'تصویر',
     this.aspectRatio = 16 / 9,
+    this.lockAspectRatio = false,
     this.errorText,
   });
 
@@ -33,6 +34,7 @@ class AdminImagePickerField extends ConsumerStatefulWidget {
   final ValueChanged<int?>? onFileSizeChanged;
   final String label;
   final double aspectRatio;
+  final bool lockAspectRatio;
   final String? errorText;
 
   @override
@@ -163,7 +165,7 @@ class _AdminImagePickerFieldState extends ConsumerState<AdminImagePickerField> {
           toolbarWidgetColor: theme.colorScheme.onSurface,
           activeControlsWidgetColor: theme.colorScheme.primary,
           initAspectRatio: _initialAspectRatio,
-          lockAspectRatio: false,
+          lockAspectRatio: widget.lockAspectRatio,
           aspectRatioPresets: aspectRatioPresets,
         ),
       ],

@@ -29,6 +29,7 @@ type CategoryWriteData = {
 };
 type BannerWriteData = {
   title?: string;
+  altText?: string;
   description?: string | null;
   imagePath?: string;
   targetUrl?: string | null;
@@ -67,14 +68,8 @@ export class StoreManagementService {
         select: {
           id: true,
           title: true,
-          description: true,
+          altText: true,
           imagePath: true,
-          targetUrl: true,
-          eyebrowText: true,
-          buttonLabel: true,
-          buttonSideText: true,
-          stickerLabel: true,
-          stickerText: true,
           backgroundColor: true,
         },
       }),
@@ -86,7 +81,12 @@ export class StoreManagementService {
         theme: safeTheme(themeSetting?.settingValue),
         logoPath: logoSetting?.settingValue || null,
         sections: mergeSections(savedSections),
-        banners: banners.map((banner) => ({ ...banner, id: banner.id.toString() })),
+        banners: banners.map((banner) => ({
+          id: banner.id.toString(),
+          altText: banner.altText?.trim() || banner.title,
+          imagePath: banner.imagePath,
+          backgroundColor: banner.backgroundColor,
+        })),
         shipping: shipping ? { name: shipping.name, baseCostToman: safeNumber(shipping.baseCostToman), freeOverToman: shipping.freeOverToman === null ? null : safeNumber(shipping.freeOverToman) } : null,
       },
     };
@@ -107,7 +107,7 @@ export class StoreManagementService {
         logoPath: logoSetting?.settingValue || null,
         sections: mergeSections(sections),
         categories: categories.map((category) => ({ ...category, id: category.id.toString(), parentId: category.parentId?.toString() ?? null })),
-        banners: banners.map((banner) => ({ ...banner, id: banner.id.toString(), isArchived: banner.archivedAt !== null })),
+        banners: banners.map((banner) => ({ ...banner, id: banner.id.toString(), altText: banner.altText?.trim() || banner.title, isArchived: banner.archivedAt !== null })),
         shipping: shipping ? { id: shipping.id.toString(), name: shipping.name, baseCostToman: safeNumber(shipping.baseCostToman), freeOverToman: shipping.freeOverToman === null ? null : safeNumber(shipping.freeOverToman), isActive: shipping.isActive } : null,
       },
     };
@@ -392,9 +392,11 @@ export class StoreManagementService {
   }
 
   private bannerValues(input: SaveAdminBannerDto, create: boolean): BannerWriteData {
-    if (create && (!input.title?.trim() || !input.imagePath?.trim())) {
-      throw new BadRequestException({ code: "BANNER_FIELDS_REQUIRED", message: "عنوان و تصویر بنر الزامی است" });
+    const altText = input.altText?.trim() || input.title?.trim();
+    if (create && (!altText || !input.imagePath?.trim())) {
+      throw new BadRequestException({ code: "BANNER_FIELDS_REQUIRED", message: "متن جایگزین و تصویر بنر الزامی است" });
     }
+    if (input.altText !== undefined && !input.altText.trim()) throw new BadRequestException({ code: "BANNER_ALT_REQUIRED", message: "متن جایگزین تصویر را وارد کن" });
     if (input.title !== undefined && !input.title.trim()) throw new BadRequestException({ code: "BANNER_TITLE_REQUIRED", message: "عنوان بنر را وارد کن" });
     if (input.imagePath !== undefined && !allowedPath(input.imagePath)) {
       throw new BadRequestException({ code: "INVALID_BANNER_IMAGE", message: "تصویر باید مسیر داخلی سایت یا نشانی HTTPS باشد" });
@@ -406,7 +408,7 @@ export class StoreManagementService {
     const endsAt = input.endsAt === undefined ? undefined : input.endsAt === null ? null : new Date(input.endsAt);
     if (startsAt !== undefined && endsAt !== undefined) validateWindow(startsAt, endsAt);
     return {
-      ...(input.title !== undefined ? { title: input.title.trim() } : {}),
+      ...(altText !== undefined ? { title: altText, altText } : {}),
       ...(input.description !== undefined ? { description: input.description?.trim() || null } : {}),
       ...(input.imagePath !== undefined ? { imagePath: input.imagePath.trim() } : {}),
       ...(input.targetUrl !== undefined ? { targetUrl: input.targetUrl?.trim() || null } : {}),

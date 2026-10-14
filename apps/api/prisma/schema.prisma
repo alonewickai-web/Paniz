@@ -711,6 +711,7 @@ model OtpRequest {
 model Banner {
   id              BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
   title           String    @db.VarChar(180)
+  altText         String?   @map("alt_text") @db.VarChar(180)
   description     String?   @db.VarChar(500)
   imagePath       String    @map("image_path") @db.VarChar(500)
   targetUrl       String?   @map("target_url") @db.VarChar(500)

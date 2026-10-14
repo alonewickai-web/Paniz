@@ -4,6 +4,11 @@ export class SaveAdminBannerDto {
   @IsOptional()
   @IsString()
   @MaxLength(180)
+  altText?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(180)
   title?: string;
 
   @IsOptional()
