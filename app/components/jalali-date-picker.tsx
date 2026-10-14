@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { jalaaliMonthLength, toGregorian, toJalaali } from "jalaali-js";
 
 const months = ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"];
@@ -24,6 +24,8 @@ export function JalaliDatePicker({ value, onChange, label = "تاریخ تولد
   const [open, setOpen] = useState(false);
   const [year, setYear] = useState(selected?.jy ?? current.jy);
   const [month, setMonth] = useState(selected?.jm ?? current.jm);
+  const years = useMemo(() => Array.from({ length: current.jy - 1300 + 1 }, (_, index) => current.jy - index), [current.jy]);
+  const availableMonths = year === current.jy ? months.slice(0, current.jm) : months;
   const firstWeekday = useMemo(() => {
     const gregorian = toGregorian(year, month, 1);
     return (new Date(gregorian.gy, gregorian.gm - 1, gregorian.gd).getDay() + 1) % 7;
@@ -31,18 +33,30 @@ export function JalaliDatePicker({ value, onChange, label = "تاریخ تولد
   const days = useMemo(() => Array.from({ length: jalaaliMonthLength(year, month) }, (_, index) => index + 1), [month, year]);
   const labelValue = selected ? `${fa.format(selected.jd)} ${months[selected.jm - 1]} ${fa.format(selected.jy)}` : "انتخاب از تقویم";
 
-  function moveMonth(delta: number) {
-    const nextMonth = month + delta;
-    const nextYear = year + (nextMonth > 12 ? 1 : nextMonth < 1 ? -1 : 0);
-    const normalizedMonth = nextMonth > 12 ? 1 : nextMonth < 1 ? 12 : nextMonth;
-    if (nextYear > current.jy || (nextYear === current.jy && normalizedMonth > current.jm)) return;
-    setYear(nextYear); setMonth(normalizedMonth);
+  function changeYear(nextYear: number) {
+    setYear(nextYear);
+    if (nextYear === current.jy && month > current.jm) setMonth(current.jm);
   }
 
   return <div className="jalali-picker-wrap">
     <label className="store-field"><span>{label}</span><button type="button" className="jalali-picker-trigger" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((previous) => !previous)}><span>{labelValue}</span><ChevronDown size={17} /></button></label>
     {open && <div className="jalali-calendar" role="dialog" aria-label="انتخاب تاریخ شمسی">
-      <div className="jalali-calendar-header"><button type="button" aria-label="ماه قبل" onClick={() => moveMonth(-1)}><ChevronRight size={18} /></button><strong>{months[month - 1]} {fa.format(year)}</strong><button type="button" aria-label="ماه بعد" disabled={year === current.jy && month === current.jm} onClick={() => moveMonth(1)}><ChevronLeft size={18} /></button></div>
+      <div className="jalali-calendar-header">
+        <label className="jalali-calendar-select-field">
+          <span>ماه</span>
+          <select aria-label="ماه" value={month} onChange={(event) => setMonth(Number(event.target.value))}>
+            {availableMonths.map((monthName, index) => <option key={monthName} value={index + 1}>{monthName}</option>)}
+          </select>
+          <ChevronDown size={15} aria-hidden="true" />
+        </label>
+        <label className="jalali-calendar-select-field jalali-calendar-year-field">
+          <span>سال</span>
+          <select aria-label="سال" value={year} onChange={(event) => changeYear(Number(event.target.value))}>
+            {years.map((yearOption) => <option key={yearOption} value={yearOption}>{fa.format(yearOption)}</option>)}
+          </select>
+          <ChevronDown size={15} aria-hidden="true" />
+        </label>
+      </div>
       <div className="jalali-calendar-grid jalali-weekdays">{weekdays.map((day) => <span key={day}>{day}</span>)}</div>
       <div className="jalali-calendar-grid">
         {Array.from({ length: firstWeekday }, (_, index) => <span className="jalali-calendar-blank" key={`blank-${index}`} />)}

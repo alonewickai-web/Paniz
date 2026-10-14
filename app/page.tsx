@@ -521,7 +521,7 @@ export default function Home() {
     : null;
   const bannerImageKey = activeBanner ? `${activeBanner.id}:${activeBanner.imagePath}` : "default-banner";
   const bannerAltText = activeBanner?.altText?.trim() || "فروشگاه پوشاک زنانه پانیذ";
-  const bannerImagePath = activeBanner?.imagePath || "/images/paniz-sage.webp";
+  const bannerImagePath = activeBanner?.imagePath || "/images/panizstyle-hero-fashion.webp";
   const sectionIsActive = (key: string) => storefrontConfig.sections.find((section) => section.sectionKey === key)?.isActive ?? true;
   const sectionOrder = (key: string, fallback: number) => storefrontConfig.sections.find((section) => section.sectionKey === key)?.sortOrder ?? fallback;
   const cartTotal = cart.reduce((sum, line) => {
@@ -747,18 +747,29 @@ export default function Home() {
           <h1 id="hero-title" className="sr-only">فروشگاه پانیذ</h1>
           <div className="hero-visual" role="group" aria-label={storefrontConfig.banners.length > 1 ? `بنر ${new Intl.NumberFormat("fa-IR").format((bannerIndex % storefrontConfig.banners.length) + 1)} از ${new Intl.NumberFormat("fa-IR").format(storefrontConfig.banners.length)}` : "بنر فروشگاه"} onPointerDown={(event) => { bannerPointerStart.current = event.clientX; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerUp={(event) => finishBannerSwipe(event.clientX)} onPointerCancel={() => { bannerPointerStart.current = null; }}>
             <div className="hero-image-wrap" style={{ backgroundColor: activeBanner?.backgroundColor || "#FCE4DB" }}>
-              {failedBannerImageKey === bannerImageKey
-                ? <div className="hero-banner-fallback" role="img" aria-label={bannerAltText}>{bannerAltText}</div>
-                : <PageFlipImage
-                    src={bannerImagePath}
-                    alt={bannerAltText}
-                    outgoing={outgoingBanner ? { src: outgoingBanner.imagePath, alt: outgoingBanner.altText || "" } : null}
-                    direction="next"
-                    priority
-                    sizes="(max-width: 760px) 100vw, 1200px"
-                    className="hero-image"
-                    onError={() => setFailedBannerImageKey(bannerImageKey)}
-                  />}
+              <div className="hero-photo">
+                {failedBannerImageKey === bannerImageKey
+                  ? <div className="hero-banner-fallback" role="img" aria-label={bannerAltText}>{bannerAltText}</div>
+                  : <PageFlipImage
+                      src={bannerImagePath}
+                      alt={bannerAltText}
+                      outgoing={outgoingBanner ? { src: outgoingBanner.imagePath, alt: outgoingBanner.altText || "" } : null}
+                      direction="next"
+                      priority
+                      sizes="(max-width: 760px) 48vw, 540px"
+                      className="hero-image"
+                      onError={() => setFailedBannerImageKey(bannerImageKey)}
+                    />}
+              </div>
+              <div className="hero-promo-copy" dir="rtl">
+                <span className="hero-promo-kicker"><Sparkles size={15} aria-hidden="true" /> انتخاب‌های تازهٔ پانیذ</span>
+                <h2>استایلی که <em>دوستش داری</em>، همین‌جاست</h2>
+                <p>مدل‌های تازهٔ پوشاک زنانه را ببین، رنگ و سایز دلخواهت را انتخاب کن و آنلاین سفارش بده.</p>
+                <Link className="hero-cta" href="#products">دیدن محصولات تازه<ArrowLeft size={17} aria-hidden="true" /></Link>
+                <div className="hero-promo-points" aria-label="ویژگی‌های خرید از پانیذ">
+                  <span>انتخاب رنگ و سایز</span><i aria-hidden="true" /><span>ثبت آنلاین سفارش</span>
+                </div>
+              </div>
             </div>
             {storefrontConfig.banners.length > 1 && <div className="hero-pagination" aria-label="صفحه‌های بنر">
               <span aria-live="polite">{new Intl.NumberFormat("fa-IR").format((bannerIndex % storefrontConfig.banners.length) + 1)} / {new Intl.NumberFormat("fa-IR").format(storefrontConfig.banners.length)}</span>
