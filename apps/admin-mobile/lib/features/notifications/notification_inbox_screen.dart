@@ -7,8 +7,13 @@ import '../../core/providers.dart';
 import '../../core/ui_helpers.dart';
 
 class NotificationInboxScreen extends ConsumerStatefulWidget {
-  const NotificationInboxScreen({super.key, this.initialNotificationId});
+  const NotificationInboxScreen({
+    super.key,
+    this.initialNotificationId,
+    this.onNavigate,
+  });
   final String? initialNotificationId;
+  final void Function(JsonMap item)? onNavigate;
 
   @override
   ConsumerState<NotificationInboxScreen> createState() =>
@@ -50,7 +55,12 @@ class _NotificationInboxScreenState
           _initialNotificationOpened = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (context.mounted) {
-              _openNotification(context, ref, notificationToOpen);
+              _openNotification(
+                context,
+                ref,
+                notificationToOpen,
+                widget.onNavigate,
+              );
             }
           });
         }
@@ -160,7 +170,13 @@ class _NotificationInboxScreenState
                 for (final item in rows)
                   _NotificationTile(
                     item: item,
-                    onTap: () => _openNotification(context, ref, item),
+                    onTap:
+                        () => _openNotification(
+                          context,
+                          ref,
+                          item,
+                          widget.onNavigate,
+                        ),
                   ),
             ],
           ),
@@ -245,6 +261,7 @@ Future<void> _openNotification(
   BuildContext context,
   WidgetRef ref,
   JsonMap item,
+  void Function(JsonMap item)? onNavigate,
 ) async {
   final id = '${item['id'] ?? ''}';
   if (item['readAt'] == null && id.isNotEmpty) {
@@ -258,6 +275,15 @@ Future<void> _openNotification(
     }
   }
   if (!context.mounted) return;
+  final entityType = '${item['entityType'] ?? ''}';
+  if (onNavigate != null &&
+      (entityType.isNotEmpty ||
+          '${item['type']}' == 'new_order' ||
+          '${item['type']}' == 'admin_message')) {
+    Navigator.of(context).pop();
+    WidgetsBinding.instance.addPostFrameCallback((_) => onNavigate(item));
+    return;
+  }
   final createdAt = DateTime.tryParse('${item['createdAt']}')?.toLocal();
   final time =
       createdAt == null

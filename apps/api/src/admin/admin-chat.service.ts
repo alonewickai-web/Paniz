@@ -16,7 +16,7 @@ export class AdminChatService {
     });
     const items = await Promise.all(contacts.map(async (contact) => {
       const [last, unreadCount] = await Promise.all([
-        this.prisma.adminChatMessage.findFirst({ where: { OR: [
+        this.prisma.adminChatMessage.findFirst({ where: { hiddenFor: { none: { adminId: admin.id } }, OR: [
           { senderAdminId: admin.id, recipientAdminId: contact.id },
           { senderAdminId: contact.id, recipientAdminId: admin.id },
         ] }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { body: true, createdAt: true } }),
@@ -36,11 +36,11 @@ export class AdminChatService {
     if (!contact) throw new NotFoundException({ code: "ADMIN_CHAT_CONTACT_NOT_FOUND", message: "گفت‌وگوی مدیر پیدا نشد." });
     await this.prisma.adminChatMessage.updateMany({ where: { senderAdminId: contactId, recipientAdminId: admin.id, readAt: null }, data: { readAt: new Date() } });
     const rows = await this.prisma.adminChatMessage.findMany({
-      where: { OR: [ { senderAdminId: admin.id, recipientAdminId: contactId }, { senderAdminId: contactId, recipientAdminId: admin.id } ] },
+      where: { hiddenFor: { none: { adminId: admin.id } }, OR: [ { senderAdminId: admin.id, recipientAdminId: contactId }, { senderAdminId: contactId, recipientAdminId: admin.id } ] },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 150,
       include: { sender: { select: { id: true, fullName: true, avatarPath: true, role: true } } },
     });
-    return { data: rows.map((row) => ({ id: row.id.toString(), senderAdminId: row.senderAdminId.toString(), recipientAdminId: row.recipientAdminId.toString(), senderName: row.sender.fullName, senderAvatarPath: row.sender.avatarPath, senderRole: row.sender.role, body: row.body, broadcast: row.broadcastGroupId !== null, createdAt: row.createdAt.toISOString(), readAt: row.readAt?.toISOString() ?? null })) };
+    return { data: rows.map((row) => ({ id: row.id.toString(), senderAdminId: row.senderAdminId.toString(), recipientAdminId: row.recipientAdminId.toString(), senderName: row.sender.fullName, senderAvatarPath: row.sender.avatarPath, senderRole: row.sender.role, body: row.body, broadcast: row.broadcastGroupId !== null, createdAt: row.createdAt.toISOString(), editedAt: row.editedAt?.toISOString() ?? null, readAt: row.readAt?.toISOString() ?? null })) };
   }
 
   async send(admin: AuthenticatedAdmin, input: { recipientAdminId?: string; body: string; broadcast?: boolean }) {
@@ -73,6 +73,38 @@ export class AdminChatService {
       });
     }
     return { data: sent.map((row) => ({ id: row.id.toString(), senderAdminId: row.senderAdminId.toString(), recipientAdminId: row.recipientAdminId.toString(), senderName: row.sender.fullName, senderAvatarPath: row.sender.avatarPath, body: row.body, broadcast: groupId !== null, createdAt: row.createdAt.toISOString(), readAt: null })) };
+  }
+
+  async edit(admin: AuthenticatedAdmin, idText: string, inputBody: string) {
+    const body = inputBody.trim();
+    if (!body || body.length > 4000) throw new BadRequestException({ code: "ADMIN_MESSAGE_REQUIRED", message: "متن پیام باید بین ۱ تا ۴۰۰۰ نویسه باشد." });
+    const id = parseId(idText);
+    const result = await this.prisma.adminChatMessage.updateMany({
+      where: { id, senderAdminId: admin.id },
+      data: { body, editedAt: new Date() },
+    });
+    if (result.count !== 1) throw new NotFoundException({ code: "ADMIN_CHAT_MESSAGE_NOT_FOUND", message: "پیام قابل ویرایش پیدا نشد." });
+    return { data: { id: id.toString(), body, editedAt: new Date().toISOString() } };
+  }
+
+  async remove(admin: AuthenticatedAdmin, idText: string, forEveryone: boolean) {
+    const id = parseId(idText);
+    const message = await this.prisma.adminChatMessage.findFirst({
+      where: { id, OR: [{ senderAdminId: admin.id }, { recipientAdminId: admin.id }] },
+      select: { id: true, senderAdminId: true },
+    });
+    if (!message) throw new NotFoundException({ code: "ADMIN_CHAT_MESSAGE_NOT_FOUND", message: "پیام پیدا نشد." });
+    if (forEveryone) {
+      if (message.senderAdminId !== admin.id) throw new BadRequestException({ code: "ADMIN_CHAT_DELETE_FORBIDDEN", message: "فقط فرستنده می‌تواند پیام را برای همه حذف کند." });
+      await this.prisma.adminChatMessage.delete({ where: { id } });
+    } else {
+      await this.prisma.adminChatMessageHide.upsert({
+        where: { messageId_adminId: { messageId: id, adminId: admin.id } },
+        create: { messageId: id, adminId: admin.id },
+        update: {},
+      });
+    }
+    return { data: { deleted: true, forEveryone } };
   }
 }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
 import '../../core/admin_api.dart';
 import '../../core/admin_avatar.dart';
 import '../../core/paniz_theme.dart';
@@ -58,7 +59,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         imageQuality: 80,
       );
       if (image == null || !mounted) return;
-      final bytes = await image.readAsBytes();
+      final cropped = await ImageCropper().cropImage(
+        sourcePath: image.path,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'تنظیم عکس پروفایل',
+            lockAspectRatio: true,
+            aspectRatioPresets: [CropAspectRatioPreset.square],
+          ),
+          IOSUiSettings(
+            title: 'تنظیم عکس پروفایل',
+            aspectRatioLockEnabled: true,
+            aspectRatioPresets: [CropAspectRatioPreset.square],
+          ),
+        ],
+      );
+      if (cropped == null || !mounted) return;
+      final bytes = await cropped.readAsBytes();
       if (bytes.length > 1024 * 1024)
         throw const AdminApiException(
           'حجم تصویر باید کمتر از یک مگابایت باشد.',
@@ -67,7 +84,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         _busy = true;
         _error = null;
       });
-      await ref.read(adminApiProvider).uploadProfileAvatar(bytes, image.name);
+      await ref
+          .read(adminApiProvider)
+          .uploadProfileAvatar(
+            bytes,
+            'profile.${cropped.path.split('.').last}',
+          );
       await ref.read(authProvider.notifier).refreshIdentity();
       if (mounted) {
         showAppMessage(context, 'تصویر پروفایل ذخیره شد.');
@@ -78,6 +100,65 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _removePhoto() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('حذف عکس پروفایل؟'),
+            content: const Text('عکس پروفایل از حساب شما حذف می‌شود.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('لغو'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('حذف'),
+              ),
+            ],
+          ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref.read(adminApiProvider).deleteProfileAvatar();
+      await ref.read(authProvider.notifier).refreshIdentity();
+      if (mounted) showAppMessage(context, 'عکس پروفایل حذف شد.');
+    } catch (error) {
+      if (mounted) setState(() => _error = AdminApi.friendlyError(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _previewPhoto(AdminIdentity admin) {
+    if (admin.avatarPath?.trim().isEmpty != false) return;
+    showDialog<void>(
+      context: context,
+      builder:
+          (context) => Dialog(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: InteractiveViewer(
+                child: Image.network(
+                  AdminApi.imageUrl(admin.avatarPath!),
+                  fit: BoxFit.contain,
+                  errorBuilder:
+                      (_, __, ___) => const SizedBox(
+                        height: 220,
+                        child: Center(child: Text('نمایش عکس ممکن نیست.')),
+                      ),
+                ),
+              ),
+            ),
+          ),
+    );
   }
 
   Future<void> _save() async {
@@ -114,10 +195,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
-                AdminAvatar(
-                  name: admin.fullName,
-                  path: admin.avatarPath,
-                  size: 88,
+                InkWell(
+                  onTap: () => _previewPhoto(admin),
+                  customBorder: const CircleBorder(),
+                  child: AdminAvatar(
+                    name: admin.fullName,
+                    path: admin.avatarPath,
+                    size: 88,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Text(
@@ -133,10 +218,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   style: TextStyle(color: context.paniz.muted),
                 ),
                 const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: _busy ? null : _photo,
-                  icon: const Icon(Icons.add_a_photo_outlined),
-                  label: const Text('تغییر عکس پروفایل'),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : _photo,
+                      icon: const Icon(Icons.add_a_photo_outlined),
+                      label: const Text('تغییر عکس پروفایل'),
+                    ),
+                    if (admin.avatarPath?.trim().isNotEmpty == true)
+                      TextButton.icon(
+                        onPressed: _busy ? null : _removePhoto,
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('حذف عکس'),
+                      ),
+                  ],
                 ),
               ],
             ),

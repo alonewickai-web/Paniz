@@ -1,7 +1,7 @@
 name: panizstyle_admin
 description: PanizStyle store management app
 publish_to: none
-version: 1.0.20+2026109009
+version: 1.0.21+2026109010
 
 environment:
   sdk: '>=3.7.0 <4.0.0'
@@ -17,6 +17,10 @@ dependencies:
   image_picker: ^1.2.4
   image_cropper: ^12.2.1
   flutter_image_compress: ^2.5.1
+  flutter_map: 8.3.2
+  latlong2: 0.9.1
+  persian_datetime_picker: ^3.2.0
+  excel: ^4.0.6
 
 dev_dependencies:
   flutter_test:

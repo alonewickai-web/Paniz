@@ -7,37 +7,38 @@ datasource db {
 }
 
 model AdminUser {
-  id                    BigInt                   @id @default(autoincrement()) @db.UnsignedBigInt
-  fullName              String                   @map("full_name") @db.VarChar(160)
-  username              String                   @unique(map: "uq_admin_users_username") @db.VarChar(80)
-  phone                 String?                  @unique(map: "uq_admin_users_phone") @db.VarChar(24)
-  avatarPath            String?                  @map("avatar_path") @db.VarChar(512)
-  passwordHash          String                   @map("password_hash") @db.VarChar(255)
-  role                  String                   @default("owner") @db.VarChar(32)
-  isActive              Boolean                  @default(true) @map("is_active")
-  mustChangePassword    Boolean                  @default(false) @map("must_change_password")
-  lastLoginAt           DateTime?                @map("last_login_at") @db.DateTime(3)
-  createdAt             DateTime                 @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt             DateTime                 @updatedAt @map("updated_at") @db.DateTime(3)
-  inventoryMovements    InventoryMovement[]
-  orderStatusChanges    OrderStatusHistory[]
-  updatedHomepageConfig HomepageSection[]
-  updatedStoreSettings  StoreSetting[]
-  auditLogs             AdminAuditLog[]
-  sessions              AdminSession[]
-  notificationDevices   AdminNotificationDevice[]
-  notificationPreferences AdminNotificationPreference?
+  id                        BigInt                          @id @default(autoincrement()) @db.UnsignedBigInt
+  fullName                  String                          @map("full_name") @db.VarChar(160)
+  username                  String                          @unique(map: "uq_admin_users_username") @db.VarChar(80)
+  phone                     String?                         @unique(map: "uq_admin_users_phone") @db.VarChar(24)
+  avatarPath                String?                         @map("avatar_path") @db.VarChar(512)
+  passwordHash              String                          @map("password_hash") @db.VarChar(255)
+  role                      String                          @default("owner") @db.VarChar(32)
+  isActive                  Boolean                         @default(true) @map("is_active")
+  mustChangePassword        Boolean                         @default(false) @map("must_change_password")
+  lastLoginAt               DateTime?                       @map("last_login_at") @db.DateTime(3)
+  createdAt                 DateTime                        @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                 DateTime                        @updatedAt @map("updated_at") @db.DateTime(3)
+  inventoryMovements        InventoryMovement[]
+  orderStatusChanges        OrderStatusHistory[]
+  updatedHomepageConfig     HomepageSection[]
+  updatedStoreSettings      StoreSetting[]
+  auditLogs                 AdminAuditLog[]
+  sessions                  AdminSession[]
+  notificationDevices       AdminNotificationDevice[]
+  notificationPreferences   AdminNotificationPreference?
   notificationSocketTickets AdminNotificationSocketTicket[]
-  permissions           AdminUserPermission[]    @relation("AdminPermissionOwner")
-  permissionsGranted    AdminUserPermission[]    @relation("AdminPermissionGrantor")
-  smsCampaigns          SmsCampaign[]
-  socialPosts           SocialPost[]
-  appReleases           AdminAppRelease[]
-  notifications         AdminNotification[]
-  pushDevices           AdminPushDevice[]
-  supportMessages       CustomerSupportMessage[] @relation("SupportMessageAdmin")
-  chatMessagesSent      AdminChatMessage[]       @relation("AdminChatSender")
-  chatMessagesReceived  AdminChatMessage[]       @relation("AdminChatRecipient")
+  permissions               AdminUserPermission[]           @relation("AdminPermissionOwner")
+  permissionsGranted        AdminUserPermission[]           @relation("AdminPermissionGrantor")
+  smsCampaigns              SmsCampaign[]
+  socialPosts               SocialPost[]
+  appReleases               AdminAppRelease[]
+  notifications             AdminNotification[]
+  pushDevices               AdminPushDevice[]
+  supportMessages           CustomerSupportMessage[]        @relation("SupportMessageAdmin")
+  chatMessagesSent          AdminChatMessage[]              @relation("AdminChatSender")
+  chatMessagesReceived      AdminChatMessage[]              @relation("AdminChatRecipient")
+  chatMessageHides          AdminChatMessageHide[]
 
   @@index([role, isActive], map: "ix_admin_users_role_active")
   @@map("admin_users")
@@ -75,18 +76,18 @@ model AdminUserPermission {
 }
 
 model AdminNotification {
-  id          BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  adminId     BigInt    @map("admin_id") @db.UnsignedBigInt
-  type        String    @db.VarChar(32)
-  title       String    @db.VarChar(160)
-  body        String    @db.VarChar(500)
-  entityType  String?   @map("entity_type") @db.VarChar(48)
-  entityId    BigInt?   @map("entity_id") @db.UnsignedBigInt
-  externalRef String?   @map("external_ref") @db.VarChar(128)
-  dedupeKey   String?   @unique(map: "uq_admin_notifications_dedupe") @map("dedupe_key") @db.VarChar(160)
-  readAt      DateTime? @map("read_at") @db.DateTime(3)
-  createdAt   DateTime  @default(now()) @map("created_at") @db.DateTime(3)
-  admin       AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  id          BigInt                      @id @default(autoincrement()) @db.UnsignedBigInt
+  adminId     BigInt                      @map("admin_id") @db.UnsignedBigInt
+  type        String                      @db.VarChar(32)
+  title       String                      @db.VarChar(160)
+  body        String                      @db.VarChar(500)
+  entityType  String?                     @map("entity_type") @db.VarChar(48)
+  entityId    BigInt?                     @map("entity_id") @db.UnsignedBigInt
+  externalRef String?                     @map("external_ref") @db.VarChar(128)
+  dedupeKey   String?                     @unique(map: "uq_admin_notifications_dedupe") @map("dedupe_key") @db.VarChar(160)
+  readAt      DateTime?                   @map("read_at") @db.DateTime(3)
+  createdAt   DateTime                    @default(now()) @map("created_at") @db.DateTime(3)
+  admin       AdminUser                   @relation(fields: [adminId], references: [id], onDelete: Cascade)
   deliveries  AdminNotificationDelivery[]
 
   @@index([adminId, readAt, createdAt], map: "ix_admin_notifications_unread_created")
@@ -94,20 +95,33 @@ model AdminNotification {
 }
 
 model AdminChatMessage {
-  id               BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  senderAdminId    BigInt    @map("sender_admin_id") @db.UnsignedBigInt
-  recipientAdminId BigInt    @map("recipient_admin_id") @db.UnsignedBigInt
-  broadcastGroupId String?   @map("broadcast_group_id") @db.Char(36)
-  body             String    @db.VarChar(4000)
-  readAt           DateTime? @map("read_at") @db.DateTime(3)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.DateTime(3)
-  sender           AdminUser @relation("AdminChatSender", fields: [senderAdminId], references: [id], onDelete: Cascade)
-  recipient        AdminUser @relation("AdminChatRecipient", fields: [recipientAdminId], references: [id], onDelete: Cascade)
+  id               BigInt                 @id @default(autoincrement()) @db.UnsignedBigInt
+  senderAdminId    BigInt                 @map("sender_admin_id") @db.UnsignedBigInt
+  recipientAdminId BigInt                 @map("recipient_admin_id") @db.UnsignedBigInt
+  broadcastGroupId String?                @map("broadcast_group_id") @db.Char(36)
+  body             String                 @db.VarChar(4000)
+  readAt           DateTime?              @map("read_at") @db.DateTime(3)
+  editedAt         DateTime?              @map("edited_at") @db.DateTime(3)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.DateTime(3)
+  sender           AdminUser              @relation("AdminChatSender", fields: [senderAdminId], references: [id], onDelete: Cascade)
+  recipient        AdminUser              @relation("AdminChatRecipient", fields: [recipientAdminId], references: [id], onDelete: Cascade)
+  hiddenFor        AdminChatMessageHide[]
 
   @@index([senderAdminId, recipientAdminId, createdAt], map: "ix_admin_chat_pair_created")
   @@index([recipientAdminId, readAt, createdAt], map: "ix_admin_chat_unread_created")
   @@index([broadcastGroupId], map: "ix_admin_chat_broadcast")
   @@map("admin_chat_messages")
+}
+
+model AdminChatMessageHide {
+  messageId BigInt           @map("message_id") @db.UnsignedBigInt
+  adminId   BigInt           @map("admin_id") @db.UnsignedBigInt
+  message   AdminChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  admin     AdminUser        @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, adminId])
+  @@index([adminId, messageId], map: "ix_admin_chat_hides_admin_message")
+  @@map("admin_chat_message_hides")
 }
 
 model AdminPushDevice {
@@ -125,19 +139,19 @@ model AdminPushDevice {
 }
 
 model AdminNotificationDevice {
-  id                 BigInt                         @id @default(autoincrement()) @db.UnsignedBigInt
-  adminId            BigInt                         @map("admin_id") @db.UnsignedBigInt
-  sessionId          BigInt                         @map("session_id") @db.UnsignedBigInt
-  deviceId           String                         @map("device_id") @db.VarChar(64)
-  deviceName         String                         @default("مدیر اندروید") @map("device_name") @db.VarChar(120)
-  platform           String                         @default("android") @db.VarChar(16)
-  lastSeenAt         DateTime?                      @map("last_seen_at") @db.DateTime(3)
-  lastNotificationId BigInt                         @default(0) @map("last_notification_id") @db.UnsignedBigInt
-  revokedAt          DateTime?                      @map("revoked_at") @db.DateTime(3)
-  createdAt          DateTime                       @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt          DateTime                       @updatedAt @map("updated_at") @db.DateTime(3)
-  admin              AdminUser                      @relation(fields: [adminId], references: [id], onDelete: Cascade)
-  session            AdminSession                   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id                 BigInt                          @id @default(autoincrement()) @db.UnsignedBigInt
+  adminId            BigInt                          @map("admin_id") @db.UnsignedBigInt
+  sessionId          BigInt                          @map("session_id") @db.UnsignedBigInt
+  deviceId           String                          @map("device_id") @db.VarChar(64)
+  deviceName         String                          @default("مدیر اندروید") @map("device_name") @db.VarChar(120)
+  platform           String                          @default("android") @db.VarChar(16)
+  lastSeenAt         DateTime?                       @map("last_seen_at") @db.DateTime(3)
+  lastNotificationId BigInt                          @default(0) @map("last_notification_id") @db.UnsignedBigInt
+  revokedAt          DateTime?                       @map("revoked_at") @db.DateTime(3)
+  createdAt          DateTime                        @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime                        @updatedAt @map("updated_at") @db.DateTime(3)
+  admin              AdminUser                       @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  session            AdminSession                    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   deliveries         AdminNotificationDelivery[]
   socketTickets      AdminNotificationSocketTicket[]
 
@@ -148,19 +162,19 @@ model AdminNotificationDevice {
 }
 
 model AdminNotificationPreference {
-  adminId                     BigInt   @id @map("admin_id") @db.UnsignedBigInt
-  newOrdersEnabled            Boolean  @default(true) @map("new_orders_enabled")
-  paymentsEnabled             Boolean  @default(true) @map("payments_enabled")
-  lowStockEnabled             Boolean  @default(true) @map("low_stock_enabled")
-  securityAlertsEnabled       Boolean  @default(true) @map("security_alerts_enabled")
-  serverAlertsEnabled         Boolean  @default(true) @map("server_alerts_enabled")
-  customerMessagesEnabled     Boolean  @default(true) @map("customer_messages_enabled")
-  adminMessagesEnabled        Boolean  @default(true) @map("admin_messages_enabled")
-  appUpdatesEnabled           Boolean  @default(true) @map("app_updates_enabled")
-  soundEnabled                Boolean  @default(false) @map("sound_enabled")
-  vibrationEnabled            Boolean  @default(true) @map("vibration_enabled")
-  backgroundMonitoringEnabled Boolean  @default(false) @map("background_monitoring_enabled")
-  updatedAt                   DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+  adminId                     BigInt    @id @map("admin_id") @db.UnsignedBigInt
+  newOrdersEnabled            Boolean   @default(true) @map("new_orders_enabled")
+  paymentsEnabled             Boolean   @default(true) @map("payments_enabled")
+  lowStockEnabled             Boolean   @default(true) @map("low_stock_enabled")
+  securityAlertsEnabled       Boolean   @default(true) @map("security_alerts_enabled")
+  serverAlertsEnabled         Boolean   @default(true) @map("server_alerts_enabled")
+  customerMessagesEnabled     Boolean   @default(true) @map("customer_messages_enabled")
+  adminMessagesEnabled        Boolean   @default(true) @map("admin_messages_enabled")
+  appUpdatesEnabled           Boolean   @default(true) @map("app_updates_enabled")
+  soundEnabled                Boolean   @default(false) @map("sound_enabled")
+  vibrationEnabled            Boolean   @default(true) @map("vibration_enabled")
+  backgroundMonitoringEnabled Boolean   @default(false) @map("background_monitoring_enabled")
+  updatedAt                   DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
   admin                       AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
   @@map("admin_notification_preferences")
@@ -201,15 +215,15 @@ model AdminNotificationSocketTicket {
 }
 
 model AdminSession {
-  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  adminId    BigInt    @map("admin_id") @db.UnsignedBigInt
-  tokenHash  String    @unique(map: "uq_admin_sessions_token_hash") @map("token_hash") @db.Char(64)
-  expiresAt  DateTime  @map("expires_at") @db.DateTime(3)
-  revokedAt  DateTime? @map("revoked_at") @db.DateTime(3)
-  lastUsedAt DateTime? @map("last_used_at") @db.DateTime(3)
-  createdAt  DateTime  @default(now()) @map("created_at") @db.DateTime(3)
-  admin      AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
-  notificationDevices AdminNotificationDevice[]
+  id                        BigInt                          @id @default(autoincrement()) @db.UnsignedBigInt
+  adminId                   BigInt                          @map("admin_id") @db.UnsignedBigInt
+  tokenHash                 String                          @unique(map: "uq_admin_sessions_token_hash") @map("token_hash") @db.Char(64)
+  expiresAt                 DateTime                        @map("expires_at") @db.DateTime(3)
+  revokedAt                 DateTime?                       @map("revoked_at") @db.DateTime(3)
+  lastUsedAt                DateTime?                       @map("last_used_at") @db.DateTime(3)
+  createdAt                 DateTime                        @default(now()) @map("created_at") @db.DateTime(3)
+  admin                     AdminUser                       @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  notificationDevices       AdminNotificationDevice[]
   notificationSocketTickets AdminNotificationSocketTicket[]
 
   @@index([adminId, expiresAt], map: "ix_admin_sessions_admin_expiry")
@@ -330,26 +344,26 @@ model Category {
 }
 
 model Product {
-  id                BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
-  categoryId        BigInt?          @map("category_id") @db.UnsignedBigInt
-  name              String           @db.VarChar(220)
-  slug              String           @unique(map: "uq_products_slug") @db.VarChar(240)
-  shortDescription  String?          @map("short_description") @db.VarChar(500)
-  description       String?          @db.MediumText
-  material          String?          @db.VarChar(220)
-  careInstructions  String?          @map("care_instructions") @db.Text
-  purchaseCostToman BigInt           @default(0) @map("purchase_cost_toman") @db.UnsignedBigInt
-  sizeGuide         Json?            @map("size_guide")
-  seoTitle          String?          @map("seo_title") @db.VarChar(240)
-  seoDescription    String?          @map("seo_description") @db.VarChar(500)
-  seoCanonicalUrl   String?          @map("seo_canonical_url") @db.VarChar(500)
-  status            String           @default("draft") @db.VarChar(24)
-  publishedAt       DateTime?        @map("published_at") @db.DateTime(3)
-  rubikaPostedAt    DateTime?        @map("rubika_posted_at") @db.DateTime(3)
-  deletedAt         DateTime?        @map("deleted_at") @db.DateTime(3)
-  createdAt         DateTime         @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt         DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
-  category          Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  id                BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  categoryId        BigInt?               @map("category_id") @db.UnsignedBigInt
+  name              String                @db.VarChar(220)
+  slug              String                @unique(map: "uq_products_slug") @db.VarChar(240)
+  shortDescription  String?               @map("short_description") @db.VarChar(500)
+  description       String?               @db.MediumText
+  material          String?               @db.VarChar(220)
+  careInstructions  String?               @map("care_instructions") @db.Text
+  purchaseCostToman BigInt                @default(0) @map("purchase_cost_toman") @db.UnsignedBigInt
+  sizeGuide         Json?                 @map("size_guide")
+  seoTitle          String?               @map("seo_title") @db.VarChar(240)
+  seoDescription    String?               @map("seo_description") @db.VarChar(500)
+  seoCanonicalUrl   String?               @map("seo_canonical_url") @db.VarChar(500)
+  status            String                @default("draft") @db.VarChar(24)
+  publishedAt       DateTime?             @map("published_at") @db.DateTime(3)
+  rubikaPostedAt    DateTime?             @map("rubika_posted_at") @db.DateTime(3)
+  deletedAt         DateTime?             @map("deleted_at") @db.DateTime(3)
+  createdAt         DateTime              @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime              @updatedAt @map("updated_at") @db.DateTime(3)
+  category          Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   images            ProductImage[]
   variants          ProductVariant[]
   couponProducts    CouponProduct[]

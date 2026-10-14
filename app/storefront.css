@@ -227,6 +227,14 @@
 .about-contact-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
 .about-contact-card { display: flex; min-width: 0; min-height: 84px; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface, #fff); color: var(--ink); text-decoration: none; }
 .about-contact-card-wide { grid-column: 1 / -1; }
+.about-location-card { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.about-map-frame { width: 100%; min-height: 260px; border: 0; border-radius: 13px; background: var(--line); }
+.about-map-directions { display: flex; flex-wrap: wrap; gap: 8px; }
+.about-map-button { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--surface, #fff); text-decoration: none; font-size: 12px; font-weight: 700; }
+.map-brand { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 8px; font-weight: 900; }
+.map-google { color: #4285f4; background: #edf3ff; }
+.map-balad { color: #208b52; background: #e8f5ed; }
+.map-neshan { color: #e46e24; background: #fff1e4; }
 .about-contact-link { transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease; }
 .about-contact-link:hover { transform: translateY(-1px); border-color: var(--rose-bright); box-shadow: 0 6px 18px rgba(63, 38, 43, .07); }
 .about-contact-icon { display: grid; width: 42px; height: 42px; flex: none; place-items: center; border-radius: 13px; background: var(--rose-light); color: var(--rose); }

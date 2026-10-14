@@ -302,6 +302,29 @@ class _AdminImagePickerFieldState extends ConsumerState<AdminImagePickerField> {
     widget.onFileSizeChanged?.call(null);
   }
 
+  void _previewImage(String? path, Uint8List? pending) {
+    if (path == null && pending == null) return;
+    showDialog<void>(
+      context: context,
+      builder:
+          (context) => Dialog(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: InteractiveViewer(
+                child:
+                    pending != null
+                        ? Image.memory(pending, fit: BoxFit.contain)
+                        : AdminNetworkImage(
+                          imagePath: path!,
+                          fit: BoxFit.contain,
+                          cacheWidth: 1800,
+                        ),
+              ),
+            ),
+          ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final path = _imagePath;
@@ -317,30 +340,36 @@ class _AdminImagePickerFieldState extends ConsumerState<AdminImagePickerField> {
           child: Text(widget.label, style: theme.textTheme.labelLarge),
         ),
         const SizedBox(height: 8),
-        Container(
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: colorScheme.outlineVariant),
-          ),
-          child: AspectRatio(
-            aspectRatio: widget.aspectRatio,
-            child:
-                pending != null
-                    ? Image.memory(
-                      pending,
-                      fit: BoxFit.contain,
-                      filterQuality: FilterQuality.medium,
-                      errorBuilder: (_, __, ___) => _brokenPreview(theme),
-                    )
-                    : path == null
-                    ? _emptyPreview(theme)
-                    : AdminNetworkImage(
-                      imagePath: path,
-                      fit: BoxFit.contain,
-                      cacheWidth: 1280,
-                    ),
+        GestureDetector(
+          onTap:
+              path == null && pending == null
+                  ? null
+                  : () => _previewImage(path, pending),
+          child: Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: colorScheme.outlineVariant),
+            ),
+            child: AspectRatio(
+              aspectRatio: widget.aspectRatio,
+              child:
+                  pending != null
+                      ? Image.memory(
+                        pending,
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.medium,
+                        errorBuilder: (_, __, ___) => _brokenPreview(theme),
+                      )
+                      : path == null
+                      ? _emptyPreview(theme)
+                      : AdminNetworkImage(
+                        imagePath: path,
+                        fit: BoxFit.contain,
+                        cacheWidth: 1280,
+                      ),
+            ),
           ),
         ),
         if (_busy) ...[

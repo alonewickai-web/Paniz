@@ -120,6 +120,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         if (!address) {
           throw new BadRequestException({ code: "CUSTOMER_ADDRESS_REQUIRED", message: "نشانی انتخاب‌شده در حساب کاربری پیدا نشد." });
         }
+        if (!address.unit?.trim()) {
+          throw new BadRequestException({ code: "CUSTOMER_ADDRESS_UNIT_REQUIRED", message: "برای ثبت سفارش، شمارهٔ واحد نشانی را از حساب کاربری تکمیل کن." });
+        }
         const lines = await this.getQuotedLines(tx, input.items);
         const subtotalToman = lines.reduce(
           (sum, line) => sum + line.unitPriceToman * BigInt(line.quantity),

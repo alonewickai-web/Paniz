@@ -14,7 +14,7 @@ export class FinancialReportController {
   @Get("finance")
   @RequireAdminPermission("reports.financial")
   @ApiOperation({ summary: "گزارش فروش، بهای تمام‌شده و سود ناخالص به ریال" })
-  report(@Req() _request: AdminRequest, @Query("range") range?: string) {
-    return this.reportService.report(range);
+  report(@Req() _request: AdminRequest, @Query("range") range?: string, @Query("from") from?: string, @Query("to") to?: string) {
+    return this.reportService.report(range, from, to);
   }
 }

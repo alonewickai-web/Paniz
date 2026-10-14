@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:persian_datetime_picker/persian_datetime_picker.dart';
+import 'package:excel/excel.dart' as excel_lib show Excel;
+import 'dart:convert';
 
 import '../../core/admin_image_picker_field.dart';
 import '../../core/admin_api.dart';
@@ -17,7 +20,8 @@ class CustomerManagementScreen extends ConsumerStatefulWidget {
 class _CustomerManagementScreenState
     extends ConsumerState<CustomerManagementScreen> {
   final _query = TextEditingController();
-  final _city = TextEditingController();
+  String? _city;
+  List<String> _cities = const [];
   String _registration = 'any';
   String _purchaseSort = 'none';
   String? _productId;
@@ -32,14 +36,21 @@ class _CustomerManagementScreenState
   void initState() {
     super.initState();
     _loadProducts();
+    _loadCities();
     _load();
   }
 
   @override
   void dispose() {
     _query.dispose();
-    _city.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadCities() async {
+    try {
+      final cities = await ref.read(adminApiProvider).customerCities();
+      if (mounted) setState(() => _cities = cities);
+    } catch (_) {}
   }
 
   Future<void> _loadProducts() async {
@@ -60,7 +71,7 @@ class _CustomerManagementScreenState
           .customers(
             page: _page,
             query: _query.text,
-            city: _city.text,
+            city: _city,
             registration: _registration,
             purchaseSort: _purchaseSort,
             productId: _productId,
@@ -87,18 +98,189 @@ class _CustomerManagementScreenState
     }
   }
 
+  Future<void> _openCustomer(JsonMap customer) async {
+    try {
+      final details = await ref
+          .read(adminApiProvider)
+          .customerDetails('${customer['id']}');
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              title: Text('${details['fullName'] ?? 'مشتری'}'),
+              content: SizedBox(
+                width: 480,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('شماره: ${details['phone'] ?? '—'}'),
+                      if ('${details['email'] ?? ''}'.isNotEmpty)
+                        Text('ایمیل: ${details['email']}'),
+                      Text('عضویت: ${_date(details['createdAt'])}'),
+                      Text(
+                        'تعداد خرید: ${persianNumber(details['purchaseCount'] ?? 0)}',
+                      ),
+                      Text(
+                        'جمع خریدها: ${toman(details['totalPurchaseToman'])}',
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed:
+                                () => _showCustomerPurchases(context, details),
+                            icon: const Icon(Icons.receipt_long_outlined),
+                            label: Text(
+                              'خریدها (${persianNumber(details['purchaseCount'] ?? 0)})',
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed:
+                                () => _showCustomerTickets(context, details),
+                            icon: const Icon(Icons.support_agent_outlined),
+                            label: Text(
+                              'تیکت‌ها (${persianNumber((details['tickets'] as List?)?.length ?? 0)})',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if ((details['addresses'] as List?)?.isNotEmpty ==
+                          true) ...[
+                        const Text(
+                          'نشانی‌های ثبت‌شده',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        ...((details['addresses'] as List).whereType<Map>().map(
+                          (address) => Padding(
+                            padding: const EdgeInsets.only(top: 5),
+                            child: Text(
+                              '${address['province'] ?? ''}، ${address['city'] ?? ''}، ${address['street'] ?? ''}، پلاک ${address['plaqueNumber'] ?? '—'}، واحد ${address['unit'] ?? '—'}',
+                            ),
+                          ),
+                        )),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('بستن'),
+                ),
+              ],
+            ),
+      );
+    } catch (error) {
+      if (mounted)
+        showAppMessage(context, AdminApi.friendlyError(error), error: true);
+    }
+  }
+
+  Future<void> _showCustomerPurchases(
+    BuildContext parent,
+    JsonMap details,
+  ) async {
+    final purchases =
+        (details['purchases'] as List? ?? const []).whereType<Map>().toList();
+    await showDialog<void>(
+      context: parent,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('خریدهای مشتری'),
+            content: SizedBox(
+              width: 460,
+              child: ListView(
+                shrinkWrap: true,
+                children:
+                    purchases.isEmpty
+                        ? const [Text('خریدی ثبت نشده است.')]
+                        : purchases
+                            .map(
+                              (order) => Card(
+                                child: ListTile(
+                                  title: Text(
+                                    'سفارش ${order['orderNumber'] ?? ''}',
+                                  ),
+                                  subtitle: Text(
+                                    '${_date(order['placedAt'])} · ${_statusLabel(order['status'])}\\n${(order['items'] as List? ?? const []).whereType<Map>().map((item) => '${item['productNameSnapshot']} × ${item['quantity']}').join('، ')}',
+                                  ),
+                                  isThreeLine: true,
+                                  trailing: Text(toman(order['totalToman'])),
+                                ),
+                              ),
+                            )
+                            .toList(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('بستن'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<void> _showCustomerTickets(
+    BuildContext parent,
+    JsonMap details,
+  ) async {
+    final tickets =
+        (details['tickets'] as List? ?? const []).whereType<Map>().toList();
+    await showDialog<void>(
+      context: parent,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('تیکت‌های مشتری'),
+            content: SizedBox(
+              width: 460,
+              child: ListView(
+                shrinkWrap: true,
+                children:
+                    tickets.isEmpty
+                        ? const [Text('تیکتی ثبت نشده است.')]
+                        : tickets
+                            .map(
+                              (ticket) => Card(
+                                child: ListTile(
+                                  title: Text(
+                                    '${ticket['subject'] ?? 'بدون عنوان'}',
+                                  ),
+                                  subtitle: Text(
+                                    '${_date(ticket['lastMessageAt'])} · ${ticket['status'] == 'closed' ? 'بسته‌شده' : 'باز'}',
+                                  ),
+                                  leading: const Icon(
+                                    Icons.support_agent_outlined,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('بستن'),
+              ),
+            ],
+          ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => RefreshIndicator(
     onRefresh: _load,
     child: ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const _PageIntro(
-          icon: Icons.people_alt_outlined,
-          title: 'مدیریت مشتریان',
-          subtitle: 'جست‌وجو، خریدهای قبلی و رضایت پیامک و روبیکا',
-        ),
-        const SizedBox(height: 12),
         TextField(
           controller: _query,
           textInputAction: TextInputAction.search,
@@ -112,72 +294,138 @@ class _CustomerManagementScreenState
           ),
         ),
         const SizedBox(height: 9),
-        TextField(
-          controller: _city,
-          textInputAction: TextInputAction.search,
-          onSubmitted: (_) {
-            _page = 1;
-            _load();
-          },
-          decoration: const InputDecoration(
-            labelText: 'شهر',
-            prefixIcon: Icon(Icons.location_city_outlined),
-          ),
-        ),
         const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          initialValue: _registration,
-          decoration: const InputDecoration(labelText: 'زمان ثبت‌نام'),
-          items: const [
-            DropdownMenuItem(value: 'any', child: Text('همه زمان‌ها')),
-            DropdownMenuItem(
-              value: 'under_year',
-              child: Text('کمتر از یک سال'),
-            ),
-            DropdownMenuItem(
-              value: 'over_year',
-              child: Text('بیشتر از یک سال'),
-            ),
-          ],
-          onChanged: (value) => setState(() => _registration = value ?? 'any'),
-        ),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          initialValue: _purchaseSort,
-          decoration: const InputDecoration(
-            labelText: 'مرتب‌سازی بر اساس خرید',
-          ),
-          items: const [
-            DropdownMenuItem(value: 'none', child: Text('بدون مرتب‌سازی')),
-            DropdownMenuItem(value: 'recent', child: Text('خرید جدیدتر')),
-            DropdownMenuItem(value: 'oldest', child: Text('خرید قدیمی‌تر')),
-          ],
-          onChanged: (value) => setState(() => _purchaseSort = value ?? 'none'),
-        ),
-        if (_products.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          DropdownButtonFormField<String?>(
-            initialValue: _productId,
-            decoration: const InputDecoration(labelText: 'خرید محصول خاص'),
-            items: [
-              const DropdownMenuItem<String?>(
-                value: null,
-                child: Text('همهٔ محصولات'),
-              ),
-              ..._products.map(
-                (item) => DropdownMenuItem<String?>(
-                  value: '${item['id']}',
-                  child: Text(
-                    '${item['name']}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String?>(
+                initialValue: _city,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  labelText: 'شهر',
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 10,
                   ),
+                ),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('همهٔ شهرها'),
+                  ),
+                  ..._cities.map(
+                    (city) => DropdownMenuItem<String?>(
+                      value: city,
+                      child: Text(city, overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                ],
+                onChanged: (value) => setState(() => _city = value),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                initialValue: _registration,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  labelText: 'زمان ثبت‌نام',
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 10,
+                  ),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'any', child: Text('همه')),
+                  DropdownMenuItem(
+                    value: 'under_year',
+                    child: Text('کمتر از یک سال'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'over_year',
+                    child: Text('بیشتر از یک سال'),
+                  ),
+                ],
+                onChanged:
+                    (value) => setState(() => _registration = value ?? 'any'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                initialValue: _purchaseSort,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  labelText: 'میزان خرید',
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 10,
+                  ),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'none',
+                    child: Text('بدون مرتب‌سازی'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'highest',
+                    child: Text('بیشترین خرید'),
+                  ),
+                  DropdownMenuItem(value: 'lowest', child: Text('کمترین خرید')),
+                  DropdownMenuItem(value: 'never', child: Text('بدون خرید')),
+                  DropdownMenuItem(value: 'recent', child: Text('خرید جدیدتر')),
+                  DropdownMenuItem(
+                    value: 'oldest',
+                    child: Text('خرید قدیمی‌تر'),
+                  ),
+                ],
+                onChanged:
+                    (value) => setState(() => _purchaseSort = value ?? 'none'),
+              ),
+            ),
+            if (_products.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: DropdownButtonFormField<String?>(
+                  initialValue: _productId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    labelText: 'خرید محصول خاص',
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 10,
+                    ),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('همهٔ محصولات'),
+                    ),
+                    ..._products.map(
+                      (item) => DropdownMenuItem<String?>(
+                        value: '${item['id']}',
+                        child: Text(
+                          '${item['name']}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) => setState(() => _productId = value),
                 ),
               ),
             ],
-            onChanged: (value) => setState(() => _productId = value),
-          ),
-        ],
+          ],
+        ),
         const SizedBox(height: 10),
         FilledButton.icon(
           onPressed:
@@ -206,89 +454,54 @@ class _CustomerManagementScreenState
           const _EmptyCard(text: 'مشتری‌ای با این فیلتر پیدا نشد.'),
         ..._customers.map(
           (customer) => Card(
-            child: Padding(
-              padding: const EdgeInsets.all(13),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(child: Text(_initial(customer['fullName']))),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${customer['fullName'] ?? 'بدون نام'}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
+            margin: const EdgeInsets.only(bottom: 12),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () => _openCustomer(customer),
+              child: Padding(
+                padding: const EdgeInsets.all(13),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${customer['fullName'] ?? 'بدون نام'}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
-                            ),
-                            Text(
-                              '${customer['phone'] ?? ''}',
-                              textDirection: TextDirection.ltr,
-                              textAlign: TextAlign.right,
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
+                              Text(
+                                '${customer['phone'] ?? ''}',
+                                textDirection: TextDirection.ltr,
+                                textAlign: TextAlign.right,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 7),
-                  Text(
-                    'شهر: ${customer['city'] ?? 'ثبت نشده'}  ·  عضویت: ${_date(customer['createdAt'])}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  Text(
-                    'آخرین خرید: ${_date(customer['lastPurchaseAt'])}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      customer['marketingOptIn'] == true
-                          ? Icons.mark_email_read_outlined
-                          : Icons.unsubscribe_outlined,
-                      size: 19,
+                      ],
                     ),
-                    title: Text(
-                      customer['marketingOptIn'] == true
-                          ? 'با رضایت دریافت پیامک'
-                          : 'بدون رضایت پیامکی',
-                      style: const TextStyle(
-                        fontSize: 12,
+                    const SizedBox(height: 7),
+                    Text(
+                      'شهر: ${customer['city'] ?? 'ثبت نشده'}  ·  عضویت: ${_date(customer['createdAt'])}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'تعداد خرید: ${persianNumber(customer['purchaseCount'] ?? 0)}  ·  جمع خرید: ${toman(customer['totalPurchaseToman'])}',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                  ),
-                  ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      customer['rubikaLinked'] == true
-                          ? Icons.link_outlined
-                          : Icons.link_off_outlined,
-                      size: 19,
-                    ),
-                    title: Text(
-                      customer['rubikaLinked'] == true &&
-                              customer['rubikaMarketingOptIn'] == true
-                          ? 'روبیکا متصل · رضایت فعال'
-                          : customer['rubikaLinked'] == true
-                          ? 'روبیکا متصل · بدون رضایت'
-                          : 'روبیکا متصل نیست',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -363,11 +576,13 @@ class _CouponManagementScreenState
 
   Future<void> _edit([JsonMap? coupon]) async {
     final code = TextEditingController(text: '${coupon?['code'] ?? ''}');
-    final initialType = coupon?['discountType'] == 'fixed' ? 'fixed' : 'percent';
+    final initialType =
+        coupon?['discountType'] == 'fixed' ? 'fixed' : 'percent';
     final value = TextEditingController(
-      text: initialType == 'fixed'
-          ? groupedNumber(coupon?['discountValue'] ?? '')
-          : '${coupon?['discountValue'] ?? ''}',
+      text:
+          initialType == 'fixed'
+              ? groupedNumber(coupon?['discountValue'] ?? '')
+              : '${coupon?['discountValue'] ?? ''}',
     );
     final minimum = TextEditingController(
       text: '${coupon?['minOrderToman'] ?? '0'}',
@@ -421,9 +636,10 @@ class _CouponManagementScreenState
                           ],
                           onChanged: (next) {
                             if (next != null) {
-                              value.text = next == 'fixed'
-                                  ? _formatGroupedValue(value.text)
-                                  : _ungroupedDigits(value.text);
+                              value.text =
+                                  next == 'fixed'
+                                      ? _formatGroupedValue(value.text)
+                                      : _ungroupedDigits(value.text);
                               type.value = next;
                             }
                           },
@@ -432,24 +648,29 @@ class _CouponManagementScreenState
                   const SizedBox(height: 8),
                   ValueListenableBuilder(
                     valueListenable: type,
-                    builder: (_, selected, __) => TextField(
-                      controller: value,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: selected == 'fixed'
-                          ? const [_ThousandsSeparatorInputFormatter()]
-                          : const [],
-                      decoration: InputDecoration(
-                        labelText: selected == 'fixed'
-                            ? 'مبلغ تخفیف (تومان)'
-                            : 'درصد تخفیف',
-                      ),
-                    ),
+                    builder:
+                        (_, selected, __) => TextField(
+                          controller: value,
+                          keyboardType: TextInputType.number,
+                          inputFormatters:
+                              selected == 'fixed'
+                                  ? const [_ThousandsSeparatorInputFormatter()]
+                                  : const [],
+                          decoration: InputDecoration(
+                            labelText:
+                                selected == 'fixed'
+                                    ? 'مبلغ تخفیف (تومان)'
+                                    : 'درصد تخفیف',
+                          ),
+                        ),
                   ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: minimum,
                     keyboardType: TextInputType.number,
-                    inputFormatters: const [_ThousandsSeparatorInputFormatter()],
+                    inputFormatters: const [
+                      _ThousandsSeparatorInputFormatter(),
+                    ],
                     decoration: const InputDecoration(
                       labelText: 'حداقل مبلغ سفارش (تومان)',
                     ),
@@ -458,7 +679,9 @@ class _CouponManagementScreenState
                   TextField(
                     controller: max,
                     keyboardType: TextInputType.number,
-                    inputFormatters: const [_ThousandsSeparatorInputFormatter()],
+                    inputFormatters: const [
+                      _ThousandsSeparatorInputFormatter(),
+                    ],
                     decoration: const InputDecoration(
                       labelText: 'سقف تخفیف (اختیاری)',
                     ),
@@ -507,8 +730,12 @@ class _CouponManagementScreenState
               ),
               FilledButton(
                 onPressed: () {
-                  final parsedValue = num.tryParse(_ungroupedDigits(value.text));
-                  final parsedMinimum = int.tryParse(_ungroupedDigits(minimum.text));
+                  final parsedValue = num.tryParse(
+                    _ungroupedDigits(value.text),
+                  );
+                  final parsedMinimum = int.tryParse(
+                    _ungroupedDigits(minimum.text),
+                  );
                   final parsedMax =
                       max.text.trim().isEmpty
                           ? null
@@ -664,13 +891,15 @@ class _ProductDiscountCampaignScreenState
           .map((item) => Map<String, dynamic>.from(item))
           .toList();
 
-  List<JsonMap> _discountedVariants(JsonMap product) => _variants(product)
-      .where((variant) {
+  List<JsonMap> _discountedVariants(JsonMap product) =>
+      _variants(product).where((variant) {
         final compare = int.tryParse('${variant['compareAtPriceToman'] ?? ''}');
         final price = int.tryParse('${variant['priceToman'] ?? ''}');
-        return variant['isActive'] == true && compare != null && price != null && compare > price;
-      })
-      .toList();
+        return variant['isActive'] == true &&
+            compare != null &&
+            price != null &&
+            compare > price;
+      }).toList();
 
   Future<void> _load() async {
     setState(() {
@@ -682,7 +911,9 @@ class _ProductDiscountCampaignScreenState
       if (!mounted) return;
       setState(() {
         _products = products;
-        _selectedIds.removeWhere((id) => !products.any((product) => '${product['id']}' == id));
+        _selectedIds.removeWhere(
+          (id) => !products.any((product) => '${product['id']}' == id),
+        );
       });
     } catch (error) {
       if (mounted) setState(() => _error = AdminApi.friendlyError(error));
@@ -694,8 +925,11 @@ class _ProductDiscountCampaignScreenState
   List<JsonMap> get _visibleProducts {
     final query = _search.text.trim().toLowerCase();
     return _products.where((product) {
-      final hasVariants = _variants(product).any((variant) => variant['isActive'] == true);
-      final matches = query.isEmpty ||
+      final hasVariants = _variants(
+        product,
+      ).any((variant) => variant['isActive'] == true);
+      final matches =
+          query.isEmpty ||
           '${product['name'] ?? ''}'.toLowerCase().contains(query) ||
           '${product['slug'] ?? ''}'.toLowerCase().contains(query);
       return hasVariants && matches && product['status'] == 'published';
@@ -705,13 +939,21 @@ class _ProductDiscountCampaignScreenState
   Future<void> _applyCampaign() async {
     final value = int.tryParse(_ungroupedDigits(_amount.text));
     if (_selectedIds.isEmpty) {
-      showAppMessage(context, 'ابتدا حداقل یک محصول را انتخاب کن.', error: true);
+      showAppMessage(
+        context,
+        'ابتدا حداقل یک محصول را انتخاب کن.',
+        error: true,
+      );
       return;
     }
     if (value == null || value < 1 || (_type == 'percent' && value >= 100)) {
-      showAppMessage(context, _type == 'percent'
-          ? 'درصد تخفیف باید بین ۱ تا ۹۹ باشد.'
-          : 'مبلغ تخفیف را به تومان وارد کن.', error: true);
+      showAppMessage(
+        context,
+        _type == 'percent'
+            ? 'درصد تخفیف باید بین ۱ تا ۹۹ باشد.'
+            : 'مبلغ تخفیف را به تومان وارد کن.',
+        error: true,
+      );
       return;
     }
 
@@ -719,18 +961,24 @@ class _ProductDiscountCampaignScreenState
     var updated = 0;
     var failed = 0;
     final api = ref.read(adminApiProvider);
-    for (final product in _products.where((item) => _selectedIds.contains('${item['id']}'))) {
-      for (final variant in _variants(product).where((item) => item['isActive'] == true)) {
+    for (final product in _products.where(
+      (item) => _selectedIds.contains('${item['id']}'),
+    )) {
+      for (final variant in _variants(
+        product,
+      ).where((item) => item['isActive'] == true)) {
         final price = int.tryParse('${variant['priceToman'] ?? ''}');
         final compare = int.tryParse('${variant['compareAtPriceToman'] ?? ''}');
-        final base = compare != null && compare > (price ?? 0) ? compare : price;
+        final base =
+            compare != null && compare > (price ?? 0) ? compare : price;
         if (base == null || base < 2) {
           failed++;
           continue;
         }
-        final discount = _type == 'percent'
-            ? (base * value) ~/ 100
-            : (value < base - 1 ? value : base - 1);
+        final discount =
+            _type == 'percent'
+                ? (base * value) ~/ 100
+                : (value < base - 1 ? value : base - 1);
         final salePrice = base - discount;
         if (salePrice < 1 || salePrice >= base) {
           failed++;
@@ -797,7 +1045,14 @@ class _ProductDiscountCampaignScreenState
   @override
   Widget build(BuildContext context) {
     final visible = _visibleProducts;
-    final discounted = _products.where((product) => product['status'] == 'published' && _discountedVariants(product).isNotEmpty).toList();
+    final discounted =
+        _products
+            .where(
+              (product) =>
+                  product['status'] == 'published' &&
+                  _discountedVariants(product).isNotEmpty,
+            )
+            .toList();
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
@@ -806,7 +1061,8 @@ class _ProductDiscountCampaignScreenState
           const _PageIntro(
             icon: Icons.sell_outlined,
             title: 'کمپین تخفیف محصولات',
-            subtitle: 'تخفیف درصدی یا مبلغ ثابت را روی رنگ و سایزهای یک یا چند محصول اعمال کن؛ محصولات منتشرشده با قیمت جدید در سایت دیده می‌شوند.',
+            subtitle:
+                'تخفیف درصدی یا مبلغ ثابت را روی رنگ و سایزهای یک یا چند محصول اعمال کن؛ محصولات منتشرشده با قیمت جدید در سایت دیده می‌شوند.',
           ),
           const SizedBox(height: 12),
           Card(
@@ -815,28 +1071,49 @@ class _ProductDiscountCampaignScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text('تنظیم تخفیف کمپین', style: TextStyle(fontWeight: FontWeight.w900)),
+                  const Text(
+                    'تنظیم تخفیف کمپین',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
                   const SizedBox(height: 10),
                   SegmentedButton<String>(
                     segments: const [
-                      ButtonSegment(value: 'percent', label: Text('درصدی'), icon: Icon(Icons.percent)),
-                      ButtonSegment(value: 'fixed', label: Text('مبلغ ثابت'), icon: Icon(Icons.payments_outlined)),
+                      ButtonSegment(
+                        value: 'percent',
+                        label: Text('درصدی'),
+                        icon: Icon(Icons.percent),
+                      ),
+                      ButtonSegment(
+                        value: 'fixed',
+                        label: Text('مبلغ ثابت'),
+                        icon: Icon(Icons.payments_outlined),
+                      ),
                     ],
                     selected: {_type},
-                    onSelectionChanged: _saving ? null : (selected) => setState(() {
-                      _type = selected.first;
-                      _amount.text = _type == 'fixed'
-                          ? _formatGroupedValue(_amount.text)
-                          : _ungroupedDigits(_amount.text);
-                    }),
+                    onSelectionChanged:
+                        _saving
+                            ? null
+                            : (selected) => setState(() {
+                              _type = selected.first;
+                              _amount.text =
+                                  _type == 'fixed'
+                                      ? _formatGroupedValue(_amount.text)
+                                      : _ungroupedDigits(_amount.text);
+                            }),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: _amount,
                     keyboardType: TextInputType.number,
-                    inputFormatters: _type == 'fixed' ? const [_ThousandsSeparatorInputFormatter()] : const [],
+                    inputFormatters:
+                        _type == 'fixed'
+                            ? const [_ThousandsSeparatorInputFormatter()]
+                            : const [],
                     decoration: InputDecoration(
-                      labelText: _type == 'percent' ? 'درصد تخفیف' : 'مبلغ تخفیف (تومان)',
+                      labelText:
+                          _type == 'percent'
+                              ? 'درصد تخفیف'
+                              : 'مبلغ تخفیف (تومان)',
                       suffixText: _type == 'percent' ? '٪' : 'تومان',
                     ),
                   ),
@@ -853,21 +1130,42 @@ class _ProductDiscountCampaignScreenState
                     Align(
                       alignment: AlignmentDirectional.centerStart,
                       child: TextButton.icon(
-                        onPressed: _saving ? null : () => setState(() {
-                          final allSelected = visible.every((item) => _selectedIds.contains('${item['id']}'));
-                          if (allSelected) {
-                            _selectedIds.removeAll(visible.map((item) => '${item['id']}'));
-                          } else {
-                            _selectedIds.addAll(visible.map((item) => '${item['id']}'));
-                          }
-                        }),
+                        onPressed:
+                            _saving
+                                ? null
+                                : () => setState(() {
+                                  final allSelected = visible.every(
+                                    (item) =>
+                                        _selectedIds.contains('${item['id']}'),
+                                  );
+                                  if (allSelected) {
+                                    _selectedIds.removeAll(
+                                      visible.map((item) => '${item['id']}'),
+                                    );
+                                  } else {
+                                    _selectedIds.addAll(
+                                      visible.map((item) => '${item['id']}'),
+                                    );
+                                  }
+                                }),
                         icon: const Icon(Icons.select_all),
-                        label: Text(visible.every((item) => _selectedIds.contains('${item['id']}')) ? 'لغو انتخاب همه' : 'انتخاب همهٔ نتایج'),
+                        label: Text(
+                          visible.every(
+                                (item) =>
+                                    _selectedIds.contains('${item['id']}'),
+                              )
+                              ? 'لغو انتخاب همه'
+                              : 'انتخاب همهٔ نتایج',
+                        ),
                       ),
                     ),
-                  if (_error != null) _ErrorCard(message: _error!, onRetry: _load),
+                  if (_error != null)
+                    _ErrorCard(message: _error!, onRetry: _load),
                   if (_loading)
-                    const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()))
+                    const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
                   else if (visible.isEmpty)
                     const _EmptyCard(text: 'محصولی برای انتخاب پیدا نشد.'),
                   ...visible.map((product) {
@@ -875,39 +1173,74 @@ class _ProductDiscountCampaignScreenState
                     final active = _discountedVariants(product);
                     return CheckboxListTile(
                       value: _selectedIds.contains(id),
-                      onChanged: _saving ? null : (checked) => setState(() {
-                        if (checked == true) _selectedIds.add(id); else _selectedIds.remove(id);
-                      }),
+                      onChanged:
+                          _saving
+                              ? null
+                              : (checked) => setState(() {
+                                if (checked == true)
+                                  _selectedIds.add(id);
+                                else
+                                  _selectedIds.remove(id);
+                              }),
                       contentPadding: EdgeInsets.zero,
-                      title: Text('${product['name'] ?? 'محصول'}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                      subtitle: Text(active.isEmpty
-                          ? '${persianNumber(_variants(product).where((item) => item['isActive'] == true).length)} رنگ و سایز فعال'
-                          : '${persianNumber(active.length)} تنوع تخفیف‌دار · قیمت پایه ${groupedNumber(active.first['compareAtPriceToman'])} تومان'),
-                      secondary: Icon(active.isNotEmpty ? Icons.local_offer_rounded : Icons.checkroom_outlined),
+                      title: Text(
+                        '${product['name'] ?? 'محصول'}',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      subtitle: Text(
+                        active.isEmpty
+                            ? '${persianNumber(_variants(product).where((item) => item['isActive'] == true).length)} رنگ و سایز فعال'
+                            : '${persianNumber(active.length)} تنوع تخفیف‌دار · قیمت پایه ${groupedNumber(active.first['compareAtPriceToman'])} تومان',
+                      ),
+                      secondary: Icon(
+                        active.isNotEmpty
+                            ? Icons.local_offer_rounded
+                            : Icons.checkroom_outlined,
+                      ),
                     );
                   }),
                   const SizedBox(height: 8),
                   FilledButton.icon(
                     onPressed: _saving || _loading ? null : _applyCampaign,
-                    icon: _saving
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.campaign_outlined),
-                    label: Text(_saving ? 'در حال ثبت تغییرات…' : 'اعمال روی ${persianNumber(_selectedIds.length)} محصول'),
+                    icon:
+                        _saving
+                            ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                            : const Icon(Icons.campaign_outlined),
+                    label: Text(
+                      _saving
+                          ? 'در حال ثبت تغییرات…'
+                          : 'اعمال روی ${persianNumber(_selectedIds.length)} محصول',
+                    ),
                   ),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 16),
-          Text('تخفیف‌های فعال در سایت · ${persianNumber(discounted.length)} محصول', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-          if (discounted.isEmpty && !_loading) const _EmptyCard(text: 'در حال حاضر محصول تخفیف‌داری در سایت نمایش داده نمی‌شود.'),
+          Text(
+            'تخفیف‌های فعال در سایت · ${persianNumber(discounted.length)} محصول',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+          ),
+          if (discounted.isEmpty && !_loading)
+            const _EmptyCard(
+              text: 'در حال حاضر محصول تخفیف‌داری در سایت نمایش داده نمی‌شود.',
+            ),
           ...discounted.map((product) {
             final variants = _discountedVariants(product);
             return Card(
               child: ListTile(
                 leading: const CircleAvatar(child: Icon(Icons.sell_outlined)),
-                title: Text('${product['name'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                subtitle: Text('${persianNumber(variants.length)} رنگ و سایز · ${groupedNumber(variants.first['priceToman'])} تومان'),
+                title: Text(
+                  '${product['name'] ?? ''}',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                subtitle: Text(
+                  '${persianNumber(variants.length)} رنگ و سایز · ${groupedNumber(variants.first['priceToman'])} تومان',
+                ),
                 trailing: TextButton(
                   onPressed: _saving ? null : () => _removeCampaign(product),
                   child: const Text('برداشتن تخفیف'),
@@ -935,6 +1268,8 @@ class _SmsCampaignScreenState extends ConsumerState<SmsCampaignScreen> {
   String _registration = 'any';
   String _purchaseSort = 'none';
   String _channel = 'sms';
+  int _purchaseThreshold = 10;
+  List<String> _phoneNumbers = const [];
   String? _productId;
   List<JsonMap> _products = const [];
   List<JsonMap> _history = const [];
@@ -963,6 +1298,8 @@ class _SmsCampaignScreenState extends ConsumerState<SmsCampaignScreen> {
     'city': _city.text.trim(),
     'registration': _registration,
     'purchaseSort': _purchaseSort,
+    'purchaseThreshold': _purchaseThreshold,
+    if (_phoneNumbers.isNotEmpty) 'phoneNumbers': _phoneNumbers,
     if (_productId != null) 'productId': _productId,
   };
 
@@ -971,6 +1308,74 @@ class _SmsCampaignScreenState extends ConsumerState<SmsCampaignScreen> {
       final list = await ref.read(adminApiProvider).productOptions();
       if (mounted) setState(() => _products = list);
     } catch (_) {}
+  }
+
+  Future<void> _importContacts() async {
+    try {
+      const fileChannel = MethodChannel('paniz/admin-reports');
+      final selected = await fileChannel.invokeMapMethod<String, Object?>(
+        'selectContactFile',
+      );
+      if (selected == null) return;
+      final fileName = '${selected['name'] ?? ''}';
+      final bytes = selected['bytes'];
+      if (bytes is! Uint8List) {
+        throw const AdminApiException('خواندن فایل ممکن نشد.');
+      }
+      final rawValues = <String>[];
+      if (fileName.toLowerCase().endsWith('.xlsx')) {
+        final workbook = excel_lib.Excel.decodeBytes(bytes);
+        for (final sheet in workbook.tables.values) {
+          for (final row in sheet.rows) {
+            for (final cell in row) {
+              if (cell?.value != null) rawValues.add(cell!.value.toString());
+            }
+          }
+        }
+      } else {
+        rawValues.add(utf8.decode(bytes, allowMalformed: true));
+      }
+      final found = <String>{};
+      for (final value in rawValues) {
+        for (final match in RegExp(
+          r'(?:\+?98|0098|0)?[\s-]*9(?:[0-9۰-۹٠-٩][\s-]*){9}',
+        ).allMatches(value)) {
+          final digits = match
+              .group(0)!
+              .replaceAll(RegExp(r'[^0-9۰-۹٠-٩]'), '');
+          final ascii = digits.replaceAllMapped(RegExp(r'[۰-۹٠-٩]'), (m) {
+            final persian = '۰۱۲۳۴۵۶۷۸۹'.indexOf(m.group(0)!);
+            final arabic = '٠١٢٣٤٥٦٧٨٩'.indexOf(m.group(0)!);
+            return '${persian >= 0 ? persian : arabic}';
+          });
+          final local =
+              ascii.startsWith('0098')
+                  ? '0${ascii.substring(4)}'
+                  : ascii.startsWith('98')
+                  ? '0${ascii.substring(2)}'
+                  : ascii.startsWith('9')
+                  ? '0$ascii'
+                  : ascii;
+          if (RegExp(r'^09\d{9}$').hasMatch(local)) found.add(local);
+        }
+      }
+      if (found.isEmpty)
+        throw const AdminApiException(
+          'در فایل شماره موبایل معتبر ایرانی پیدا نشد.',
+        );
+      if (!mounted) return;
+      setState(() {
+        _phoneNumbers = found.take(20000).toList();
+        _audienceCount = null;
+      });
+      showAppMessage(
+        context,
+        '${persianNumber(_phoneNumbers.length)} شماره از فایل خوانده شد. هنگام ارسال فقط مخاطبانی استفاده می‌شوند که رضایت این کانال را ثبت کرده باشند.',
+      );
+    } catch (error) {
+      if (mounted)
+        showAppMessage(context, AdminApi.friendlyError(error), error: true);
+    }
   }
 
   Future<void> _refreshHistory() async {
@@ -1090,13 +1495,6 @@ class _SmsCampaignScreenState extends ConsumerState<SmsCampaignScreen> {
     child: ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const _PageIntro(
-          icon: Icons.campaign_outlined,
-          title: 'پیام‌رسانی به مشتریان',
-          subtitle:
-              'ارسال از پیامک یا ربات روبیکا با فیلتر و پیش‌نمایش مخاطبان',
-        ),
-        const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           key: ValueKey(_channel),
           initialValue: _channel,
@@ -1121,7 +1519,7 @@ class _SmsCampaignScreenState extends ConsumerState<SmsCampaignScreen> {
         TextField(
           controller: _title,
           maxLength: 160,
-          decoration: const InputDecoration(labelText: 'عنوان کمپین'),
+          decoration: const InputDecoration(labelText: 'عنوان'),
         ),
         const SizedBox(height: 8),
         TextField(
@@ -1144,6 +1542,29 @@ class _SmsCampaignScreenState extends ConsumerState<SmsCampaignScreen> {
             context,
           ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
         ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: _loading ? null : _importContacts,
+          icon: const Icon(Icons.upload_file_outlined),
+          label: Text(
+            _phoneNumbers.isEmpty
+                ? 'افزودن شماره از CSV یا Excel'
+                : 'تغییر فایل شماره‌ها (${persianNumber(_phoneNumbers.length)})',
+          ),
+        ),
+        if (_phoneNumbers.isNotEmpty)
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: TextButton.icon(
+              onPressed:
+                  () => setState(() {
+                    _phoneNumbers = const [];
+                    _audienceCount = null;
+                  }),
+              icon: const Icon(Icons.close),
+              label: const Text('پاک‌کردن شماره‌های فایل'),
+            ),
+          ),
         const SizedBox(height: 8),
         TextField(
           controller: _query,
@@ -1185,6 +1606,14 @@ class _SmsCampaignScreenState extends ConsumerState<SmsCampaignScreen> {
             DropdownMenuItem(value: 'none', child: Text('بدون ترتیب')),
             DropdownMenuItem(value: 'recent', child: Text('خرید جدیدتر')),
             DropdownMenuItem(value: 'oldest', child: Text('خرید قدیمی‌تر')),
+            DropdownMenuItem(
+              value: 'over_threshold',
+              child: Text('میزان خرید بالاتر از تعداد'),
+            ),
+            DropdownMenuItem(
+              value: 'under_threshold',
+              child: Text('میزان خرید کمتر از تعداد'),
+            ),
           ],
           onChanged:
               (value) => setState(() {
@@ -1192,6 +1621,25 @@ class _SmsCampaignScreenState extends ConsumerState<SmsCampaignScreen> {
                 _audienceCount = null;
               }),
         ),
+        if (_purchaseSort == 'over_threshold' ||
+            _purchaseSort == 'under_threshold') ...[
+          const SizedBox(height: 8),
+          TextFormField(
+            key: ValueKey(_purchaseSort),
+            initialValue: '$_purchaseThreshold',
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'تعداد سفارش برای مقایسه',
+            ),
+            onChanged: (value) {
+              final parsed = int.tryParse(value);
+              if (parsed != null && parsed > 0 && parsed <= 100000) {
+                _purchaseThreshold = parsed;
+                _audienceCount = null;
+              }
+            },
+          ),
+        ],
         if (_products.isNotEmpty) ...[
           const SizedBox(height: 8),
           DropdownButtonFormField<String?>(
@@ -1381,8 +1829,13 @@ class _SocialPublishingScreenState
         break;
       }
     }
+    final images =
+        selected?['images'] is List
+            ? (selected!['images'] as List).whereType<Map>().toList()
+            : const <Map>[];
     setState(() {
       _productId = id;
+      _imagePath = images.isEmpty ? null : '${images.first['imagePath']}';
       _productTitle.text =
           selected == null
               ? ''
@@ -1421,11 +1874,18 @@ class _SocialPublishingScreenState
 
   Future<void> _chooseTime() async {
     final now = DateTime.now();
-    final date = await showDatePicker(
+    final today = Jalali.now();
+    final date = await showPersianDatePicker(
       context: context,
-      initialDate: _publishAt ?? now,
-      firstDate: now,
-      lastDate: now.add(const Duration(days: 365)),
+      initialDate: Jalali.fromDateTime(_publishAt ?? now),
+      firstDate: today,
+      lastDate: today.add(years: 1),
+      currentDate: today,
+      locale: const Locale('fa', 'IR'),
+      textDirection: TextDirection.rtl,
+      helpText: 'تاریخ انتشار',
+      cancelText: 'انصراف',
+      confirmText: 'انتخاب',
     );
     if (date == null || !mounted) return;
     final time = await showTimePicker(
@@ -1436,9 +1896,9 @@ class _SocialPublishingScreenState
     setState(
       () =>
           _publishAt = DateTime(
-            date.year,
-            date.month,
-            date.day,
+            date.toDateTime().year,
+            date.toDateTime().month,
+            date.toDateTime().day,
             time.hour,
             time.minute,
           ),
@@ -1536,7 +1996,7 @@ class _SocialPublishingScreenState
     if (raw is! String) return '—';
     final date = DateTime.tryParse(raw)?.toLocal();
     if (date == null) return '—';
-    return '${date.year}/${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}  ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    return '${shamsiDate(date)} · ${persianNumber(date.hour.toString().padLeft(2, '0'))}:${persianNumber(date.minute.toString().padLeft(2, '0'))}';
   }
 
   Future<void> _actOnPost(JsonMap post, String action) async {
@@ -1766,21 +2226,18 @@ class _SocialPublishingScreenState
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const _PageIntro(
-            icon: Icons.campaign_outlined,
-            title: 'انتشار تبلیغات',
-            subtitle: 'ارسال مستقیم پیام و مشاهدهٔ سوابق روبیکا و اینستاگرام',
-          ),
-          const SizedBox(height: 10),
           _IntegrationTile(
-            title: 'ربات روبیکا',
+            title: 'روبیکا',
             configured: rubika['configured'] == true,
-            hint: 'توکن، شناسه و لینک عمومی کانال',
+            hint: _integrationReason(rubika),
+            icon: Icons.send_rounded,
           ),
+          const SizedBox(height: 8),
           _IntegrationTile(
-            title: 'Instagram Graph API',
+            title: 'اینستاگرام',
             configured: instagram['configured'] == true,
-            hint: 'INSTAGRAM_USER_ID، token و Graph API version مجاز',
+            hint: _integrationReason(instagram),
+            icon: Icons.camera_alt_outlined,
           ),
           const SizedBox(height: 8),
           Card(
@@ -1832,6 +2289,75 @@ class _SocialPublishingScreenState
                           'پیش‌فرض از عنوان سئو، توضیح کوتاه یا نام محصول پر شده است.',
                     ),
                   ),
+                  if (_selectedProduct?['images'] is List &&
+                      (_selectedProduct!['images'] as List).isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Text(
+                        'عکس‌های همین محصول',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    SizedBox(
+                      height: 92,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children:
+                            (_selectedProduct!['images'] as List)
+                                .whereType<Map>()
+                                .map((image) {
+                                  final path = '${image['imagePath'] ?? ''}';
+                                  final selected = path == _imagePath;
+                                  return Padding(
+                                    padding: const EdgeInsetsDirectional.only(
+                                      end: 8,
+                                    ),
+                                    child: InkWell(
+                                      onTap:
+                                          () =>
+                                              setState(() => _imagePath = path),
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Container(
+                                        width: 76,
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          border: Border.all(
+                                            color:
+                                                selected
+                                                    ? Theme.of(
+                                                      context,
+                                                    ).colorScheme.primary
+                                                    : Theme.of(context)
+                                                        .colorScheme
+                                                        .outlineVariant,
+                                            width: selected ? 2 : 1,
+                                          ),
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            11,
+                                          ),
+                                          child: Image.network(
+                                            AdminApi.imageUrl(path),
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (_, __, ___) => const Icon(
+                                                  Icons.broken_image_outlined,
+                                                ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                })
+                                .toList(),
+                      ),
+                    ),
+                  ],
                 ],
                 TextField(
                   controller: _caption,
@@ -1869,6 +2395,75 @@ class _SocialPublishingScreenState
                       ),
                     ),
                   ),
+                  if (_selectedProduct?['images'] is List &&
+                      (_selectedProduct!['images'] as List).isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Text(
+                        'عکس‌های همین محصول',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    SizedBox(
+                      height: 92,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children:
+                            (_selectedProduct!['images'] as List)
+                                .whereType<Map>()
+                                .map((image) {
+                                  final path = '${image['imagePath'] ?? ''}';
+                                  final selectedImage = path == _imagePath;
+                                  return Padding(
+                                    padding: const EdgeInsetsDirectional.only(
+                                      end: 8,
+                                    ),
+                                    child: InkWell(
+                                      onTap:
+                                          () =>
+                                              setState(() => _imagePath = path),
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Container(
+                                        width: 76,
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          border: Border.all(
+                                            color:
+                                                selectedImage
+                                                    ? Theme.of(
+                                                      context,
+                                                    ).colorScheme.primary
+                                                    : Theme.of(context)
+                                                        .colorScheme
+                                                        .outlineVariant,
+                                            width: selectedImage ? 2 : 1,
+                                          ),
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            11,
+                                          ),
+                                          child: Image.network(
+                                            AdminApi.imageUrl(path),
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (_, __, ___) => const Icon(
+                                                  Icons.broken_image_outlined,
+                                                ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                })
+                                .toList(),
+                      ),
+                    ),
+                  ],
                 ],
                 const SizedBox(height: 8),
                 AdminImagePickerField(
@@ -1909,7 +2504,7 @@ class _SocialPublishingScreenState
                     label: Text(
                       _publishAt == null
                           ? 'انتخاب تاریخ و ساعت'
-                          : _publishAt!.toLocal().toString().substring(0, 16),
+                          : _socialDate(_publishAt!.toUtc().toIso8601String()),
                     ),
                   ),
                 FilledButton.icon(
@@ -2230,25 +2825,39 @@ class _IntegrationTile extends StatelessWidget {
     required this.title,
     required this.configured,
     required this.hint,
+    required this.icon,
   });
   final String title;
   final bool configured;
   final String hint;
+  final IconData icon;
   @override
   Widget build(BuildContext context) => Card(
     child: ListTile(
-      leading: Icon(
-        configured ? Icons.check_circle_outline : Icons.error_outline,
-        color:
-            configured ? Colors.green : Theme.of(context).colorScheme.tertiary,
+      leading: CircleAvatar(
+        backgroundColor:
+            configured
+                ? Colors.green.withValues(alpha: .12)
+                : Theme.of(context).colorScheme.errorContainer,
+        child: Icon(
+          icon,
+          color:
+              configured ? Colors.green : Theme.of(context).colorScheme.error,
+        ),
       ),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
       subtitle: Text(
-        configured ? 'تنظیمات اتصال ثبت شده' : 'تنظیم در متغیرهای API: $hint',
+        configured ? 'متصل' : 'قطع شده: $hint',
         style: Theme.of(context).textTheme.bodySmall,
       ),
     ),
   );
+}
+
+String _integrationReason(JsonMap status) {
+  final missing = status['missing'];
+  if (missing is! List || missing.isEmpty) return 'اتصال برقرار است';
+  return 'تنظیمات ناقص است: ${missing.join('، ')}';
 }
 
 class _EmptyCard extends StatelessWidget {
@@ -2305,14 +2914,7 @@ Widget _statusLine(String name, bool ready) => Padding(
 String _date(Object? raw) {
   if (raw is! String) return 'ندارد';
   final date = DateTime.tryParse(raw);
-  return date == null
-      ? '—'
-      : '${date.toLocal().year}/${date.toLocal().month.toString().padLeft(2, '0')}/${date.toLocal().day.toString().padLeft(2, '0')}';
-}
-
-String _initial(Object? raw) {
-  final value = raw is String ? raw.trim() : '';
-  return value.isEmpty ? 'م' : value.substring(0, 1);
+  return date == null ? '—' : shamsiDate(date.toLocal());
 }
 
 String _statusLabel(Object? raw) => switch (raw) {
@@ -2372,10 +2974,12 @@ class _ThousandsSeparatorInputFormatter extends TextInputFormatter {
       (_) => ',',
     );
     final formatted = persianNumber(grouped);
-    final oldOffset = newValue.selection.extentOffset.clamp(0, newValue.text.length).toInt();
-    final digitCountBeforeCursor = _digits(
-      newValue.text.substring(0, oldOffset),
-    ).replaceAll(RegExp(r'\D'), '').length;
+    final oldOffset =
+        newValue.selection.extentOffset.clamp(0, newValue.text.length).toInt();
+    final digitCountBeforeCursor =
+        _digits(
+          newValue.text.substring(0, oldOffset),
+        ).replaceAll(RegExp(r'\D'), '').length;
     var offset = 0;
     var digitsSeen = 0;
     while (offset < formatted.length && digitsSeen < digitCountBeforeCursor) {

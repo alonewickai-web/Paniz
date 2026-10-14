@@ -14,9 +14,10 @@ import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 import { execFile as execFileCallback } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
+import { toJalaali } from "jalaali-js";
 import { AuthenticatedAdmin } from "../admin-auth/admin-session.guard";
 import { PrismaService } from "../database/prisma.service";
 import { RubikaBotService } from "../integrations/rubika/rubika.service";
@@ -32,6 +33,7 @@ const socialProductSelect = {
   slug: true,
   seoTitle: true,
   shortDescription: true,
+  images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }], select: { imagePath: true, altText: true } },
   variants: {
     where: { isActive: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -44,7 +46,9 @@ type AudienceFilters = {
   q?: string;
   city?: string;
   registration?: "any" | "under_year" | "over_year";
-  purchaseSort?: "none" | "recent" | "oldest";
+  purchaseSort?: "none" | "recent" | "oldest" | "highest" | "lowest" | "never" | "over_threshold" | "under_threshold";
+  purchaseThreshold?: number;
+  phoneNumbers?: string[];
   productId?: string;
 };
 
@@ -86,7 +90,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     this.rubikaTimer.unref();
     this.rubikaProductTimer = setInterval(() => void this.publishOldestAvailableProduct(), 150 * 60_000);
     this.rubikaProductTimer.unref();
-    this.backupTimer = setInterval(() => void this.ensureDailyBackup(), 60 * 60_000);
+    this.backupTimer = setInterval(() => void this.ensureDailyBackup(), 30 * 60_000);
     this.backupTimer.unref();
     setTimeout(() => void this.publishDuePosts(), 5_000).unref();
     if (this.smsCampaignWorkerEnabled()) setTimeout(() => void this.processQueuedSms(), 8_000).unref();
@@ -112,6 +116,43 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     return { data: {
       items: customers.slice(start, start + pageSize).map(toCustomerSummary),
       meta: { page, pageSize, total, capped },
+    } };
+  }
+
+  async customerCities(admin: AuthenticatedAdmin) {
+    requireAdminPermission(admin, "customers.view");
+    const rows = await this.prisma.customerAddress.groupBy({
+      by: ["city"], where: { city: { not: "" }, customer: { is: { status: "active" } } },
+      orderBy: { city: "asc" }, take: 500,
+    });
+    return { data: rows.map((row) => row.city).filter(Boolean) };
+  }
+
+  async customerDetails(admin: AuthenticatedAdmin, idText: string) {
+    requireAdminPermission(admin, "customers.view");
+    const id = parseId(idText, "customer id");
+    const customer = await this.prisma.customer.findUnique({
+      where: { id },
+      select: {
+        id: true, phone: true, fullName: true, email: true, birthDateJalali: true, createdAt: true,
+        addresses: { orderBy: { updatedAt: "desc" }, select: { id: true, title: true, province: true, city: true, street: true, alley: true, plaqueNumber: true, floor: true, unit: true } },
+        orders: { where: { paymentStatus: "paid" }, orderBy: { placedAt: "desc" }, take: 100,
+          select: { id: true, orderNumber: true, status: true, totalToman: true, placedAt: true,
+            items: { select: { productNameSnapshot: true, skuSnapshot: true, quantity: true, lineTotalToman: true } } } },
+        supportTickets: { orderBy: { lastMessageAt: "desc" }, take: 100,
+          select: { id: true, subject: true, status: true, lastMessageAt: true, createdAt: true } },
+      },
+    });
+    if (!customer) throw new NotFoundException({ code: "CUSTOMER_NOT_FOUND", message: "مشتری پیدا نشد." });
+    const orderCount = await this.prisma.order.count({ where: { customerId: id, paymentStatus: "paid" } });
+    const total = await this.prisma.order.aggregate({ where: { customerId: id, paymentStatus: "paid" }, _sum: { totalToman: true } });
+    return { data: {
+      id: customer.id.toString(), phone: customer.phone, fullName: customer.fullName, email: customer.email,
+      birthDateJalali: customer.birthDateJalali, createdAt: customer.createdAt.toISOString(),
+      addresses: customer.addresses.map((address) => ({ ...address, id: address.id.toString() })),
+      purchases: customer.orders.map((order) => ({ ...order, id: order.id.toString(), totalToman: order.totalToman.toString(), placedAt: order.placedAt.toISOString(), items: order.items.map((item) => ({ ...item, lineTotalToman: item.lineTotalToman.toString() })) })),
+      purchaseCount: orderCount, totalPurchaseToman: (total._sum.totalToman ?? 0n).toString(),
+      tickets: customer.supportTickets.map((ticket) => ({ ...ticket, id: ticket.id.toString(), lastMessageAt: ticket.lastMessageAt.toISOString(), createdAt: ticket.createdAt.toISOString() })),
     } };
   }
 
@@ -448,10 +489,18 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   socialStatus(admin: AuthenticatedAdmin) {
-
+    const rubikaMissing = [
+      ...(!this.config.get("RUBIKA_BOT_TOKEN") ? ["توکن ربات"] : []),
+      ...(!this.config.get("RUBIKA_CHANNEL_ID") ? ["شناسه کانال"] : []),
+    ];
+    const instagramMissing = [
+      ...(!this.config.get("INSTAGRAM_USER_ID") ? ["شناسه حساب"] : []),
+      ...(!this.config.get("INSTAGRAM_ACCESS_TOKEN") ? ["توکن دسترسی"] : []),
+      ...(!this.config.get("INSTAGRAM_GRAPH_API_VERSION") ? ["نسخه API"] : []),
+    ];
     return { data: {
-      rubika: { configured: Boolean(this.config.get("RUBIKA_BOT_TOKEN") && this.config.get("RUBIKA_CHANNEL_ID")) },
-      instagram: { configured: Boolean(this.config.get("INSTAGRAM_USER_ID") && this.config.get("INSTAGRAM_ACCESS_TOKEN") && this.config.get("INSTAGRAM_GRAPH_API_VERSION")) },
+      rubika: { configured: rubikaMissing.length === 0, missing: rubikaMissing },
+      instagram: { configured: instagramMissing.length === 0, missing: instagramMissing },
     } };
   }
 
@@ -720,8 +769,15 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   private async loadCustomers(filters: AudienceFilters, channel: "all" | "sms" | "rubika", consentOnly: boolean) {
     const now = new Date();
     const cutoff = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    const orderConditions: Prisma.OrderListRelationFilter[] = [];
+    if (filters.productId) orderConditions.push({ some: {
+      paymentStatus: "paid", items: { some: { productId: parseId(filters.productId, "productId") } },
+    } });
+    if (filters.purchaseSort === "never") orderConditions.push({ none: { paymentStatus: "paid" } });
+    if (filters.purchaseSort === "lowest") orderConditions.push({ some: { paymentStatus: "paid" } });
     const where: Prisma.CustomerWhereInput = {
       status: "active",
+      ...(filters.phoneNumbers?.length ? { phone: { in: filters.phoneNumbers } } : {}),
       ...(consentOnly && channel === "sms" ? { marketingOptIn: true } : {}),
       ...(channel === "rubika" ? { rubikaMarketingOptIn: true, rubikaChatId: { not: null } } : {}),
       ...(filters.q ? { OR: [
@@ -730,10 +786,20 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
       ...(filters.city ? { addresses: { some: { city: { contains: filters.city } } } } : {}),
       ...(filters.registration === "under_year" ? { createdAt: { gte: cutoff } } : {}),
       ...(filters.registration === "over_year" ? { createdAt: { lt: cutoff } } : {}),
-      ...(filters.productId ? { orders: { some: {
-        paymentStatus: "paid", items: { some: { productId: parseId(filters.productId, "productId") } },
-      } } } : {}),
+      ...(orderConditions.length ? { AND: orderConditions.map((orders) => ({ orders })) } : {}),
     };
+    if (filters.purchaseSort === "over_threshold" || filters.purchaseSort === "under_threshold") {
+      const threshold = filters.purchaseThreshold ?? 10;
+      const ids = await this.prisma.$queryRaw<Array<{ id: bigint }>>`
+        SELECT c.id AS id
+        FROM customers c
+        LEFT JOIN orders o ON o.customer_id = c.id AND o.payment_status = 'paid'
+        WHERE c.status = 'active'
+        GROUP BY c.id
+        HAVING COUNT(o.id) ${filters.purchaseSort === "over_threshold" ? Prisma.raw(">=") : Prisma.raw("<")} ${threshold}
+      `;
+      where.id = { in: ids.map((row) => row.id) };
+    }
     const [total, customers] = await Promise.all([
       this.prisma.customer.count({ where }),
       this.prisma.customer.findMany({
@@ -746,14 +812,31 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
         },
       }),
     ]);
-    if (filters.purchaseSort !== "none") {
+    const purchaseStats = customers.length ? await this.prisma.order.groupBy({
+      by: ["customerId"], where: { customerId: { in: customers.map((customer) => customer.id) }, paymentStatus: "paid" },
+      _count: { _all: true }, _sum: { totalToman: true },
+    }) : [];
+    const statsByCustomer = new Map(purchaseStats.map((row) => [row.customerId?.toString() ?? "", {
+      count: row._count._all, totalToman: row._sum.totalToman ?? 0n,
+    }]));
+    if (["recent", "oldest", "highest", "lowest", "never"].includes(filters.purchaseSort ?? "none")) {
       customers.sort((left, right) => {
+        const leftStats = statsByCustomer.get(left.id.toString()) ?? { count: 0, totalToman: 0n };
+        const rightStats = statsByCustomer.get(right.id.toString()) ?? { count: 0, totalToman: 0n };
+        if (filters.purchaseSort === "highest") return rightStats.count - leftStats.count;
+        if (filters.purchaseSort === "lowest") return leftStats.count - rightStats.count;
+        if (filters.purchaseSort === "never") return 0;
         const leftAt = left.orders[0]?.placedAt.getTime() ?? 0;
         const rightAt = right.orders[0]?.placedAt.getTime() ?? 0;
         return filters.purchaseSort === "recent" ? rightAt - leftAt : leftAt - rightAt;
       });
     }
-    return { customers, total, capped: total > customers.length };
+    const withStats = customers.map((customer) => ({
+      ...customer,
+      purchaseCount: statsByCustomer.get(customer.id.toString())?.count ?? 0,
+      totalPurchaseToman: (statsByCustomer.get(customer.id.toString())?.totalToman ?? 0n).toString(),
+    }));
+    return { customers: withStats, total, capped: total > customers.length };
   }
 
   private async publishDuePosts(): Promise<void> {
@@ -859,6 +942,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
       productCode: product.variants[0]?.sku ?? null,
       colors,
       sizes,
+      images: product.images.map((image) => ({ imagePath: image.imagePath, altText: image.altText })),
       purchaseUrl: new URL(`/products/${encodeURIComponent(product.slug)}`, siteBaseUrl).toString(),
     };
   }
@@ -927,12 +1011,8 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     if (this.backupBusy || this.config.get<string>("BACKUP_SCHEDULE_ENABLED", "true") === "false") return;
     this.backupBusy = true;
     try {
-      const files = await this.listBackupFiles();
-      const latest = files[0] ? new Date(files[0].createdAt).getTime() : 0;
-      if (Date.now() - latest > 24 * 60 * 60_000) {
-        await this.writeBackup();
-        await this.removeOldBackups();
-      }
+      await this.writeBackup();
+      await this.removeOldBackups();
     } catch (error) {
       this.logger.warn(`Scheduled database backup skipped: ${error instanceof Error ? error.message : "unknown error"}`);
     } finally { this.backupBusy = false; }
@@ -984,12 +1064,14 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     const parsed = new URL(databaseUrl);
     const directory = this.backupDirectory();
     await mkdir(directory, { recursive: true });
-    const filename = `paniz-mysql-${new Date().toISOString().replace(/[:.]/g, "-")}.sql`;
+    const stamp = iranJalaliBackupStamp(new Date());
+    const filename = `paniz-mysql-${stamp.date}-${stamp.time}.sql`;
     const outputPath = join(directory, filename);
+    const temporaryPath = `${outputPath}.partial-${randomUUID()}`;
     const args = [
       "--single-transaction", "--quick", "--skip-lock-tables", "--host", parsed.hostname,
       "--port", parsed.port || "3306", "--user", decodeURIComponent(parsed.username),
-      "--default-character-set=utf8mb4", "--result-file", outputPath,
+      "--default-character-set=utf8mb4", "--result-file", temporaryPath,
       decodeURIComponent(parsed.pathname.replace(/^\//, "")),
     ];
     try {
@@ -998,9 +1080,14 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
         env: { ...process.env, MYSQL_PWD: decodeURIComponent(parsed.password) },
       });
     } catch (error) {
-      await rm(outputPath, { force: true }).catch(() => undefined);
+      await rm(temporaryPath, { force: true }).catch(() => undefined);
       throw new ServiceUnavailableException({ code: "BACKUP_FAILED", message: "mysqldump failed. Mount persistent storage at /data and install/configure the MySQL client in the API image." });
     }
+    await rename(temporaryPath, outputPath);
+    const sameDay = await readdir(directory).catch(() => [] as string[]);
+    await Promise.all(sameDay
+      .filter((name) => name.startsWith(`paniz-mysql-${stamp.date} `) && name !== filename && /^paniz-mysql-[\d-]+ [\d:]+\.sql$/.test(name))
+      .map((name) => rm(join(directory, name), { force: true })));
     const metadata = await stat(outputPath);
     return { filename, createdAt: metadata.mtime.toISOString(), sizeBytes: metadata.size, path: outputPath };
   }
@@ -1008,7 +1095,7 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   private async listBackupFiles() {
     const directory = this.backupDirectory();
     const names = await readdir(directory).catch(() => [] as string[]);
-    const files = await Promise.all(names.filter((name) => /^paniz-mysql-[\w-]+\.sql$/.test(name)).map(async (filename) => {
+    const files = await Promise.all(names.filter((name) => /^paniz-mysql-[\d-]+ [\d:]+\.sql$/.test(name)).map(async (filename) => {
       const metadata = await stat(join(directory, filename));
       return { filename, createdAt: metadata.mtime.toISOString(), sizeBytes: metadata.size };
     }));
@@ -1016,13 +1103,13 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async removeOldBackups(): Promise<void> {
-    const keep = boundedInt(this.config.get<string>("BACKUP_RETENTION_COUNT", "7"), 7, 1, 100);
+    const keep = 365;
     const files = await this.listBackupFiles();
     await Promise.all(files.slice(keep).map((file) => rm(join(this.backupDirectory(), file.filename), { force: true })));
   }
 
   private backupDirectory(): string {
-    return this.config.get<string>("BACKUP_DIR", join(process.cwd(), "backups"));
+    return join(this.config.get<string>("BACKUP_DIR", join(process.cwd(), "backups")), "Database", "برنامه");
   }
 
   private async audit(admin: AuthenticatedAdmin, action: string, entityType: string, entityId: bigint | null, details: Prisma.InputJsonObject) {
@@ -1036,29 +1123,53 @@ function requireManager(admin: AuthenticatedAdmin): void {
 
 function normalizeFilters(raw: Record<string, unknown>): AudienceFilters {
   const registration = raw.registration === "under_year" || raw.registration === "over_year" ? raw.registration : "any";
-  const purchaseSort = raw.purchaseSort === "recent" || raw.purchaseSort === "oldest" ? raw.purchaseSort : "none";
+  const purchaseSort = ["recent", "oldest", "highest", "lowest", "never", "over_threshold", "under_threshold"].includes(String(raw.purchaseSort))
+    ? raw.purchaseSort as NonNullable<AudienceFilters["purchaseSort"]> : "none";
+  const phoneNumbers = Array.isArray(raw.phoneNumbers)
+    ? [...new Set(raw.phoneNumbers.filter((value): value is string => typeof value === "string").map(normalizeIranianMobile).filter((value): value is string => value !== null))].slice(0, MAX_AUDIENCE)
+    : undefined;
   const filters: AudienceFilters = {
     q: typeof raw.q === "string" ? raw.q.trim().slice(0, 120) || undefined : undefined,
     city: typeof raw.city === "string" ? raw.city.trim().slice(0, 100) || undefined : undefined,
     registration, purchaseSort,
+    purchaseThreshold: boundedInt(raw.purchaseThreshold, 10, 1, 100_000),
+    phoneNumbers,
     productId: typeof raw.productId === "string" && raw.productId.trim() ? raw.productId.trim() : undefined,
   };
   if (filters.productId) parseId(filters.productId, "productId");
   return filters;
 }
 
+function normalizeIranianMobile(value: string): string | null {
+  const digits = value.replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit))).replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/[^0-9]/g, "");
+  const local = digits.startsWith("0098") ? `0${digits.slice(4)}` : digits.startsWith("98") ? `0${digits.slice(2)}` : digits;
+  return /^09\d{9}$/.test(local) ? `+98${local.slice(1)}` : null;
+}
+
 function toCustomerSummary(customer: {
   id: bigint; phone: string; fullName: string | null; email: string | null; marketingOptIn: boolean;
   rubikaMarketingOptIn: boolean; rubikaChatId: string | null; createdAt: Date;
   addresses: { city: string; province: string }[]; orders: { placedAt: Date; orderNumber: string }[];
+  purchaseCount: number; totalPurchaseToman: string;
 }) {
   return {
     id: customer.id.toString(), phone: customer.phone, fullName: customer.fullName, email: customer.email,
     marketingOptIn: customer.marketingOptIn, rubikaMarketingOptIn: customer.rubikaMarketingOptIn,
     rubikaLinked: Boolean(customer.rubikaChatId), createdAt: customer.createdAt.toISOString(),
     city: customer.addresses[0]?.city ?? null, province: customer.addresses[0]?.province ?? null,
+    purchaseCount: customer.purchaseCount, totalPurchaseToman: customer.totalPurchaseToman,
     lastPurchaseAt: customer.orders[0]?.placedAt.toISOString() ?? null,
     lastOrderNumber: customer.orders[0]?.orderNumber ?? null,
+  };
+}
+
+function iranJalaliBackupStamp(input: Date): { date: string; time: string } {
+  const tehran = new Date(input.getTime() + 210 * 60_000);
+  const jalali = toJalaali(tehran.getUTCFullYear(), tehran.getUTCMonth() + 1, tehran.getUTCDate());
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return {
+    date: `${jalali.jy}-${pad(jalali.jm)}-${pad(jalali.jd)}`,
+    time: `${pad(tehran.getUTCHours())}:${pad(tehran.getUTCMinutes())}`,
   };
 }
 

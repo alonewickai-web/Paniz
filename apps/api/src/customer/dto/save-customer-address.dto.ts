@@ -58,10 +58,11 @@ export class SaveCustomerAddressDto {
   @MaxLength(40)
   floor?: string;
 
-  @IsOptional()
+  @Transform(({ value }) => typeof value === "string" ? value.trim() : value)
   @IsString()
+  @MinLength(1)
   @MaxLength(40)
-  unit?: string;
+  unit!: string;
 
   @IsOptional()
   @Transform(({ value }) => typeof value === "string" && value.trim() ? normalizeIranPhone(value) : value)

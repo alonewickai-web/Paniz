@@ -77,8 +77,30 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
     if (!mounted) return;
     _pushTool(
       'اعلان‌ها',
-      NotificationInboxScreen(initialNotificationId: id.isEmpty ? null : id),
+      NotificationInboxScreen(
+        initialNotificationId: id.isEmpty ? null : id,
+        onNavigate: _navigateFromNotification,
+      ),
     );
+  }
+
+  void _navigateFromNotification(JsonMap item) {
+    if (!mounted) return;
+    final type = '${item['type'] ?? ''}';
+    final entity = '${item['entityType'] ?? ''}';
+    if (type == 'new_order' || entity == 'order') {
+      _selectTab(2);
+    } else if (type == 'admin_message' || entity == 'admin_chat') {
+      _pushTool('گفت‌وگوی مدیران', const AdminChatScreen());
+    } else if (entity == 'product') {
+      _selectTab(1);
+    } else if (entity == 'support_ticket' || entity == 'ticket') {
+      _pushTool('پشتیبانی', const AdminSupportScreen());
+    } else if (entity == 'social_post' || entity == 'sms_campaign') {
+      _pushTool('انتشار و پیام‌رسانی', const SocialPublishingScreen());
+    } else {
+      _pushTool('اعلان‌ها', const NotificationInboxScreen());
+    }
   }
 
   static const _titles = ['خانه', 'محصولات', 'سفارش‌ها', 'گزارش‌ها'];
@@ -257,7 +279,12 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
             IconButton(
               tooltip: 'سفارش‌های نیازمند رسیدگی',
               onPressed:
-                  () => _pushTool('اعلان‌ها', const NotificationInboxScreen()),
+                  () => _pushTool(
+                    'اعلان‌ها',
+                    NotificationInboxScreen(
+                      onNavigate: _navigateFromNotification,
+                    ),
+                  ),
               icon: Badge(
                 isLabelVisible:
                     unreadNotifications > 0 ||
@@ -533,10 +560,11 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
                   Icons.local_shipping_outlined,
                   permission: 'store.content',
                   detail: 'هزینهٔ پست و حد ارسال رایگان',
-                  onTap: () => _pushToolFromDrawer(
-                    'هزینه و روش ارسال',
-                    const StoreManagementScreen(initialTab: 4),
-                  ),
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'هزینه و روش ارسال',
+                        const StoreManagementScreen(initialTab: 5),
+                      ),
                 ),
                 _drawerTile(
                   'مشتریان',
@@ -564,10 +592,11 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
                   Icons.local_offer_outlined,
                   permission: 'products.change_price',
                   detail: 'تخفیف درصدی یا مبلغی برای چند محصول',
-                  onTap: () => _pushToolFromDrawer(
-                    'کمپین تخفیف محصولات',
-                    const ProductDiscountCampaignScreen(),
-                  ),
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'کمپین تخفیف محصولات',
+                        const ProductDiscountCampaignScreen(),
+                      ),
                 ),
                 _drawerTile(
                   'تبلیغات و روبیکا',
@@ -626,10 +655,11 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
                   Icons.query_stats_rounded,
                   permission: 'reports.view',
                   detail: 'عملکرد گوگل، بازدید و محصولات',
-                  onTap: () => _pushToolFromDrawer(
-                    'سئو و تحلیل بازدید',
-                    SeoAnalyticsScreen(admin: widget.admin),
-                  ),
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'سئو و تحلیل بازدید',
+                        SeoAnalyticsScreen(admin: widget.admin),
+                      ),
                 ),
                 _drawerTile(
                   'گفت‌وگوی مدیران',

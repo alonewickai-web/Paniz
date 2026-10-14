@@ -259,6 +259,7 @@ export default function AccountPage() {
   async function saveAddress(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     try {
+      if (!addressForm.unit.trim()) throw new Error("شمارهٔ واحد را وارد کن.");
       if (addressForm.latitude === null || addressForm.longitude === null) throw new Error("موقعیت دقیق نشانی را روی نقشه انتخاب کن.");
       await customerApi(editingAddressId ? `/customer/addresses/${editingAddressId}` : "/customer/addresses", {
         method: editingAddressId ? "PATCH" : "POST", body: JSON.stringify({ ...addressForm, postalCode: asciiDigits(addressForm.postalCode), backupPhone: addressForm.backupPhone.trim() || undefined }),
@@ -438,7 +439,7 @@ export default function AccountPage() {
                 <label className="store-field"><span>کوچه / خیابان فرعی <small>(در صورت وجود)</small></span><input maxLength={200} value={addressForm.alley} onChange={(event) => setAddressForm((form) => ({ ...form, alley: event.target.value }))} /></label>
                 <label className="store-field"><span>پلاک</span><input required maxLength={40} value={addressForm.plaqueNumber} onChange={(event) => setAddressForm((form) => ({ ...form, plaqueNumber: event.target.value }))} /></label>
                 <label className="store-field"><span>طبقه</span><input maxLength={40} value={addressForm.floor} onChange={(event) => setAddressForm((form) => ({ ...form, floor: event.target.value }))} /></label>
-                <label className="store-field"><span>واحد <small>(اختیاری)</small></span><input maxLength={40} value={addressForm.unit} onChange={(event) => setAddressForm((form) => ({ ...form, unit: event.target.value }))} /></label>
+                <label className="store-field"><span>واحد</span><input required maxLength={40} value={addressForm.unit} onChange={(event) => setAddressForm((form) => ({ ...form, unit: event.target.value }))} /></label>
                 <label className="store-field"><span>شمارهٔ تماس جایگزین <small>(اختیاری)</small></span><input dir="ltr" type="tel" inputMode="tel" pattern="(?:\+98|0098|0)?9[0-9۰-۹٠-٩]{9}" value={addressForm.backupPhone} onChange={(event) => setAddressForm((form) => ({ ...form, backupPhone: event.target.value }))} /></label>
                 <label className="store-field"><span>کدپستی ۱۰ رقمی</span><input dir="ltr" inputMode="numeric" autoComplete="postal-code" required pattern="[0-9۰-۹٠-٩]{10}" maxLength={10} value={addressForm.postalCode} onChange={(event) => setAddressForm((form) => ({ ...form, postalCode: event.target.value }))} /></label>
                 <div className="store-form-wide"><label className="store-field"><span>موقعیت روی نقشه</span></label><AddressLocationPicker latitude={addressForm.latitude} longitude={addressForm.longitude} onChange={(latitude, longitude) => setAddressForm((form) => ({ ...form, latitude, longitude }))} fallbackLatitude={cityLocation(addressForm.province, addressForm.city)?.lat} fallbackLongitude={cityLocation(addressForm.province, addressForm.city)?.lon} /></div>

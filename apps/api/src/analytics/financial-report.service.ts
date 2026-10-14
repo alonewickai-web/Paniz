@@ -10,22 +10,29 @@ type CostRow = { day: string; productCostToman: bigint };
 export class FinancialReportService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async report(rangeText: string | undefined) {
+  async report(rangeText: string | undefined, fromText?: string, toText?: string) {
     const range = rangeText ?? "7";
-    if (!["7", "10", "30", "month"].includes(range)) throw new BadRequestException({ code: "INVALID_FINANCE_RANGE", message: "بازهٔ گزارش مالی معتبر نیست." });
+    const custom = Boolean(fromText || toText);
+    if (custom && (!fromText || !toText)) throw new BadRequestException({ code: "FINANCE_DATE_RANGE_REQUIRED", message: "تاریخ شروع و پایان را هر دو انتخاب کن." });
+    if (!custom && !["today", "7", "10", "30", "month"].includes(range)) throw new BadRequestException({ code: "INVALID_FINANCE_RANGE", message: "بازهٔ گزارش مالی معتبر نیست." });
     const nowIran = new Date(Date.now() + IRAN_OFFSET_MS);
     const todayIran = new Date(Date.UTC(nowIran.getUTCFullYear(), nowIran.getUTCMonth(), nowIran.getUTCDate()));
-    const startIran = range === "month"
+    const startIran = custom ? parseDay(fromText!) : range === "month"
       ? new Date(Date.UTC(todayIran.getUTCFullYear(), todayIran.getUTCMonth(), 1))
-      : new Date(todayIran.getTime() - (Number(range) - 1) * 86_400_000);
+      : range === "today" ? todayIran : new Date(todayIran.getTime() - (Number(range) - 1) * 86_400_000);
+    const lastIran = custom ? parseDay(toText!) : todayIran;
+    if (startIran > lastIran) throw new BadRequestException({ code: "INVALID_FINANCE_DATE_RANGE", message: "تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد." });
+    const days = Math.floor((lastIran.getTime() - startIran.getTime()) / 86_400_000) + 1;
+    if (days > 3660) throw new BadRequestException({ code: "FINANCE_RANGE_TOO_LARGE", message: "بازهٔ گزارش حداکثر ده سال است." });
     const startUtc = new Date(startIran.getTime() - IRAN_OFFSET_MS);
+    const endUtc = new Date(lastIran.getTime() + 86_400_000 - IRAN_OFFSET_MS);
     const [sales, costs] = await Promise.all([
       this.prisma.$queryRaw<DayRow[]>`
         SELECT DATE_FORMAT(DATE_ADD(placed_at, INTERVAL 210 MINUTE), '%Y-%m-%d') AS day,
           CAST(COALESCE(SUM(total_toman), 0) AS UNSIGNED) AS salesToman,
           CAST(COUNT(*) AS UNSIGNED) AS orderCount
         FROM orders
-        WHERE payment_status = 'paid' AND placed_at >= ${startUtc}
+        WHERE payment_status = 'paid' AND placed_at >= ${startUtc} AND placed_at < ${endUtc}
         GROUP BY DATE_FORMAT(DATE_ADD(placed_at, INTERVAL 210 MINUTE), '%Y-%m-%d')
         ORDER BY day ASC
       `,
@@ -33,14 +40,13 @@ export class FinancialReportService {
         SELECT DATE_FORMAT(DATE_ADD(o.placed_at, INTERVAL 210 MINUTE), '%Y-%m-%d') AS day,
           CAST(COALESCE(SUM(i.purchase_cost_toman * i.quantity), 0) AS UNSIGNED) AS productCostToman
         FROM orders o JOIN order_items i ON i.order_id = o.id
-        WHERE o.payment_status = 'paid' AND o.placed_at >= ${startUtc}
+        WHERE o.payment_status = 'paid' AND o.placed_at >= ${startUtc} AND o.placed_at < ${endUtc}
         GROUP BY DATE_FORMAT(DATE_ADD(o.placed_at, INTERVAL 210 MINUTE), '%Y-%m-%d')
         ORDER BY day ASC
       `,
     ]);
     const salesByDay = new Map(sales.map((row) => [row.day, row]));
     const costsByDay = new Map(costs.map((row) => [row.day, row.productCostToman]));
-    const days = range === "month" ? todayIran.getUTCDate() : Number(range);
     const daily = Array.from({ length: days }, (_, index) => {
       const date = new Date(startIran.getTime() + index * 86_400_000);
       const iso = `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
@@ -63,6 +69,14 @@ export class FinancialReportService {
       orderCount: total.orderCount + row.orderCount,
     }), { salesRial: 0, productCostRial: 0, grossProfitRial: 0, orderCount: 0 }) } };
   }
+}
+
+function parseDay(value: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) throw new BadRequestException({ code: "INVALID_FINANCE_DATE", message: "تاریخ گزارش معتبر نیست." });
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  if (date.toISOString().slice(0, 10) !== value) throw new BadRequestException({ code: "INVALID_FINANCE_DATE", message: "تاریخ گزارش معتبر نیست." });
+  return date;
 }
 
 function jalaliDate(year: number, month: number, day: number) {

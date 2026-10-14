@@ -190,7 +190,7 @@ function addressData(customerId: bigint, input: SaveCustomerAddressDto, isDefaul
   const alley = input.alley?.trim() || null;
   const plaqueNumber = input.plaqueNumber.trim();
   const floor = input.floor?.trim() || null;
-  const unit = input.unit?.trim() || null;
+  const unit = input.unit.trim();
   const backupPhone = input.backupPhone?.trim() || null;
   const deliveryDetails = input.deliveryDetails?.trim() || null;
   const addressLine = [
@@ -198,7 +198,7 @@ function addressData(customerId: bigint, input: SaveCustomerAddressDto, isDefaul
     alley ? `کوچه ${alley}` : null,
     `پلاک ${plaqueNumber}`,
     floor ? `طبقه ${floor}` : null,
-    unit ? `واحد ${unit}` : null,
+    `واحد ${unit}`,
     deliveryDetails,
   ].filter(Boolean).join("، ");
   if (addressLine.length > 500) {

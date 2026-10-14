@@ -155,10 +155,6 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       children: [
-        const PanizPageHeader(
-          title: 'کارکنان',
-          subtitle: 'هر حساب فقط به بخش‌های تعیین‌شده دسترسی دارد.',
-        ),
         FilledButton.icon(
           onPressed: () => _edit(),
           icon: const Icon(Icons.person_add_alt_outlined),

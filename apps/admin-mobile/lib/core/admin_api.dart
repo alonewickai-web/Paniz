@@ -65,6 +65,8 @@ class AdminApi {
   late final Dio dio;
   static const _tokenKey = 'panizstyle.admin.access-token';
   static const _notificationDeviceKey = 'paniz.admin.notification-device-id';
+  static const _notificationPromptKey =
+      'paniz.admin.notification-permission-prompted';
   static const _notificationChannel = MethodChannel(
     'paniz/admin-notifications',
   );
@@ -307,6 +309,8 @@ class AdminApi {
           }),
         ),
       );
+  Future<JsonMap> deleteProfileAvatar() async =>
+      _data(await dio.delete('admin/auth/profile/avatar'));
   Future<List<JsonMap>> productCategories() async =>
       _list(_payload(await dio.get('admin/product-categories')));
   Future<JsonMap> productDetail(String id) async =>
@@ -376,7 +380,21 @@ class AdminApi {
 
   Future<void> resumeNotificationMonitoringIfEnabled() async {
     try {
-      final preferences = await notificationPreferences();
+      var preferences = await notificationPreferences();
+      final prompted =
+          await _storage.read(key: _notificationPromptKey) == 'true';
+      if (!prompted) {
+        // Android 13+ requires runtime permission. Ask once on the first
+        // authenticated launch, then let the user manage it in Settings.
+        await _storage.write(key: _notificationPromptKey, value: 'true');
+        if (!await hasNotificationPermission()) {
+          final allowed = await requestNotificationPermission();
+          if (!allowed) return;
+        }
+        preferences = await updateNotificationPreferences({
+          'backgroundMonitoringEnabled': true,
+        });
+      }
       if (preferences['backgroundMonitoringEnabled'] != true ||
           !await hasNotificationPermission())
         return;
@@ -421,6 +439,20 @@ class AdminApi {
     ),
   );
 
+  Future<void> editAdminChatMessage(String id, String body) async {
+    await dio.patch('admin/chat/messages/$id', data: {'body': body});
+  }
+
+  Future<void> deleteAdminChatMessage(
+    String id, {
+    required bool forEveryone,
+  }) async {
+    await dio.delete(
+      'admin/chat/messages/$id',
+      queryParameters: {'forEveryone': forEveryone},
+    );
+  }
+
   Future<JsonMap> siteVisitAnalytics() async =>
       _data(await dio.get('admin/analytics/site-visits'));
 
@@ -428,14 +460,16 @@ class AdminApi {
     String range = '28',
     String? from,
     String? to,
-  }) async => _data(await dio.get(
-    'admin/analytics/seo',
-    queryParameters: {
-      'range': range,
-      if (from != null) 'from': from,
-      if (to != null) 'to': to,
-    },
-  ));
+  }) async => _data(
+    await dio.get(
+      'admin/analytics/seo',
+      queryParameters: {
+        'range': range,
+        if (from != null) 'from': from,
+        if (to != null) 'to': to,
+      },
+    ),
+  );
 
   Future<String> seoAnalyticsCsv({
     String range = '28',
@@ -458,20 +492,41 @@ class AdminApi {
     return response.data ?? '';
   }
 
-  Future<Uint8List> seoAnalyticsXlsx({String range = '28', String type = 'products', String? from, String? to, String? category}) async {
+  Future<Uint8List> seoAnalyticsXlsx({
+    String range = '28',
+    String type = 'products',
+    String? from,
+    String? to,
+    String? category,
+  }) async {
     final response = await dio.get<List<int>>(
       'admin/analytics/seo/export.xlsx',
-      queryParameters: {'range': range, 'type': type,
+      queryParameters: {
+        'range': range,
+        'type': type,
         if (from != null) 'from': from,
         if (to != null) 'to': to,
-        if (category != null) 'category': category},
+        if (category != null) 'category': category,
+      },
       options: Options(responseType: ResponseType.bytes),
     );
     return Uint8List.fromList(response.data ?? <int>[]);
   }
 
-  Future<JsonMap> financeReport(String range) async =>
-      _data(await dio.get('admin/analytics/finance', queryParameters: {'range': range}));
+  Future<JsonMap> financeReport(
+    String range, {
+    String? from,
+    String? to,
+  }) async => _data(
+    await dio.get(
+      'admin/analytics/finance',
+      queryParameters: {
+        'range': range,
+        if (from != null) 'from': from,
+        if (to != null) 'to': to,
+      },
+    ),
+  );
 
   Future<JsonMap> customers({
     int page = 1,
@@ -494,6 +549,14 @@ class AdminApi {
       },
     ),
   );
+
+  Future<List<String>> customerCities() async {
+    final payload = _payload(await dio.get('admin/customers/cities'));
+    return payload is List ? payload.whereType<String>().toList() : const [];
+  }
+
+  Future<JsonMap> customerDetails(String id) async =>
+      _data(await dio.get('admin/customers/$id'));
 
   Future<JsonMap> previewSmsAudience(JsonMap filters) async => _data(
     await dio.post('admin/sms-campaigns/preview', data: {'filters': filters}),
@@ -607,9 +670,8 @@ class AdminApi {
   Future<List<JsonMap>> adminSupportTickets() async =>
       _list(_payload(await dio.get('admin/support/tickets')));
 
-  Future<JsonMap> closeSupportTicket(String id) async => _data(
-    await dio.patch('admin/support/tickets/$id/close'),
-  );
+  Future<JsonMap> closeSupportTicket(String id) async =>
+      _data(await dio.patch('admin/support/tickets/$id/close'));
 
   Future<List<JsonMap>> adminReturns() async =>
       _list(_payload(await dio.get('admin/support/returns')));

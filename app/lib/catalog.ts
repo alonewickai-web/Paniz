@@ -56,6 +56,12 @@ export function apiBaseUrl() {
   return (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:4000/api/v1").replace(/\/$/, "");
 }
 
+export function publicImageUrl(path: string | null | undefined) {
+  if (!path) return "/paniz-logo.jpg";
+  if (/^https?:\/\//i.test(path)) return path;
+  return new URL(path, `${new URL(apiBaseUrl()).origin}/`).toString();
+}
+
 export function formatToman(value: number) {
   return `${new Intl.NumberFormat("fa-IR").format(value)} تومان`;
 }

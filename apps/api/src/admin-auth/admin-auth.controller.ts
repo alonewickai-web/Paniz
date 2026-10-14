@@ -1,9 +1,9 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Patch, Post, Req, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Patch, Post, Req, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { mkdir, writeFile, unlink } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { uploadRoot } from "../uploads/upload-storage";
 import { UpdateAdminProfileDto } from "../admin/dto/update-admin-profile.dto";
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from "@nestjs/swagger";
@@ -77,5 +77,16 @@ export class AdminAuthController {
     await writeFile(path, b, { flag: "wx" });
     try { return await this.auth.updateProfile({}, request, `/uploads/admin-avatars/${filename}`); }
     catch (error) { await unlink(path).catch(() => {}); throw error; }
+  }
+
+  @Delete("profile/avatar")
+  @UseGuards(AdminSessionGuard)
+  async deleteAvatar(@Req() request: AdminRequest) {
+    const oldPath = request.admin?.avatarPath;
+    const result = await this.auth.updateProfile({}, request, null);
+    if (oldPath && /^\/uploads\/admin-avatars\/[a-z0-9-]+\.(?:jpg|png|webp)$/i.test(oldPath)) {
+      await unlink(join(uploadRoot(), "admin-avatars", basename(oldPath))).catch(() => undefined);
+    }
+    return result;
   }
 }

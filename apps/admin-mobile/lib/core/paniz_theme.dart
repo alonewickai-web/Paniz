@@ -357,7 +357,7 @@ class PanizTheme {
       textTheme: Typography.material2021(
         platform: TargetPlatform.android,
       ).black.apply(
-        fontSizeFactor: 1.05,
+        fontSizeFactor: 1.1,
         bodyColor: palette.ink,
         displayColor: palette.ink,
       ),

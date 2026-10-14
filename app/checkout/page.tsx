@@ -140,6 +140,7 @@ export default function CheckoutPage() {
   async function saveAddress(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSavingAddress(true); setAddressError("");
     try {
+      if (!addressForm.unit.trim()) throw new Error("شمارهٔ واحد را وارد کن.");
       if (addressForm.latitude === null || addressForm.longitude === null) throw new Error("موقعیت دقیق نشانی را روی نقشه انتخاب کن.");
       const address = await customerApi<CustomerAddress>("/customer/addresses", {
         method: "POST",
@@ -157,6 +158,8 @@ export default function CheckoutPage() {
     event.preventDefault(); setSubmitError("");
     if (!profile) { setSubmitError("برای ثبت سفارش ابتدا وارد حساب کاربری شو."); return; }
     if (!selectedAddressId) { setSubmitError("یک نشانی ذخیره‌شده برای تحویل انتخاب کن."); return; }
+    const selectedAddress = addresses.find((address) => address.id === selectedAddressId);
+    if (!selectedAddress?.unit?.trim()) { setSubmitError("این نشانی شمارهٔ واحد ندارد. از بخش نشانی‌های حساب کاربری آن را تکمیل کن یا نشانی تازه‌ای بساز."); return; }
     if (!quote || loadingQuote || quoteError || quote.couponCode !== (appliedCoupon || null)) { setSubmitError("اول قیمت، موجودی و اعتبار کد تخفیف را دوباره بررسی کن."); return; }
     setSubmitting(true);
     const orderRequest = JSON.stringify({ cart: cartPayload, coupon: appliedCoupon || null, addressId: selectedAddressId, customerNote: customerNote.trim() || null });
@@ -219,7 +222,7 @@ export default function CheckoutPage() {
                     <div className="customer-section-heading"><span className="customer-section-icon"><MapPin size={19} /></span><div><h2>نشانی تحویل</h2><p>گیرنده: {profile.fullName || profile.phone}</p></div>{addresses.length > 0 && <button className="outline-button customer-add-address" type="button" onClick={() => { setShowAddressForm((current) => !current); setAddressError(""); }}><Plus size={17} /> نشانی تازه</button>}</div>
                     {addresses.length > 0 && <div className="checkout-address-options">{addresses.map((address) => <label className={`checkout-address-option ${selectedAddressId === address.id ? "selected" : ""}`} key={address.id}>
                       <input type="radio" name="delivery-address" value={address.id} checked={selectedAddressId === address.id} onChange={() => setSelectedAddressId(address.id)} />
-                      <span className="checkout-address-copy"><strong>{address.title || "نشانی"} {address.isDefault && <small>پیش‌فرض</small>}</strong><span>{address.recipientName} · <bdi dir="ltr">{address.recipientPhone}</bdi></span><span>{address.province}، {address.city}، {address.addressLine}</span><span>کدپستی: <bdi dir="ltr">{address.postalCode}</bdi></span></span>
+                      <span className="checkout-address-copy"><strong>{address.title || "نشانی"} {address.isDefault && <small>پیش‌فرض</small>}</strong><span>{address.recipientName} · <bdi dir="ltr">{address.recipientPhone}</bdi></span><span>{address.province}، {address.city}، {address.addressLine}</span><span>کدپستی: <bdi dir="ltr">{address.postalCode}</bdi></span>{!address.unit?.trim() && <span className="store-inline-error">برای ثبت سفارش، شمارهٔ واحد این نشانی را در حساب کاربری تکمیل کن.</span>}</span>
                     </label>)}</div>}
                     {showAddressForm && <form className="customer-address-form customer-checkout-address-form" onSubmit={(event) => void saveAddress(event)}>
                       <div className="customer-address-form-heading"><h3>{addresses.length ? "افزودن نشانی تازه" : "برای خرید یک نشانی ثبت کن"}</h3>{addresses.length > 0 && <button type="button" className="customer-text-button" onClick={() => setShowAddressForm(false)}>انصراف</button>}</div>
@@ -233,7 +236,7 @@ export default function CheckoutPage() {
                         <label className="store-field"><span>کوچه / خیابان فرعی <small>(در صورت وجود)</small></span><input maxLength={200} value={addressForm.alley} onChange={(event) => setAddressForm((form) => ({ ...form, alley: event.target.value }))} /></label>
                         <label className="store-field"><span>پلاک</span><input required maxLength={40} value={addressForm.plaqueNumber} onChange={(event) => setAddressForm((form) => ({ ...form, plaqueNumber: event.target.value }))} /></label>
                         <label className="store-field"><span>طبقه</span><input maxLength={40} value={addressForm.floor} onChange={(event) => setAddressForm((form) => ({ ...form, floor: event.target.value }))} /></label>
-                        <label className="store-field"><span>واحد <small>(اختیاری)</small></span><input maxLength={40} value={addressForm.unit} onChange={(event) => setAddressForm((form) => ({ ...form, unit: event.target.value }))} /></label>
+                        <label className="store-field"><span>واحد</span><input required maxLength={40} value={addressForm.unit} onChange={(event) => setAddressForm((form) => ({ ...form, unit: event.target.value }))} /></label>
                         <label className="store-field"><span>شمارهٔ تماس جایگزین <small>(اختیاری)</small></span><input dir="ltr" type="tel" inputMode="tel" pattern="(?:\+98|0098|0)?9[0-9۰-۹٠-٩]{9}" value={addressForm.backupPhone} onChange={(event) => setAddressForm((form) => ({ ...form, backupPhone: event.target.value }))} /></label>
                         <label className="store-field"><span>کدپستی ۱۰ رقمی</span><input dir="ltr" inputMode="numeric" autoComplete="postal-code" required pattern="[0-9۰-۹٠-٩]{10}" maxLength={10} value={addressForm.postalCode} onChange={(event) => setAddressForm((form) => ({ ...form, postalCode: event.target.value }))} /></label>
                         <div className="store-form-wide"><label className="store-field"><span>موقعیت روی نقشه</span></label><AddressLocationPicker latitude={addressForm.latitude} longitude={addressForm.longitude} onChange={(latitude, longitude) => setAddressForm((form) => ({ ...form, latitude, longitude }))} fallbackLatitude={cityLocation(addressForm.province, addressForm.city)?.lat} fallbackLongitude={cityLocation(addressForm.province, addressForm.city)?.lon} /></div>

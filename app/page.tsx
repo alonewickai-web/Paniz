@@ -24,6 +24,7 @@ import { useStorefront } from "./lib/storefront-state";
 import { StoreImage } from "./components/store-image";
 import { PageFlipImage, type FlipImage } from "./components/page-flip-image";
 import { ProductSearchAutocomplete } from "./components/product-search-autocomplete";
+import { publicImageUrl } from "./lib/catalog";
 
 type Product = {
   id: number;
@@ -88,6 +89,7 @@ type ApiCategory = {
 
 type StorefrontConfig = {
   theme: string;
+  logoPath?: string | null;
   sections: { sectionKey: string; title: string | null; isActive: boolean; sortOrder: number }[];
   banners: {
     id: string;
@@ -282,7 +284,7 @@ export default function Home() {
   const [hasDiscounts, setHasDiscounts] = useState(false);
   const [catalogReloadKey, setCatalogReloadKey] = useState(0);
   const [catalogPage, setCatalogPage] = useState(1);
-  const [storefrontConfig, setStorefrontConfig] = useState<StorefrontConfig>({ theme: "rose", sections: [], banners: [] });
+  const [storefrontConfig, setStorefrontConfig] = useState<StorefrontConfig>({ theme: "rose", logoPath: null, sections: [], banners: [] });
   const [bannerIndex, setBannerIndex] = useState(0);
   const [outgoingBanner, setOutgoingBanner] = useState<StorefrontConfig["banners"][number] | null>(null);
   const [failedBannerImageKey, setFailedBannerImageKey] = useState<string | null>(null);
@@ -686,7 +688,7 @@ export default function Home() {
             <Menu size={23} />
           </button>
           <a className="brand" href="#top" aria-label="صفحه اصلی پانیذ">
-            <img className="brand-image" src="/paniz-logo.jpg" alt="" />
+            <img className="brand-image" src={publicImageUrl(storefrontConfig.logoPath)} alt="" />
             <span className="brand-word">پانیذ</span>
           </a>
 
@@ -909,7 +911,7 @@ export default function Home() {
 
       <footer className="site-footer" id="footer">
         <div className="footer-inner page-shell">
-          <div className="footer-brand"><a className="brand" href="#top"><img className="brand-image" src="/paniz-logo.jpg" alt="" /><span className="brand-word">پانیذ</span></a><p>پانیذ؛ برای روزهایی که می‌خوای خودت باشی.</p></div>
+          <div className="footer-brand"><a className="brand" href="#top"><img className="brand-image" src={publicImageUrl(storefrontConfig.logoPath)} alt="" /><span className="brand-word">پانیذ</span></a><p>پانیذ؛ برای روزهایی که می‌خوای خودت باشی.</p></div>
           <div><strong>راهنمای خرید</strong><Link href="/help/shipping">روش‌های ارسال</Link><Link href="/policies/returns">شرایط تعویض</Link><Link href="/help/faq">سؤالات پرتکرار</Link></div>
           <div><strong>همراه پانیذ</strong><Link href="/about">دربارهٔ ما</Link><Link href="/contact">تماس با ما</Link><Link href="/policies/privacy">حریم خصوصی</Link></div>
           <div className="newsletter"><strong>خبرهای خوب رو از دست نده</strong><span>خبرنامه بعد از اتصال سرویس اطلاع‌رسانی فعال می‌شود.</span></div>

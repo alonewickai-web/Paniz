@@ -12,7 +12,6 @@ class InventoryScreen extends ConsumerStatefulWidget {
 }
 
 class _InventoryScreenState extends ConsumerState<InventoryScreen> {
-  bool _onlyUnderThree = false;
   String _categoryId = 'all';
   String _stockState = 'all';
   bool _searchExpanded = false;
@@ -165,7 +164,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                     entry.variant['colorName'],
                     entry.variant['sizeLabel'],
                   ].whereType<Object>().join(' ').toLowerCase();
-              if (_onlyUnderThree && available >= 3) return false;
               if (_categoryId != 'all' && category != _categoryId) return false;
               if (_stockState == 'in_stock' && available <= 0) return false;
               if (_stockState == 'out_of_stock' && available > 0) return false;
@@ -241,55 +239,86 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              DropdownButtonFormField<String>(
-                initialValue:
-                    _categoryId == 'all' || categories.containsKey(_categoryId)
-                        ? _categoryId
-                        : 'all',
-                decoration: const InputDecoration(
-                  labelText: 'دسته‌بندی',
-                  prefixIcon: Icon(Icons.category_outlined),
-                ),
-                items: [
-                  const DropdownMenuItem(
-                    value: 'all',
-                    child: Text('همهٔ دسته‌بندی‌ها'),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue:
+                          _categoryId == 'all' ||
+                                  categories.containsKey(_categoryId)
+                              ? _categoryId
+                              : 'all',
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 11,
+                        ),
+                        labelText: 'دسته‌بندی',
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                          value: 'all',
+                          child: Text(
+                            'همهٔ دسته‌ها',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        ...categories.entries.map(
+                          (entry) => DropdownMenuItem(
+                            value: entry.key,
+                            child: Text(
+                              entry.value,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                      onChanged:
+                          (value) =>
+                              setState(() => _categoryId = value ?? 'all'),
+                    ),
                   ),
-                  ...categories.entries.map(
-                    (entry) => DropdownMenuItem(
-                      value: entry.key,
-                      child: Text(entry.value, overflow: TextOverflow.ellipsis),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _stockState,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 11,
+                        ),
+                        labelText: 'وضعیت',
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'all',
+                          child: Text(
+                            'همهٔ وضعیت‌ها',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'in_stock',
+                          child: Text('موجود', overflow: TextOverflow.ellipsis),
+                        ),
+                        DropdownMenuItem(
+                          value: 'out_of_stock',
+                          child: Text(
+                            'ناموجود',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                      onChanged:
+                          (value) =>
+                              setState(() => _stockState = value ?? 'all'),
                     ),
                   ),
                 ],
-                onChanged:
-                    (value) => setState(() => _categoryId = value ?? 'all'),
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: _stockState,
-                decoration: const InputDecoration(
-                  labelText: 'وضعیت موجودی',
-                  prefixIcon: Icon(Icons.inventory_2_outlined),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'all', child: Text('همهٔ وضعیت‌ها')),
-                  DropdownMenuItem(
-                    value: 'in_stock',
-                    child: Text('دارای موجودی'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'out_of_stock',
-                    child: Text('اتمام موجودی'),
-                  ),
-                ],
-                onChanged:
-                    (value) => setState(() => _stockState = value ?? 'all'),
-              ),
-              const SizedBox(height: 10),
-              _UnderThreeFilter(
-                value: _onlyUnderThree,
-                onChanged: (value) => setState(() => _onlyUnderThree = value),
               ),
               const SizedBox(height: 12),
               if (visible.isEmpty)
@@ -306,81 +335,35 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                   ),
                 )
               else
-                ...visible.map(
-                  (entry) => Padding(
-                    padding: const EdgeInsets.only(bottom: 9),
-                    child: _InventoryCard(
-                      entry: entry,
-                      onAdjust:
-                          () => _adjust(
-                            entry.variant,
-                            '${entry.product['name'] ?? ''}',
-                          ),
-                    ),
-                  ),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final cardWidth = (constraints.maxWidth - 10) / 2;
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children:
+                          visible
+                              .map(
+                                (entry) => SizedBox(
+                                  width: cardWidth,
+                                  child: _InventoryCard(
+                                    entry: entry,
+                                    onAdjust:
+                                        () => _adjust(
+                                          entry.variant,
+                                          '${entry.product['name'] ?? ''}',
+                                        ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                    );
+                  },
                 ),
             ],
           ),
         );
       },
-    );
-  }
-}
-
-class _UnderThreeFilter extends StatelessWidget {
-  const _UnderThreeFilter({required this.value, required this.onChanged});
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsetsDirectional.only(
-        start: 12,
-        end: 4,
-        top: 4,
-        bottom: 4,
-      ),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: colors.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.filter_alt_outlined, color: colors.primary),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'فقط موجودی زیر ۳ عدد',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                ),
-                Text(
-                  value
-                      ? 'فعال · حداکثر ۲ عدد قابل‌فروش'
-                      : 'غیرفعال · نمایش همهٔ موجودی‌ها',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: value ? colors.primary : colors.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Switch.adaptive(
-            value: value,
-            onChanged: onChanged,
-            activeThumbColor: colors.primary,
-            activeTrackColor: colors.primaryContainer,
-            inactiveTrackColor: colors.surfaceContainerHighest,
-            inactiveThumbColor: colors.outline,
-          ),
-        ],
-      ),
     );
   }
 }
@@ -394,52 +377,172 @@ class _InventoryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final variant = entry.variant;
     final available = variant['availableQuantity'] as num? ?? 0;
-    final low = available < 3;
     return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor:
-              low
-                  ? Theme.of(context).colorScheme.errorContainer
-                  : Theme.of(context).colorScheme.primaryContainer,
-          child: Icon(
-            Icons.inventory_2_outlined,
-            color:
-                low
-                    ? Theme.of(context).colorScheme.error
-                    : Theme.of(context).colorScheme.primary,
-            size: 20,
-          ),
-        ),
-        title: Text(
-          '${entry.product['name'] ?? ''}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
-        ),
-        subtitle: Text(
-          '${variant['colorName'] ?? ''} · ${variant['sizeLabel'] ?? ''} · ${variant['sku'] ?? ''}\nکل ${persianNumber(variant['stockQuantity'] ?? 0)}  |  رزرو ${persianNumber(variant['reservedQuantity'] ?? 0)}',
-          style: const TextStyle(height: 1.6),
-        ),
-        isThreeLine: true,
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onAdjust,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              '${persianNumber(available)}',
-              style: TextStyle(
-                color:
-                    low
-                        ? Theme.of(context).colorScheme.error
-                        : Theme.of(context).colorScheme.onSurface,
-                fontWeight: FontWeight.w900,
-                fontSize: 17,
+            _InventoryImageCarousel(
+              images:
+                  entry.product['images'] is List
+                      ? (entry.product['images'] as List)
+                          .whereType<Map>()
+                          .map((image) => Map<String, dynamic>.from(image))
+                          .toList()
+                      : const [],
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${entry.product['name'] ?? 'بدون نام'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'کد: ${variant['sku'] ?? '—'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textDirection: TextDirection.rtl,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    'سایز: ${variant['sizeLabel'] ?? '—'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.inventory_2_outlined,
+                        size: 17,
+                        color:
+                            available > 0
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.error,
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          'موجودی ${persianNumber(available)}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w900,
+                            color:
+                                available > 0
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                      const Icon(Icons.edit_outlined, size: 16),
+                    ],
+                  ),
+                ],
               ),
             ),
-            Text('قابل‌فروش', style: TextStyle(fontSize: 9)),
           ],
         ),
-        onTap: onAdjust,
+      ),
+    );
+  }
+}
+
+class _InventoryImageCarousel extends StatefulWidget {
+  const _InventoryImageCarousel({required this.images});
+  final List<JsonMap> images;
+
+  @override
+  State<_InventoryImageCarousel> createState() =>
+      _InventoryImageCarouselState();
+}
+
+class _InventoryImageCarouselState extends State<_InventoryImageCarousel> {
+  int _page = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final images =
+        widget.images
+            .where((image) => '${image['imagePath'] ?? ''}'.trim().isNotEmpty)
+            .toList();
+    final colors = Theme.of(context).colorScheme;
+    if (images.isEmpty) {
+      return Container(
+        height: 148,
+        color: colors.surfaceContainerHighest,
+        child: Icon(
+          Icons.image_not_supported_outlined,
+          color: colors.onSurfaceVariant,
+          size: 36,
+        ),
+      );
+    }
+    return SizedBox(
+      height: 148,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          PageView.builder(
+            itemCount: images.length,
+            onPageChanged: (page) => setState(() => _page = page),
+            itemBuilder:
+                (context, index) => Image.network(
+                  AdminApi.imageUrl('${images[index]['imagePath']}'),
+                  fit: BoxFit.cover,
+                  errorBuilder:
+                      (_, __, ___) => Container(
+                        color: colors.surfaceContainerHighest,
+                        child: Icon(
+                          Icons.broken_image_outlined,
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                ),
+          ),
+          if (images.length > 1)
+            Positioned(
+              bottom: 7,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                  images.length,
+                  (index) => AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    width: _page == index ? 14 : 5,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color:
+                          _page == index
+                              ? colors.primary
+                              : colors.surface.withValues(alpha: .8),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

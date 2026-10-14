@@ -17,6 +17,18 @@ export class AdminToolsController {
     return this.tools.listCustomers(request.admin!, query);
   }
 
+  @Get("customers/cities")
+  @RequireAdminPermission("customers.view")
+  customerCities(@Req() request: AdminRequest) {
+    return this.tools.customerCities(request.admin!);
+  }
+
+  @Get("customers/:id")
+  @RequireAdminPermission("customers.view")
+  customerDetails(@Req() request: AdminRequest, @Param("id") id: string) {
+    return this.tools.customerDetails(request.admin!, id);
+  }
+
   @Get("products/options")
   @RequireAnyAdminPermission("customers.view", "products.view", "marketing.sms.view", "marketing.rubika.view")
   productOptions(@Req() request: AdminRequest) {

@@ -198,10 +198,6 @@ class _AuditLogScreenState extends ConsumerState<AuditLogScreen> {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       children: [
-        const PanizPageHeader(
-          title: 'تاریخچهٔ فعالیت‌ها',
-          subtitle: 'برای دیدن جزئیات تغییر، روی هر فعالیت بزنید.',
-        ),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
@@ -515,6 +511,9 @@ class _AdminRecordScreenState extends ConsumerState<AdminRecordScreen> {
           if (!snapshot.hasData)
             return const Center(child: CircularProgressIndicator());
           final row = snapshot.data!;
+          final address = row['address'] is Map
+              ? Map<String, dynamic>.from(row['address'] as Map)
+              : null;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -588,6 +587,29 @@ class _AdminRecordScreenState extends ConsumerState<AdminRecordScreen> {
                   ),
                 ),
               ],
+              if (address != null) ...[
+                sectionTitle('مشخصات ارسال'),
+                const SizedBox(height: 12),
+                _DetailValue(
+                  label: 'آدرس',
+                  value: _shippingAddressText(address),
+                ),
+                if ('${address['postalCode'] ?? ''}'.trim().isNotEmpty)
+                  _DetailValue(
+                    label: 'کدپستی',
+                    value: '${address['postalCode']}',
+                  ),
+                if ('${address['backupPhone'] ?? ''}'.trim().isNotEmpty)
+                  _DetailValue(
+                    label: 'شمارهٔ تماس جایگزین',
+                    value: '${address['backupPhone']}',
+                  ),
+                if (address['latitude'] != null && address['longitude'] != null)
+                  _DetailValue(
+                    label: 'موقعیت روی نقشه',
+                    value: '${address['latitude']}, ${address['longitude']}',
+                  ),
+              ],
               const SizedBox(height: 16),
               ...row.entries
                   .where(
@@ -596,6 +618,7 @@ class _AdminRecordScreenState extends ConsumerState<AdminRecordScreen> {
                           'images',
                           'variants',
                           'items',
+                          'address',
                           'name',
                           'status',
                           'category',
@@ -707,6 +730,31 @@ const _labels = <String, String>{
   'sessionId': 'شناسهٔ نشست',
 };
 String detailLabel(String key) => _labels[key] ?? 'اطلاعات تکمیلی';
+
+String _shippingAddressText(Map<String, dynamic> address) {
+  final province = '${address['province'] ?? ''}'.trim();
+  final city = '${address['city'] ?? ''}'.trim();
+  final savedLine = '${address['addressLine'] ?? ''}'.trim();
+  final line = savedLine.isNotEmpty
+      ? savedLine
+      : <String>[
+          '${address['street'] ?? ''}'.trim(),
+          if ('${address['alley'] ?? ''}'.trim().isNotEmpty)
+            'کوچه ${address['alley']}',
+          if ('${address['plaqueNumber'] ?? ''}'.trim().isNotEmpty)
+            'پلاک ${address['plaqueNumber']}',
+          if ('${address['floor'] ?? ''}'.trim().isNotEmpty)
+            'طبقه ${address['floor']}',
+          if ('${address['unit'] ?? ''}'.trim().isNotEmpty)
+            'واحد ${address['unit']}',
+          '${address['deliveryDetails'] ?? ''}'.trim(),
+        ].where((part) => part.trim().isNotEmpty).join('، ');
+  return <String>[
+    if (province.isNotEmpty) province,
+    if (city.isNotEmpty) city,
+    if (line.isNotEmpty) line,
+  ].join('، ');
+}
 
 class _DetailValue extends StatelessWidget {
   const _DetailValue({required this.label, required this.value});

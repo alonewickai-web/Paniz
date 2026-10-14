@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { AdminRequest, AdminSessionGuard } from "../admin-auth/admin-session.guard";
 import { AdminChatService } from "./admin-chat.service";
@@ -22,5 +22,15 @@ export class AdminChatController {
   @ApiOperation({ summary: "ارسال پیام مدیر یا پخش پیام متنی سوپرادمین" })
   send(@Req() request: AdminRequest, @Body() body: { recipientAdminId?: string; body: string; broadcast?: boolean }) {
     return this.chat.send(request.admin!, body);
+  }
+
+  @Patch("messages/:id")
+  edit(@Req() request: AdminRequest, @Param("id") id: string, @Body() body: { body?: string }) {
+    return this.chat.edit(request.admin!, id, body.body ?? "");
+  }
+
+  @Delete("messages/:id")
+  remove(@Req() request: AdminRequest, @Param("id") id: string, @Query("forEveryone") forEveryone?: string) {
+    return this.chat.remove(request.admin!, id, forEveryone === "true");
   }
 }

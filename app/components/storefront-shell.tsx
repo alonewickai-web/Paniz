@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Heart, House, Menu, ShoppingBag, UserRound } from "lucide-react";
 import { useStorefront } from "../lib/storefront-state";
-import { apiBaseUrl, type StoreCategory } from "../lib/catalog";
+import { apiBaseUrl, publicImageUrl, type StoreCategory } from "../lib/catalog";
 import { ProductSearchAutocomplete } from "./product-search-autocomplete";
 
 export function StorefrontHeader() {
@@ -16,6 +16,7 @@ export function StorefrontHeader() {
   const [activeCategory, setActiveCategory] = useState("");
   const [hasDiscounts, setHasDiscounts] = useState(false);
   const [activeSale, setActiveSale] = useState(false);
+  const logoSrc = useStoreLogo();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -62,7 +63,7 @@ export function StorefrontHeader() {
       <header className="site-header">
         <div className="header-main page-shell">
           <Link className="brand" href="/" aria-label="صفحهٔ اصلی پانیذ">
-            <img className="brand-image" src="/paniz-logo.jpg" alt="" /><span className="brand-word">پانیذ</span>
+            <img className="brand-image" src={logoSrc} alt="" /><span className="brand-word">پانیذ</span>
           </Link>
           <ProductSearchAutocomplete id="store-search" wrapperClassName="header-search-autocomplete" />
           <div className="header-actions">
@@ -91,16 +92,32 @@ export function StorefrontHeader() {
 }
 
 export function StorefrontFooter() {
+  const logoSrc = useStoreLogo();
   return (
     <footer className="site-footer store-footer">
       <div className="footer-inner page-shell">
-        <div className="footer-brand"><Link className="brand" href="/"><img className="brand-image" src="/paniz-logo.jpg" alt="" /><span className="brand-word">پانیذ</span></Link><p>پانیذ؛ برای روزهایی که می‌خوای خودت باشی.</p></div>
+        <div className="footer-brand"><Link className="brand" href="/"><img className="brand-image" src={logoSrc} alt="" /><span className="brand-word">پانیذ</span></Link><p>پانیذ؛ برای روزهایی که می‌خوای خودت باشی.</p></div>
         <div><strong>راهنمای خرید</strong><Link href="/help/shipping">روش‌های ارسال</Link><Link href="/policies/returns">تعویض و مرجوعی</Link><Link href="/help/faq">پرسش‌های پرتکرار</Link></div>
         <div><strong>همراه پانیذ</strong><Link href="/about">دربارهٔ ما</Link><Link href="/contact">تماس با ما</Link><Link href="/policies/privacy">حریم خصوصی</Link></div>
       </div>
       <div className="footer-bottom page-shell"><span>© پانیذ</span><span>پوشاک زنانه، با انتخاب تو</span></div>
     </footer>
   );
+}
+
+function useStoreLogo() {
+  const [logo, setLogo] = useState("/paniz-logo.jpg");
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch(`${apiBaseUrl()}/storefront/config`, { cache: "no-store", signal: controller.signal })
+      .then((response) => response.ok ? response.json() as Promise<{ data?: { logoPath?: string | null } }> : null)
+      .then((payload) => {
+        if (!controller.signal.aborted && payload?.data?.logoPath) setLogo(publicImageUrl(payload.data.logoPath));
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+  return logo;
 }
 
 export function StorefrontBottomNav() {

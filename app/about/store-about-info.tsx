@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPin, MapPinned, Phone } from "lucide-react";
+import { MapPin, Phone } from "lucide-react";
 import { useEffect, useState } from "react";
 import { apiBaseUrl } from "../lib/catalog";
 
@@ -9,8 +9,9 @@ type StoreAbout = {
   phone: string;
   rubikaUrl: string;
   instagramUrl: string;
-  physicalAddress: string;
   mapUrl: string;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 const emptyAbout: StoreAbout = {
@@ -18,8 +19,9 @@ const emptyAbout: StoreAbout = {
   phone: "",
   rubikaUrl: "",
   instagramUrl: "",
-  physicalAddress: "",
   mapUrl: "",
+  latitude: null,
+  longitude: null,
 };
 
 export function StoreAboutInfo() {
@@ -32,10 +34,15 @@ export function StoreAboutInfo() {
       .then((payload) => {
         if (!controller.signal.aborted) {
           const saved = payload?.data?.about;
-          setAbout(Object.fromEntries(Object.keys(emptyAbout).map((key) => {
-            const value = saved?.[key as keyof StoreAbout];
-            return [key, typeof value === "string" ? value : ""];
-          })) as StoreAbout);
+          setAbout({
+            address: typeof saved?.address === "string" ? saved.address : "",
+            phone: typeof saved?.phone === "string" ? saved.phone : "",
+            rubikaUrl: typeof saved?.rubikaUrl === "string" ? saved.rubikaUrl : "",
+            instagramUrl: typeof saved?.instagramUrl === "string" ? saved.instagramUrl : "",
+            mapUrl: typeof saved?.mapUrl === "string" ? saved.mapUrl : "",
+            latitude: typeof saved?.latitude === "number" ? saved.latitude : null,
+            longitude: typeof saved?.longitude === "number" ? saved.longitude : null,
+          });
         }
       })
       .catch(() => {
@@ -53,12 +60,20 @@ export function StoreAboutInfo() {
 
   const instagramHref = safeInstagramUrl(about.instagramUrl);
   const rubikaHref = safeRubikaUrl(about.rubikaUrl);
+  const hasLocation = Number.isFinite(about.latitude) && Number.isFinite(about.longitude);
+  const latitude = about.latitude ?? 0;
+  const longitude = about.longitude ?? 0;
   const mapHref = safeHttpsUrl(about.mapUrl);
   const callHref = phoneHref(about.phone);
+  const hasContact = [about.address, about.phone, about.rubikaUrl, about.instagramUrl].some((value) => value.trim()) || hasLocation;
+  const mapUrl = hasLocation ? `https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.006}%2C${latitude - 0.004}%2C${longitude + 0.006}%2C${latitude + 0.004}&layer=mapnik&marker=${latitude}%2C${longitude}` : null;
+  const googleDirections = hasLocation ? `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}` : mapHref;
+  const baladDirections = hasLocation ? `https://balad.ir/location?latitude=${latitude}&longitude=${longitude}&zoom=16` : null;
+  const neshanDirections = hasLocation ? `https://neshan.org/maps/@${latitude},${longitude},16z` : null;
 
   return <section className="about-contact-section" aria-label="اطلاعات تماس پانیذ">
     <h2>راه‌های ارتباط با پانیذ</h2>
-    {Object.values(about).every((value) => !value.trim())
+    {!hasContact
       ? <p className="about-contact-empty">اطلاعات تماس هنوز در تنظیمات فروشگاه ثبت نشده است.</p>
       : <div className="about-contact-grid">
         {about.address.trim() && <article className="about-contact-card">
@@ -76,10 +91,14 @@ export function StoreAboutInfo() {
         {about.instagramUrl.trim() && (instagramHref
           ? <a className="about-contact-card about-contact-link" href={instagramHref} target="_blank" rel="noreferrer"><span className="about-contact-icon instagram-contact-icon"><InstagramMark /></span><div className="about-contact-copy"><strong>اینستاگرام پانیذ</strong><p>{about.instagramUrl}</p></div></a>
           : <article className="about-contact-card"><span className="about-contact-icon instagram-contact-icon"><InstagramMark /></span><div className="about-contact-copy"><strong>اینستاگرام پانیذ</strong><p>پیوند واردشده معتبر نیست</p></div></article>)}
-        {about.physicalAddress.trim() && <article className="about-contact-card about-contact-card-wide">
-          <span className="about-contact-icon"><MapPinned size={20} /></span>
-          <div className="about-contact-copy"><strong>خرید حضوری</strong><p>{about.physicalAddress}</p></div>
-          {mapHref && <a className="about-map-button" href={mapHref} target="_blank" rel="noreferrer">نمایش روی نقشه <MapPin size={15} /></a>}
+        {hasLocation && mapUrl && <article className="about-contact-card about-location-card">
+          <div className="about-contact-copy"><strong>موقعیت فروشگاه</strong><p>برای مسیریابی، یکی از برنامه‌ها را انتخاب کن.</p></div>
+          <iframe className="about-map-frame" title="موقعیت فروشگاه پانیذ روی نقشه" src={mapUrl} loading="lazy" referrerPolicy="no-referrer" />
+          <div className="about-map-directions">
+            {googleDirections && <a className="about-map-button" href={googleDirections} target="_blank" rel="noreferrer"><span className="map-brand map-google">G</span> مسیریابی با Google Maps</a>}
+            {baladDirections && <a className="about-map-button" href={baladDirections} target="_blank" rel="noreferrer"><span className="map-brand map-balad">ب</span> مسیریابی با بلد</a>}
+            {neshanDirections && <a className="about-map-button" href={neshanDirections} target="_blank" rel="noreferrer"><span className="map-brand map-neshan">ن</span> مسیریابی با نشان</a>}
+          </div>
         </article>}
       </div>}
   </section>;

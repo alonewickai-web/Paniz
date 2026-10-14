@@ -1,4 +1,4 @@
-import { IsString, MaxLength } from "class-validator";
+import { IsNumber, IsOptional, IsString, MaxLength } from "class-validator";
 
 export class UpdateStoreAboutDto {
   @IsString() @MaxLength(500) address!: string;
@@ -7,4 +7,6 @@ export class UpdateStoreAboutDto {
   @IsString() @MaxLength(500) instagramUrl!: string;
   @IsString() @MaxLength(500) physicalAddress!: string;
   @IsString() @MaxLength(500) mapUrl!: string;
+  @IsOptional() @IsNumber() latitude?: number | null;
+  @IsOptional() @IsNumber() longitude?: number | null;
 }

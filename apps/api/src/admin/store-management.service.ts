@@ -157,6 +157,8 @@ export class StoreManagementService {
       instagramUrl: input.instagramUrl.trim(),
       physicalAddress: input.physicalAddress.trim(),
       mapUrl: input.mapUrl.trim(),
+      latitude: typeof input.latitude === "number" && Number.isFinite(input.latitude) ? input.latitude : null,
+      longitude: typeof input.longitude === "number" && Number.isFinite(input.longitude) ? input.longitude : null,
     };
     await this.prisma.$transaction(async (tx) => {
       await tx.storeSetting.upsert({
@@ -507,6 +509,8 @@ function safeStoreAbout(value: Prisma.JsonValue | undefined) {
     instagramUrl: read("instagramUrl"),
     physicalAddress: read("physicalAddress"),
     mapUrl: read("mapUrl"),
+    latitude: typeof source.latitude === "number" && Number.isFinite(source.latitude) ? source.latitude : null,
+    longitude: typeof source.longitude === "number" && Number.isFinite(source.longitude) ? source.longitude : null,
   };
 }
 

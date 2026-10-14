@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.provider.OpenableColumns
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.app.NotificationManagerCompat
@@ -33,8 +34,10 @@ class MainActivity : FlutterFragmentActivity() {
     private val apkPickerRequest = 8401
     private val notificationPermissionRequest = 8402
     private val reportExportRequest = 8403
+    private val contactImportRequest = 8404
     private var reportExportResult: MethodChannel.Result? = null
     private var reportExportBytes: ByteArray? = null
+    private var contactImportResult: MethodChannel.Result? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,6 +130,21 @@ class MainActivity : FlutterFragmentActivity() {
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "paniz/admin-reports")
             .setMethodCallHandler { call, result ->
+                if (call.method == "selectContactFile") {
+                    if (contactImportResult != null) { result.error("IMPORT_BUSY", "پنجرهٔ انتخاب فایل هنوز باز است.", null); return@setMethodCallHandler }
+                    try {
+                        contactImportResult = result
+                        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "*/*"
+                            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("text/csv", "text/plain", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream"))
+                        }, contactImportRequest)
+                    } catch (error: Exception) {
+                        contactImportResult = null
+                        result.error("IMPORT_FAILED", "انتخاب فایل باز نشد.", null)
+                    }
+                    return@setMethodCallHandler
+                }
                 if (call.method != "saveReport") { result.notImplemented(); return@setMethodCallHandler }
                 if (reportExportResult != null) { result.error("EXPORT_BUSY", "پنجرهٔ ذخیرهٔ گزارش هنوز باز است.", null); return@setMethodCallHandler }
                 val bytes = call.argument<ByteArray>("bytes")
@@ -271,6 +289,37 @@ class MainActivity : FlutterFragmentActivity() {
     @Deprecated("Android compatibility callback")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == contactImportRequest) {
+            val result = contactImportResult ?: return
+            contactImportResult = null
+            val uri = data?.data
+            if (resultCode != RESULT_OK || uri == null) { result.success(null); return }
+            Thread {
+                try {
+                    val name = contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (cursor.moveToFirst() && index >= 0) cursor.getString(index) else "contacts.csv"
+                    } ?: "contacts.csv"
+                    val bytes = contentResolver.openInputStream(uri)?.use { input ->
+                        val output = java.io.ByteArrayOutputStream()
+                        val buffer = ByteArray(16 * 1024)
+                        var size = 0
+                        while (true) {
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            size += count
+                            if (size > 10 * 1024 * 1024) throw IllegalArgumentException("حجم فایل نباید بیشتر از ۱۰ مگابایت باشد.")
+                            output.write(buffer, 0, count)
+                        }
+                        output.toByteArray()
+                    } ?: throw IllegalArgumentException("فایل انتخاب‌شده قابل خواندن نیست.")
+                    runOnUiThread { result.success(mapOf("name" to name, "bytes" to bytes)) }
+                } catch (error: Exception) {
+                    runOnUiThread { result.error("IMPORT_FAILED", error.message ?: "خواندن فایل انجام نشد.", null) }
+                }
+            }.start()
+            return
+        }
         if (requestCode == reportExportRequest) {
             val result = reportExportResult ?: return
             val bytes = reportExportBytes
