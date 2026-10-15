@@ -15,7 +15,7 @@ import { PwaRegistration } from "./components/pwa-registration";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
-  title: "فروشگاه پانیذ",
+  title: "72766661",
   applicationName: "فروشگاه پانیذ",
   appleWebApp: { capable: true, title: "پانیذ", statusBarStyle: "default" },
   description:
