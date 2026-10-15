@@ -30,6 +30,8 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
   bool _freeThresholdEnabled = false;
 
   final _aboutAddress = TextEditingController();
+  final _aboutIntroTitle = TextEditingController();
+  final _aboutIntroDescription = TextEditingController();
   final _aboutPhone = TextEditingController();
   final _aboutRubikaUrl = TextEditingController();
   final _aboutInstagramUrl = TextEditingController();
@@ -53,6 +55,8 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
   void dispose() {
     _shippingCost.dispose();
     _freeShippingThreshold.dispose();
+    _aboutIntroTitle.dispose();
+    _aboutIntroDescription.dispose();
     _aboutAddress.dispose();
     _aboutPhone.dispose();
     _aboutRubikaUrl.dispose();
@@ -688,7 +692,8 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
                   decoration: const InputDecoration(
                     labelText: 'لینک مقصد با لمس تصویر',
                     hintText: 'https://... یا /products',
-                    helperText: 'می‌توانی لینک یک محصول یا صفحهٔ سایت را وارد کنی.',
+                    helperText:
+                        'می‌توانی لینک یک محصول یا صفحهٔ سایت را وارد کنی.',
                   ),
                 ),
                 if (_popupImagePath != null) ...[
@@ -704,9 +709,13 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
                           child: Image.network(
                             AdminApi.imageUrl(_popupImagePath!),
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const Center(
-                              child: Icon(Icons.broken_image_outlined, size: 36),
-                            ),
+                            errorBuilder:
+                                (_, __, ___) => const Center(
+                                  child: Icon(
+                                    Icons.broken_image_outlined,
+                                    size: 36,
+                                  ),
+                                ),
                           ),
                         ),
                       ),
@@ -715,26 +724,29 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
                 ],
                 const SizedBox(height: 16),
                 FilledButton.icon(
-                  onPressed: _saving
-                      ? null
-                      : () {
-                          if (_popupEnabled && _popupImagePath == null) {
-                            showAppMessage(
-                              context,
-                              'برای فعال‌کردن پاپ‌آپ، اول تصویرش را انتخاب کن.',
-                              error: true,
-                            );
-                            return;
-                          }
-                          _run(() async {
-                            await ref.read(adminApiProvider).updateStorePopup({
-                              'enabled': _popupEnabled,
-                              'imagePath': _popupImagePath,
-                              'linkUrl': _popupLinkUrl.text.trim(),
-                            });
-                            _popupInitialized = false;
-                          }, 'تنظیمات پاپ‌آپ ذخیره شد');
-                        },
+                  onPressed:
+                      _saving
+                          ? null
+                          : () {
+                            if (_popupEnabled && _popupImagePath == null) {
+                              showAppMessage(
+                                context,
+                                'برای فعال‌کردن پاپ‌آپ، اول تصویرش را انتخاب کن.',
+                                error: true,
+                              );
+                              return;
+                            }
+                            _run(() async {
+                              await ref
+                                  .read(adminApiProvider)
+                                  .updateStorePopup({
+                                    'enabled': _popupEnabled,
+                                    'imagePath': _popupImagePath,
+                                    'linkUrl': _popupLinkUrl.text.trim(),
+                                  });
+                              _popupInitialized = false;
+                            }, 'تنظیمات پاپ‌آپ ذخیره شد');
+                          },
                   icon: const Icon(Icons.save_outlined),
                   label: const Text('ذخیرهٔ پاپ‌آپ'),
                 ),
@@ -888,6 +900,8 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
             ? Map<String, dynamic>.from(data['about'] as Map)
             : <String, dynamic>{};
     if (!_aboutInitialized) {
+      _aboutIntroTitle.text = '${about['introTitle'] ?? ''}';
+      _aboutIntroDescription.text = '${about['introDescription'] ?? ''}';
       _aboutAddress.text = '${about['address'] ?? ''}';
       _aboutPhone.text = '${about['phone'] ?? ''}';
       _aboutRubikaUrl.text = '${about['rubikaUrl'] ?? ''}';
@@ -910,7 +924,7 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
         const Padding(
           padding: EdgeInsets.only(top: 3, bottom: 12),
           child: Text(
-            'این اطلاعات در صفحهٔ «دربارهٔ ما»ی سایت نمایش داده می‌شود. برای حذف هر مورد، کادرش را خالی بگذار.',
+            'عنوان، متن معرفی و اطلاعات تماس اینجا ذخیره می‌شوند و در صفحهٔ «دربارهٔ ما»ی سایت نمایش داده می‌شوند. برای حذف هر مورد، کادرش را خالی بگذار.',
             style: TextStyle(
               color: Color(0xFF74686C),
               fontSize: 12,
@@ -924,6 +938,26 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                TextField(
+                  controller: _aboutIntroTitle,
+                  maxLength: 120,
+                  decoration: const InputDecoration(
+                    labelText: 'عنوان معرفی فروشگاه',
+                    hintText: 'مثلاً دربارهٔ پانیذ',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _aboutIntroDescription,
+                  minLines: 3,
+                  maxLines: 7,
+                  maxLength: 2000,
+                  decoration: const InputDecoration(
+                    labelText: 'متن معرفی فروشگاه',
+                    hintText: 'متن واقعی معرفی فروشگاه را وارد کن',
+                  ),
+                ),
+                const SizedBox(height: 10),
                 TextField(
                   controller: _aboutAddress,
                   minLines: 2,
@@ -1051,6 +1085,9 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
                           ? null
                           : () => _run(() async {
                             await ref.read(adminApiProvider).updateStoreAbout({
+                              'introTitle': _aboutIntroTitle.text.trim(),
+                              'introDescription':
+                                  _aboutIntroDescription.text.trim(),
                               'address': _aboutAddress.text.trim(),
                               'phone': _aboutPhone.text.trim(),
                               'rubikaUrl': _aboutRubikaUrl.text.trim(),

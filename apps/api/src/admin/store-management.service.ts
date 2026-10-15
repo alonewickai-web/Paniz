@@ -184,17 +184,21 @@ export class StoreManagementService {
 
   async saveAboutInfo(admin: AuthenticatedAdmin, input: UpdateStoreAboutDto) {
     requireAdminPermission(admin, "store.content");
-    const about = {
-      address: input.address.trim(),
-      phone: input.phone.trim(),
-      rubikaUrl: input.rubikaUrl.trim(),
-      instagramUrl: input.instagramUrl.trim(),
-      physicalAddress: input.physicalAddress.trim(),
-      mapUrl: input.mapUrl.trim(),
-      latitude: typeof input.latitude === "number" && Number.isFinite(input.latitude) ? input.latitude : null,
-      longitude: typeof input.longitude === "number" && Number.isFinite(input.longitude) ? input.longitude : null,
-    };
-    await this.prisma.$transaction(async (tx) => {
+    const about = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.storeSetting.findUnique({ where: { settingKey: "store.about" }, select: { settingValue: true } });
+      const previousAbout = safeStoreAbout(current?.settingValue);
+      const about = {
+        introTitle: input.introTitle?.trim() ?? previousAbout.introTitle,
+        introDescription: input.introDescription?.trim() ?? previousAbout.introDescription,
+        address: input.address.trim(),
+        phone: input.phone.trim(),
+        rubikaUrl: input.rubikaUrl.trim(),
+        instagramUrl: input.instagramUrl.trim(),
+        physicalAddress: input.physicalAddress.trim(),
+        mapUrl: input.mapUrl.trim(),
+        latitude: typeof input.latitude === "number" && Number.isFinite(input.latitude) ? input.latitude : null,
+        longitude: typeof input.longitude === "number" && Number.isFinite(input.longitude) ? input.longitude : null,
+      };
       await tx.storeSetting.upsert({
         where: { settingKey: "store.about" },
         create: { settingKey: "store.about", settingValue: about, isPublic: true, updatedByAdminId: admin.id },
@@ -203,6 +207,7 @@ export class StoreManagementService {
       await tx.adminAuditLog.create({
         data: { adminId: admin.id, action: "store.about.updated", entityType: "store_setting", details: { fields: Object.keys(about) } },
       });
+      return about;
     });
     return { data: { about } };
   }
@@ -537,6 +542,8 @@ function safeStoreAbout(value: Prisma.JsonValue | undefined) {
     : {};
   const read = (key: string) => typeof source[key] === "string" ? source[key] as string : "";
   return {
+    introTitle: read("introTitle"),
+    introDescription: read("introDescription"),
     address: read("address"),
     phone: read("phone"),
     rubikaUrl: read("rubikaUrl"),

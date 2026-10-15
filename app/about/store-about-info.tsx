@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { apiBaseUrl } from "../lib/catalog";
 
 type StoreAbout = {
+  introTitle: string;
+  introDescription: string;
   address: string;
   phone: string;
   rubikaUrl: string;
@@ -15,6 +17,8 @@ type StoreAbout = {
 };
 
 const emptyAbout: StoreAbout = {
+  introTitle: "",
+  introDescription: "",
   address: "",
   phone: "",
   rubikaUrl: "",
@@ -26,15 +30,23 @@ const emptyAbout: StoreAbout = {
 
 export function StoreAboutInfo() {
   const [about, setAbout] = useState<StoreAbout | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
+    setLoadError(false);
     void fetch(`${apiBaseUrl()}/storefront/config`, { cache: "no-store", signal: controller.signal })
-      .then((response) => response.ok ? response.json() as Promise<{ data?: { about?: Partial<StoreAbout> } }> : null)
+      .then((response) => {
+        if (!response.ok) throw new Error("STORE_ABOUT_LOAD_FAILED");
+        return response.json() as Promise<{ data?: { about?: Partial<StoreAbout> } }>;
+      })
       .then((payload) => {
         if (!controller.signal.aborted) {
           const saved = payload?.data?.about;
           setAbout({
+            introTitle: typeof saved?.introTitle === "string" ? saved.introTitle : "",
+            introDescription: typeof saved?.introDescription === "string" ? saved.introDescription : "",
             address: typeof saved?.address === "string" ? saved.address : "",
             phone: typeof saved?.phone === "string" ? saved.phone : "",
             rubikaUrl: typeof saved?.rubikaUrl === "string" ? saved.rubikaUrl : "",
@@ -46,13 +58,24 @@ export function StoreAboutInfo() {
         }
       })
       .catch(() => {
-        if (!controller.signal.aborted) setAbout(emptyAbout);
+        if (!controller.signal.aborted) {
+          setAbout(emptyAbout);
+          setLoadError(true);
+        }
       });
     return () => controller.abort();
-  }, []);
+  }, [reload]);
+
+  if (loadError) {
+    return <section className="about-contact-section" aria-label="درباره و اطلاعات تماس پانیذ" role="status">
+      <p className="about-contact-empty">دریافت اطلاعات فروشگاه با مشکل روبه‌رو شد.</p>
+      <button className="about-retry-button" type="button" onClick={() => setReload((value) => value + 1)}>تلاش دوباره</button>
+    </section>;
+  }
 
   if (!about) {
     return <section className="about-contact-section" aria-busy="true" aria-label="اطلاعات تماس پانیذ">
+      <div className="about-intro-skeleton" />
       <h2>راه‌های ارتباط با پانیذ</h2>
       <div className="about-contact-skeleton" />
     </section>;
@@ -71,7 +94,11 @@ export function StoreAboutInfo() {
   const baladDirections = hasLocation ? `https://balad.ir/location?latitude=${latitude}&longitude=${longitude}&zoom=16` : null;
   const neshanDirections = hasLocation ? `https://neshan.org/maps/@${latitude},${longitude},16z` : null;
 
-  return <section className="about-contact-section" aria-label="اطلاعات تماس پانیذ">
+  return <section className="about-contact-section" aria-label="درباره و اطلاعات تماس پانیذ">
+    <h1>{about.introTitle.trim() || "دربارهٔ پانیذ"}</h1>
+    {about.introDescription.trim()
+      ? <p className="store-info-lead about-intro-description">{about.introDescription}</p>
+      : <p className="about-contact-empty">برای نمایش معرفی واقعی فروشگاه، عنوان و متن را در اپ مدیریت، بخش «درباره ما» ثبت کن.</p>}
     <h2>راه‌های ارتباط با پانیذ</h2>
     {!hasContact
       ? <p className="about-contact-empty">اطلاعات تماس هنوز در تنظیمات فروشگاه ثبت نشده است.</p>
