@@ -109,7 +109,7 @@ export function StorefrontFooter() {
 }
 
 export function EnamadSeal() {
-  return <div className="enamad-seal" dangerouslySetInnerHTML={{ __html: `<a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=8163840&Code=q40hSNzyifJ0X5ZXlM8OUaHEgFcpzbdG'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=8163840&Code=q40hSNzyifJ0X5ZXlM8OUaHEgFcpzbdG' alt='' style='cursor:pointer' code='q40hSNzyifJ0X5ZXlM8OUaHEgFcpzbdG'></a>` }} />;
+  return <div className="enamad-seal" dangerouslySetInnerHTML={{ __html: `<a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=8191295&Code=H613Jqd6T1ufboLySUezjs7YqoET1EPq'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=8191295&Code=H613Jqd6T1ufboLySUezjs7YqoET1EPq' alt='' style='cursor:pointer' code='H613Jqd6T1ufboLySUezjs7YqoET1EPq'></a>` }} />;
 }
 
 function useStoreLogo() {
