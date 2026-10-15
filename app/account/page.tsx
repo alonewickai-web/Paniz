@@ -3,8 +3,8 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { ArrowLeft, Check, LogOut, MapPin, MessageCircle, Package, Pencil, Plus, ShieldCheck, Smartphone, Trash2, UserRound } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { ArrowLeft, Check, ChevronDown, LogOut, MapPin, MessageCircle, Package, Pencil, Plus, ShieldCheck, Smartphone, Trash2, UserRound } from "lucide-react";
 import { StorefrontShell } from "../components/storefront-shell";
 import { formatToman } from "../lib/catalog";
 import { CustomerApiError, customerApi, customerAssetUrl, type CustomerAddress, type CustomerOrder, type CustomerProfile } from "../lib/customer-api";
@@ -40,6 +40,7 @@ type AddressForm = {
 
 type SupportTicket = { id: string; subject: string; status: string; createdAt: string; lastMessageAt: string; messages: { id: string; senderType: string; body: string; imagePath: string | null; createdAt: string }[] };
 type CustomerReturn = { id: string; orderNumber: string; reason: string; status: string; adminNote: string | null; refundReceiptPath: string | null; requestedAt: string; refundAmountToman: number };
+type CustomerAccountPanel = "profile" | "addresses" | "orders" | "support";
 
 function cityLocation(province: string, city: string) {
   const provinceId = provinces.find((item) => item.name === province)?.id;
@@ -74,6 +75,8 @@ export default function AccountPage() {
   const [addressForm, setAddressForm] = useState<AddressForm>(emptyAddress());
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [addressFormOpen, setAddressFormOpen] = useState(false);
+  const [openAccountPanel, setOpenAccountPanel] = useState<CustomerAccountPanel | null>(null);
+  const [openInvoiceOrder, setOpenInvoiceOrder] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -319,21 +322,35 @@ export default function AccountPage() {
             <button className="customer-text-button" type="button" onClick={() => { setCodeSent(false); setCode(""); setError(""); setNotice(""); }}>ویرایش شمارهٔ موبایل</button>
           </form>}
         </div> : <div className="customer-dashboard">
-          <section className="customer-section customer-profile-section">
-            <div className="customer-section-heading"><span className="customer-section-icon"><UserRound size={19} /></span><div><h2>اطلاعات حساب</h2><p>شمارهٔ تأییدشده و مشخصات تماس تو</p></div></div>
+          <CustomerAccountSection
+            id="profile"
+            title="اطلاعات حساب"
+            description="شمارهٔ تأییدشده و مشخصات تماس تو"
+            icon={<UserRound size={19} />}
+            className="customer-profile-section"
+            open={openAccountPanel === "profile"}
+            onToggle={() => setOpenAccountPanel((current) => current === "profile" ? null : "profile")}
+          >
             <div className="customer-verified-phone"><span>شمارهٔ همراه</span><strong dir="ltr">{profile.phone}</strong><small><Check size={14} /> تأییدشده</small></div>
             {!profile.fullName?.trim() && <p className="customer-feedback customer-feedback-success" role="status">برای تکمیل حساب، نام و نام خانوادگی‌ات را وارد کن. ایمیل اختیاری است.</p>}
             <form className="store-form-grid customer-profile-form" onSubmit={(event) => void saveProfile(event)}>
-              <label className="store-field"><span>نام و نام خانوادگی</span><input autoComplete="name" autoFocus={!profile.fullName?.trim()} required minLength={2} maxLength={160} value={profileForm.fullName} onChange={(event) => setProfileForm((form) => ({ ...form, fullName: event.target.value }))} /></label>
+              <label className="store-field"><span>نام و نام خانوادگی</span><input autoComplete="name" autoFocus={openAccountPanel === "profile" && !profile.fullName?.trim()} required minLength={2} maxLength={160} value={profileForm.fullName} onChange={(event) => setProfileForm((form) => ({ ...form, fullName: event.target.value }))} /></label>
               <JalaliDatePicker value={profileForm.birthDateJalali} onChange={(birthDateJalali) => setProfileForm((form) => ({ ...form, birthDateJalali }))} />
               <label className="store-field"><span>ایمیل <small>(اختیاری)</small></span><input type="email" autoComplete="email" maxLength={254} value={profileForm.email} onChange={(event) => setProfileForm((form) => ({ ...form, email: event.target.value }))} /></label>
               <label className="customer-default-check store-form-wide"><input type="checkbox" checked={profileForm.marketingOptIn} onChange={(event) => setProfileForm((form) => ({ ...form, marketingOptIn: event.target.checked }))} /><span>مایلم پیشنهادها و محصولات تازهٔ فروشگاه را دریافت کنم. هر زمان بخواهم می‌توانم این گزینه را غیرفعال کنم.</span></label>
               <button className="button-primary customer-save-profile" type="submit" disabled={busy}>{profile.fullName?.trim() ? "ذخیرهٔ اطلاعات" : "ثبت مشخصات و تکمیل حساب"}</button>
             </form>
-          </section>
+          </CustomerAccountSection>
 
-          <section className="customer-section">
-            <div className="customer-section-heading"><span className="customer-section-icon"><MapPin size={19} /></span><div><h2>نشانی‌های تحویل</h2><p>کدپستی و نشانی دقیق برای ارسال سفارش‌ها</p></div><button className="outline-button customer-add-address" type="button" onClick={() => beginAddressEdit()}><Plus size={17} /> افزودن نشانی</button></div>
+          <CustomerAccountSection
+            id="addresses"
+            title="نشانی‌های تحویل"
+            description="کدپستی و نشانی دقیق برای ارسال سفارش‌ها"
+            icon={<MapPin size={19} />}
+            open={openAccountPanel === "addresses"}
+            onToggle={() => setOpenAccountPanel((current) => current === "addresses" ? null : "addresses")}
+          >
+            {profile.addresses.length > 0 && <button className="outline-button customer-add-address" type="button" onClick={() => beginAddressEdit()}><Plus size={17} /> افزودن نشانی</button>}
             {profile.addresses.length ? <div className="customer-address-grid">{profile.addresses.map((address) => <article className={`customer-address-card ${address.isDefault ? "is-default" : ""}`} key={address.id}>
               <div className="customer-address-title"><strong>{address.title || "نشانی"}</strong>{address.isDefault && <span>پیش‌فرض</span>}</div>
               <p>{address.recipientName} · <bdi dir="ltr">{address.recipientPhone}</bdi></p>
@@ -371,14 +388,23 @@ export default function AccountPage() {
               </div>
               <div className="customer-address-form-actions"><button className="button-primary" type="submit" disabled={busy}>{busy ? "در حال ذخیره…" : "ذخیرهٔ نشانی"}<Check size={17} /></button></div>
             </form>}
-          </section>
+          </CustomerAccountSection>
 
-          <section className="customer-section customer-orders-section">
-            <div className="customer-section-heading"><span className="customer-section-icon"><Package size={19} /></span><div><h2>سفارش‌های من</h2><p>سفارش‌ها و وضعیت فعلی آن‌ها</p></div></div>
+          <CustomerAccountSection
+            id="orders"
+            title="سفارش‌های من"
+            description="سفارش‌ها و وضعیت فعلی آن‌ها"
+            icon={<Package size={19} />}
+            className="customer-orders-section"
+            open={openAccountPanel === "orders"}
+            onToggle={() => setOpenAccountPanel((current) => current === "orders" ? null : "orders")}
+          >
             {orders.length ? <div className="customer-order-list">{orders.map((order) => {
               const returnRequest = returns.find((item) => item.orderNumber === order.orderNumber);
               const progress = order.status === "delivered" ? 3 : order.status === "shipped" ? 2 : order.status === "preparing" ? 1 : 0;
               const closed = ["cancelled", "expired", "returned"].includes(order.status);
+              const invoiceOpen = openInvoiceOrder === order.orderNumber;
+              const invoicePanelId = `customer-invoice-${encodeURIComponent(order.orderNumber)}`;
               return <article className="customer-order-card" key={order.orderNumber}>
               <div><span className="customer-order-number">{order.orderNumber}</span><small>{new Date(order.placedAt).toLocaleDateString("fa-IR")}</small></div>
               <div className="customer-order-products">{order.items.map((item, index) => <span key={`${item.name}-${index}`}>{item.name} · {item.color} · {item.size} × {new Intl.NumberFormat("fa-IR").format(item.quantity)}</span>)}</div>
@@ -388,9 +414,12 @@ export default function AccountPage() {
                 {order.trackingCode && <p className="customer-tracking-code">کد پیگیری پست: <bdi dir="ltr">{order.trackingCode}</bdi></p>}
                 {order.timeline.length > 0 && <details className="customer-order-history"><summary>دیدن تاریخچهٔ تغییر وضعیت</summary><ul>{order.timeline.map((entry, index) => <li key={`${entry.at}-${index}`}><strong>{orderStatus[entry.status] ?? entry.status}</strong>{entry.note && <span>{entry.note}</span>}<time>{new Date(entry.at).toLocaleString("fa-IR")}</time></li>)}</ul></details>}
               </div>}
-              <details className="customer-invoice">
-                <summary>فاکتور و جزئیات مبلغ</summary>
-                <div className="customer-invoice-lines">
+              <div className="customer-invoice" data-open={invoiceOpen ? "true" : "false"}>
+                <button type="button" className="customer-invoice-trigger" aria-expanded={invoiceOpen} aria-controls={invoicePanelId} onClick={() => setOpenInvoiceOrder((current) => current === order.orderNumber ? null : order.orderNumber)}>
+                  <span>فاکتور و جزئیات مبلغ</span><ChevronDown size={16} aria-hidden="true" />
+                </button>
+                <div className="customer-invoice-panel" id={invoicePanelId} hidden={!invoiceOpen}>
+                  <div className="customer-invoice-lines">
                   {order.items.map((item, index) => (
                     <div key={`${item.name}-${index}`}>
                       <span>{item.name} · {item.color} · {item.size}<small>{new Intl.NumberFormat("fa-IR").format(item.quantity)} عدد × {formatRial(item.unitPriceToman)}</small></span>
@@ -400,24 +429,75 @@ export default function AccountPage() {
                   <div><span>هزینهٔ ارسال</span><strong>{order.shippingToman ? formatRial(order.shippingToman) : "رایگان"}</strong></div>
                   {order.discountToman > 0 && <div><span>تخفیف</span><strong>− {formatRial(order.discountToman)}</strong></div>}
                   <div className="customer-invoice-total"><span>مبلغ قابل پرداخت</span><strong>{formatRial(order.totalToman)}</strong></div>
+                  </div>
+                  <button type="button" className="button-primary customer-pay-order" disabled={!order.paymentConfigured} title={!order.paymentConfigured ? "درگاه پرداخت هنوز روی فروشگاه تنظیم نشده است" : undefined}>
+                    {order.paymentConfigured ? "پرداخت سفارش" : "درگاه پرداخت تنظیم نشده"}<ArrowLeft size={16} />
+                  </button>
                 </div>
-                <button type="button" className="button-primary customer-pay-order" disabled={!order.paymentConfigured} title={!order.paymentConfigured ? "درگاه پرداخت هنوز روی فروشگاه تنظیم نشده است" : undefined}>
-                  {order.paymentConfigured ? "پرداخت سفارش" : "درگاه پرداخت تنظیم نشده"}<ArrowLeft size={16} />
-                </button>
-              </details>
+              </div>
               {order.status === "delivered" && order.paymentStatus === "paid" && !returnRequest && <details className="customer-return-form"><summary>درخواست مرجوعی کالا</summary><p>هزینهٔ بازگشت کالا با خریدار است. بازپرداخت پس از دریافت کامل کالای مرجوعی انجام می‌شود.</p><form className="store-form-grid" onSubmit={(event) => void createReturn(event, order.orderNumber)}><label className="store-field store-form-wide"><span>دلیل مرجوعی</span><textarea name="reason" required minLength={3} maxLength={2000} rows={3} /></label><label className="store-field"><span>شماره شبا</span><input name="iban" dir="ltr" inputMode="text" placeholder="IR000000000000000000000000" required pattern="IR[0-9۰-۹٠-٩]{24}" /></label><label className="store-field"><span>شماره کارت</span><input name="cardNumber" dir="ltr" inputMode="numeric" required pattern="[0-9۰-۹٠-٩]{16}" maxLength={16} /></label><button className="outline-button customer-save-profile" disabled={busy} type="submit">ثبت درخواست مرجوعی</button></form></details>}
               {returnRequest && <div className="customer-return-status"><strong>درخواست مرجوعی: {returnStatus[returnRequest.status] ?? returnRequest.status}</strong><span>{returnRequest.adminNote ?? "وضعیت درخواست از همین صفحه به‌روز می‌شود."}</span>{returnRequest.refundReceiptPath && <a href={customerAssetUrl(returnRequest.refundReceiptPath) ?? undefined} target="_blank" rel="noreferrer">مشاهدهٔ رسید واریز</a>}</div>}
             </article>})}</div> : <p className="customer-no-orders">هنوز سفارشی در حسابت ثبت نشده است. <Link href="/products">دیدن محصولات</Link></p>}
-          </section>
+          </CustomerAccountSection>
 
-          <section id="support" className="customer-section customer-support-section">
-            <div className="customer-section-heading"><span className="customer-section-icon"><MessageCircle size={19} /></span><div><h2>پشتیبانی</h2><p>درخواست ثبت کن یا گفت‌وگویت را ادامه بده.</p></div></div>
+          <CustomerAccountSection
+            id="support"
+            title="پشتیبانی"
+            description="درخواست ثبت کن یا گفت‌وگویت را ادامه بده."
+            icon={<MessageCircle size={19} />}
+            className="customer-support-section"
+            open={openAccountPanel === "support"}
+            onToggle={() => setOpenAccountPanel((current) => current === "support" ? null : "support")}
+          >
             <form className="customer-support-form" onSubmit={(event) => void createSupportTicket(event)}><label className="store-field"><span>موضوع</span><input name="subject" required minLength={3} maxLength={180} /></label><label className="store-field"><span>پیام</span><textarea name="message" required minLength={2} maxLength={4000} rows={3} /></label><label className="store-field"><span>تصویر پیوست <small>(اختیاری · JPG، PNG یا WebP تا ۵ مگابایت)</small></span><input type="file" name="image" accept="image/jpeg,image/png,image/webp" /></label><button className="button-primary" type="submit" disabled={busy}>ثبت درخواست پشتیبانی</button></form>
             {supportTickets.map((ticket) => <article className="customer-ticket" key={ticket.id}><div className="customer-ticket-heading"><strong>{ticket.subject}</strong><span>{ticket.status === "waiting_customer" ? "پاسخ پشتیبان" : ticket.status === "closed" ? "تیکت بسته شد" : "در حال پیگیری"}</span></div>{ticket.status === "closed" && <p className="customer-ticket-closed" role="status">این تیکت بسته شد. برای پیگیری بیشتر، یک درخواست پشتیبانی تازه ثبت کن.</p>}<ol>{ticket.messages.map((message) => <li className={message.senderType === "admin" ? "from-support" : "from-customer"} key={message.id}><strong>{message.senderType === "admin" ? "پشتیبان پانیذ" : "من"}</strong><p>{message.body}</p>{message.imagePath && <a href={customerAssetUrl(message.imagePath) ?? undefined} target="_blank" rel="noreferrer"><img className="customer-ticket-image" src={customerAssetUrl(message.imagePath) ?? undefined} alt="تصویر پیوست گفت‌وگوی پشتیبانی" loading="lazy" /></a>}<time>{new Date(message.createdAt).toLocaleString("fa-IR")}</time></li>)}</ol>{ticket.status !== "closed" && <form className="customer-ticket-reply" onSubmit={(event) => void replySupportTicket(event, ticket.id)}><label className="store-field"><span>پاسخ</span><textarea name="body" required maxLength={4000} rows={2} /></label><label className="store-field"><span>تصویر (اختیاری)</span><input type="file" name="image" accept="image/jpeg,image/png,image/webp" /></label><button className="outline-button" type="submit" disabled={busy}>ارسال پیام</button></form>}</article>)}
-          </section>
+          </CustomerAccountSection>
         </div>}
       </div></main>
     </StorefrontShell>
+  );
+}
+
+function CustomerAccountSection({
+  id,
+  title,
+  description,
+  icon,
+  open,
+  onToggle,
+  className = "",
+  children,
+}: {
+  id: CustomerAccountPanel;
+  title: string;
+  description: string;
+  icon: ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  const panelId = `customer-account-panel-${id}`;
+  return (
+    <section id={id} className={`customer-section customer-accordion ${className}`}>
+      <h2 className="customer-accordion-heading">
+        <button
+          type="button"
+          className="customer-accordion-trigger"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={onToggle}
+        >
+          <span className="customer-section-icon">{icon}</span>
+          <span className="customer-accordion-copy">
+            <span className="customer-accordion-title">{title}</span>
+            <span className="customer-accordion-description">{description}</span>
+          </span>
+          <ChevronDown size={16} aria-hidden="true" />
+        </button>
+      </h2>
+      <div id={panelId} className="customer-accordion-panel" hidden={!open}>{children}</div>
+    </section>
   );
 }
 

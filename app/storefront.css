@@ -603,3 +603,26 @@ html[data-theme="dark"] .address-map-locate, html[data-theme="dark"] .jalali-cal
   .about-contact-card { gap: 10px; padding: 12px; }
   .about-contact-icon { width: 39px; height: 39px; }
 }
+
+.customer-section.customer-accordion { padding: 11px; overflow: hidden; }
+.customer-accordion-heading { margin: 0 !important; }
+.customer-accordion-trigger { width: 100%; min-height: 62px; display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); text-align: right; font: inherit; cursor: pointer; transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease; }
+.customer-accordion-trigger:hover, .customer-accordion-trigger[aria-expanded="true"] { border-color: var(--rose-bright); background: var(--rose-light); }
+.customer-accordion-trigger:focus-visible, .customer-invoice-trigger:focus-visible { outline: 2px solid var(--rose); outline-offset: 2px; }
+.customer-accordion-trigger .customer-section-icon { width: 40px; height: 40px; border-radius: 12px; }
+.customer-accordion-copy { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.customer-accordion-title { color: var(--ink); font-size: 15px; font-weight: 700; }
+.customer-accordion-description { color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.6; }
+.customer-accordion-trigger > svg { flex: none; color: var(--muted); transition: transform 180ms ease, color 180ms ease; }
+.customer-accordion-trigger[aria-expanded="true"] > svg { color: var(--rose); transform: rotate(180deg); }
+.customer-accordion-panel { padding: 16px 10px 9px; animation: customer-accordion-in 180ms ease both; }
+.customer-accordion-panel[hidden], .customer-invoice-panel[hidden] { display: none !important; }
+.customer-add-address { margin-bottom: 14px; }
+.customer-invoice { padding: 8px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.customer-invoice-trigger { width: 100%; min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); text-align: right; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: border-color 160ms ease, background-color 160ms ease; }
+.customer-invoice-trigger:hover, .customer-invoice[data-open="true"] .customer-invoice-trigger { border-color: var(--rose-bright); background: var(--rose-light); }
+.customer-invoice-trigger > svg { flex: none; color: var(--muted); transition: transform 180ms ease, color 180ms ease; }
+.customer-invoice[data-open="true"] .customer-invoice-trigger > svg { color: var(--rose); transform: rotate(180deg); }
+.customer-invoice-panel { padding: 12px 3px 2px; animation: customer-accordion-in 180ms ease both; }
+@keyframes customer-accordion-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .customer-accordion-trigger, .customer-accordion-trigger > svg, .customer-invoice-trigger, .customer-invoice-trigger > svg, .customer-accordion-panel, .customer-invoice-panel { transition: none; animation: none; } }
