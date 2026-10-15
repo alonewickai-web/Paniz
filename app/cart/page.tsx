@@ -8,7 +8,7 @@ import { apiBaseUrl, formatToman, type StoreProductDetail } from "../lib/catalog
 import { useStorefront } from "../lib/storefront-state";
 import { StoreImage } from "../components/store-image";
 
-type Quote = { items: { variantId: string; productName: string; unitPriceToman: number; lineTotalToman: number; quantity: number }[]; subtotalToman: number; shippingToman: number | null; totalToman: number | null };
+type Quote = { items: { variantId: string; productName: string; unitPriceToman: number; lineTotalToman: number; quantity: number }[]; subtotalToman: number; shippingToman: number | null; shippingLabel: string | null; totalToman: number | null };
 
 export default function CartPage() {
   const { cart, setCart, ready } = useStorefront();
@@ -136,8 +136,8 @@ export default function CartPage() {
               <aside className="store-order-summary">
                 <h2>خلاصهٔ سفارش</h2>
                 <div><span>جمع کالاها</span><strong>{formatToman(subtotal)}</strong></div>
-                <div><span>هزینهٔ ارسال</span><strong className="store-pending-value">پس از نشانی</strong></div>
-                <p>قیمت و موجودی از دیتابیس دوباره بررسی می‌شود. هزینهٔ ارسال و پرداخت آنلاین هنوز در تنظیمات فروشگاه تعریف نشده‌اند.</p>
+                <div><span>{quote?.shippingLabel || "هزینهٔ ارسال"}</span><strong>{quote ? quote.shippingToman === null ? "تنظیم نشده" : quote.shippingToman === 0 ? "رایگان" : formatToman(quote.shippingToman) : loading ? "در حال محاسبه…" : "—"}</strong></div>
+                <p>هزینهٔ ارسال بر اساس تنظیمات فروشگاه در همین سبد محاسبه و در تسویه‌حساب دوباره بررسی می‌شود.</p>
                 <Link className="button-primary" href="/checkout" aria-disabled={Boolean(quoteError || loading || !quote)} onClick={(event) => { if (quoteError || loading || !quote) event.preventDefault(); }}>ادامه به تسویه‌حساب <ArrowLeft size={17} /></Link>
                 {loading && <small className="store-loading-note">در حال بررسی قیمت و موجودی…</small>}
                 <Link className="store-back-link" href="/products">ادامهٔ خرید</Link>

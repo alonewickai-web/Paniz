@@ -76,7 +76,7 @@ export class StoreManagementService {
           backgroundColor: true,
         },
       }),
-      this.prisma.shippingMethod.findFirst({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { name: true, baseCostToman: true, freeOverToman: true } }),
+      this.prisma.shippingMethod.findFirst({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { name: true, description: true, estimatedDaysMin: true, estimatedDaysMax: true, baseCostToman: true, freeOverToman: true } }),
     ]);
 
     return {
@@ -92,7 +92,7 @@ export class StoreManagementService {
           imagePath: banner.imagePath,
           backgroundColor: banner.backgroundColor,
         })),
-        shipping: shipping ? { name: shipping.name, baseCostToman: safeNumber(shipping.baseCostToman), freeOverToman: shipping.freeOverToman === null ? null : safeNumber(shipping.freeOverToman) } : null,
+        shipping: shipping ? { name: shipping.name, description: shipping.description, estimatedDaysMin: shipping.estimatedDaysMin, estimatedDaysMax: shipping.estimatedDaysMax, baseCostToman: safeNumber(shipping.baseCostToman), freeOverToman: shipping.freeOverToman === null ? null : safeNumber(shipping.freeOverToman) } : null,
       },
     };
   }
@@ -117,7 +117,7 @@ export class StoreManagementService {
         sections: mergeSections(sections),
         categories: categories.map((category) => ({ ...category, id: category.id.toString(), parentId: category.parentId?.toString() ?? null })),
         banners: banners.map((banner) => ({ ...banner, id: banner.id.toString(), altText: banner.altText?.trim() || banner.title, isArchived: banner.archivedAt !== null })),
-        shipping: shipping ? { id: shipping.id.toString(), name: shipping.name, baseCostToman: safeNumber(shipping.baseCostToman), freeOverToman: shipping.freeOverToman === null ? null : safeNumber(shipping.freeOverToman), isActive: shipping.isActive } : null,
+        shipping: shipping ? { id: shipping.id.toString(), name: shipping.name, description: shipping.description, estimatedDaysMin: shipping.estimatedDaysMin, estimatedDaysMax: shipping.estimatedDaysMax, baseCostToman: safeNumber(shipping.baseCostToman), freeOverToman: shipping.freeOverToman === null ? null : safeNumber(shipping.freeOverToman), isActive: shipping.isActive } : null,
       },
     };
   }
@@ -129,14 +129,28 @@ export class StoreManagementService {
     const freeOverToman = input.freeShippingEnabled && !input.alwaysFree ? BigInt(input.freeOverToman!) : null;
     const result = await this.prisma.$transaction(async (tx) => {
       const current = await tx.shippingMethod.findFirst({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] });
-      const data = { name: input.name.trim() || "ارسال پستی", description: "هزینهٔ ارسال سفارش بر اساس تنظیم فروشگاه", baseCostToman, freeOverToman, isActive: true, sortOrder: 0 };
+      const estimatedDaysMin = input.estimatedDaysMin === undefined ? current?.estimatedDaysMin ?? null : input.estimatedDaysMin;
+      const estimatedDaysMax = input.estimatedDaysMax === undefined ? current?.estimatedDaysMax ?? null : input.estimatedDaysMax;
+      if (estimatedDaysMin !== null && estimatedDaysMax !== null && estimatedDaysMax < estimatedDaysMin) {
+        throw new BadRequestException({ code: "INVALID_SHIPPING_ESTIMATE", message: "حداکثر زمان ارسال نباید از حداقل آن کمتر باشد." });
+      }
+      const data = {
+        name: input.name.trim() || current?.name || "ارسال پستی",
+        description: input.description === undefined ? current?.description ?? null : input.description?.trim() || null,
+        estimatedDaysMin,
+        estimatedDaysMax,
+        baseCostToman,
+        freeOverToman,
+        isActive: true,
+        sortOrder: 0,
+      };
       const saved = current
         ? await tx.shippingMethod.update({ where: { id: current.id }, data })
         : await tx.shippingMethod.create({ data });
       await tx.adminAuditLog.create({ data: { adminId: admin.id, action: "shipping.settings.updated", entityType: "shipping_method", entityId: saved.id, details: { baseCostToman: baseCostToman.toString(), freeOverToman: input.freeShippingEnabled && !input.alwaysFree ? input.freeOverToman : null, alwaysFree: input.alwaysFree } } });
       return saved;
     });
-    return { data: { id: result.id.toString(), name: result.name, baseCostToman: safeNumber(result.baseCostToman), freeOverToman: result.freeOverToman === null ? null : safeNumber(result.freeOverToman), alwaysFree: result.baseCostToman === 0n, isActive: result.isActive } };
+    return { data: { id: result.id.toString(), name: result.name, description: result.description, estimatedDaysMin: result.estimatedDaysMin, estimatedDaysMax: result.estimatedDaysMax, baseCostToman: safeNumber(result.baseCostToman), freeOverToman: result.freeOverToman === null ? null : safeNumber(result.freeOverToman), alwaysFree: result.baseCostToman === 0n, isActive: result.isActive } };
   }
 
   async saveLogo(admin: AuthenticatedAdmin, input: { logoPath?: string | null }) {

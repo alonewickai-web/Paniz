@@ -210,7 +210,7 @@ export default function CheckoutPage() {
         {order ? <section className="store-order-success" role="status">
           <span className="store-success-icon"><Check size={28} /></span><span className="section-kicker">درخواست خرید ثبت شد</span><h1>سفارش {order.orderNumber}</h1>
           <p>مبلغ نهایی سفارش: <strong>{formatToman(order.totalToman)}</strong> · موجودی انتخاب‌هایت تا {order.reservationExpiresAt ? new Date(order.reservationExpiresAt).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" }) : "۱۵ دقیقه"} رزرو شد.</p>
-          <div className="store-payment-notice"><ShieldCheck size={20} /><span><strong>سفارش ثبت شد اما پرداخت بانکی هنوز فعال نیست.</strong><small>درگاه پرداخت و هزینهٔ ارسال در تنظیمات فروشگاه تعریف نشده‌اند؛ مبلغ فعلی فقط جمع کالاهاست و پرداخت نهایی بعد از اتصال این سرویس‌ها انجام می‌شود.</small></span></div>
+          <div className="store-payment-notice"><ShieldCheck size={20} /><span><strong>سفارش ثبت شد اما پرداخت بانکی هنوز فعال نیست.</strong><small>هزینهٔ ارسال در مبلغ نهایی سفارش لحاظ شده است. تا زمان اتصال درگاه، این سفارش پرداخت‌شده محسوب نمی‌شود.</small></span></div>
           <div className="store-success-actions"><Link className="button-primary" href="/account">مشاهدهٔ سفارش‌ها</Link><Link className="outline-button" href="/products">بازگشت به فروشگاه</Link></div>
         </section> : !cart.length ? <div className="store-empty-page"><h1>سبد خرید خالی است</h1><p>برای ادامه، ابتدا محصولی به سبدت اضافه کن.</p><Link className="button-primary" href="/products">دیدن محصولات</Link></div> : (
           <>

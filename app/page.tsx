@@ -906,7 +906,7 @@ export default function Home() {
         {sectionIsActive("benefits") && <section className="benefits-strip" aria-label="خدمات پانیذ" style={{ order: sectionOrder("benefits", 3) }}>
           <div className="benefit"><span className="benefit-icon mint-icon"><ShoppingBag size={20} /></span><div><strong>خرید آسوده</strong><span>قیمت و موجودی از فروشگاه بررسی می‌شود</span></div></div>
           <span className="benefit-separator" />
-          <div className="benefit"><span className="benefit-icon peach-icon"><ArrowRight size={20} /></span><div><strong>روش‌های ارسال</strong><span>هزینه پس از واردکردن نشانی مشخص می‌شود</span></div></div>
+          <div className="benefit"><span className="benefit-icon peach-icon"><ArrowRight size={20} /></span><div><strong>روش‌های ارسال</strong><span>هزینه و شرایط ارسال را در راهنمای ارسال ببین</span></div></div>
           <span className="benefit-separator" />
           <div className="benefit"><span className="benefit-icon lilac-icon"><Check size={20} /></span><div><strong>شرایط تعویض</strong><span>پیش از نهایی‌شدن سفارش اعلام می‌شود</span></div></div>
           <span className="benefit-separator" />

@@ -23,6 +23,10 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
   bool _saving = false;
   List<String>? _sectionOrderOverride;
 
+  final _shippingName = TextEditingController();
+  final _shippingDescription = TextEditingController();
+  final _shippingDaysMin = TextEditingController();
+  final _shippingDaysMax = TextEditingController();
   final _shippingCost = TextEditingController();
   final _freeShippingThreshold = TextEditingController();
   bool _shippingInitialized = false;
@@ -53,6 +57,10 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
 
   @override
   void dispose() {
+    _shippingName.dispose();
+    _shippingDescription.dispose();
+    _shippingDaysMin.dispose();
+    _shippingDaysMax.dispose();
     _shippingCost.dispose();
     _freeShippingThreshold.dispose();
     _aboutIntroTitle.dispose();
@@ -764,6 +772,14 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
             ? Map<String, dynamic>.from(data['shipping'] as Map)
             : <String, dynamic>{};
     if (!_shippingInitialized) {
+      _shippingName.text = '${shipping['name'] ?? 'ارسال پستی'}';
+      final savedDescription = '${shipping['description'] ?? ''}';
+      _shippingDescription.text =
+          savedDescription == 'هزینهٔ ارسال سفارش بر اساس تنظیم فروشگاه'
+              ? ''
+              : savedDescription;
+      _shippingDaysMin.text = '${shipping['estimatedDaysMin'] ?? ''}';
+      _shippingDaysMax.text = '${shipping['estimatedDaysMax'] ?? ''}';
       _shippingCost.text = _digits('${shipping['baseCostToman'] ?? 0}');
       _freeShippingThreshold.text = _digits(
         '${shipping['freeOverToman'] ?? ''}',
@@ -793,6 +809,52 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                TextField(
+                  controller: _shippingName,
+                  maxLength: 120,
+                  decoration: const InputDecoration(
+                    labelText: 'نام روش ارسال',
+                    hintText: 'مثلاً ارسال پستی',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _shippingDescription,
+                  minLines: 2,
+                  maxLines: 4,
+                  maxLength: 500,
+                  decoration: const InputDecoration(
+                    labelText: 'توضیحات روش ارسال',
+                    hintText: 'جزئیات واقعی ارسال را برای مشتری بنویس',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _shippingDaysMin,
+                        keyboardType: TextInputType.number,
+                        textDirection: TextDirection.ltr,
+                        decoration: const InputDecoration(
+                          labelText: 'حداقل زمان (روز)',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: _shippingDaysMax,
+                        keyboardType: TextInputType.number,
+                        textDirection: TextDirection.ltr,
+                        decoration: const InputDecoration(
+                          labelText: 'حداکثر زمان (روز)',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 TextField(
                   controller: _shippingCost,
                   enabled: !_alwaysFree,
@@ -860,9 +922,20 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
                             final threshold = _digits(
                               _freeShippingThreshold.text,
                             );
+                            final minDays = _digits(_shippingDaysMin.text);
+                            final maxDays = _digits(_shippingDaysMax.text);
                             if (!_alwaysFree && cost.isEmpty)
                               throw const AdminApiException(
                                 'هزینهٔ پست را وارد کن.',
+                              );
+                            if (minDays.isNotEmpty != maxDays.isNotEmpty)
+                              throw const AdminApiException(
+                                'حداقل و حداکثر زمان ارسال را با هم وارد کن.',
+                              );
+                            if (minDays.isNotEmpty &&
+                                int.parse(maxDays) < int.parse(minDays))
+                              throw const AdminApiException(
+                                'حداکثر زمان ارسال نباید از حداقل آن کمتر باشد.',
                               );
                             if (_freeThresholdEnabled &&
                                 !_alwaysFree &&
@@ -873,7 +946,17 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
                             await ref
                                 .read(adminApiProvider)
                                 .updateShippingSettings({
-                                  'name': 'ارسال پستی',
+                                  'name': _shippingName.text.trim(),
+                                  'description':
+                                      _shippingDescription.text.trim(),
+                                  'estimatedDaysMin':
+                                      minDays.isEmpty
+                                          ? null
+                                          : int.parse(minDays),
+                                  'estimatedDaysMax':
+                                      maxDays.isEmpty
+                                          ? null
+                                          : int.parse(maxDays),
                                   'baseCostToman': cost.isEmpty ? '0' : cost,
                                   'alwaysFree': _alwaysFree,
                                   'freeShippingEnabled':
