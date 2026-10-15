@@ -38,6 +38,11 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
   double? _mapLongitude;
   bool _aboutInitialized = false;
 
+  final _popupLinkUrl = TextEditingController();
+  String? _popupImagePath;
+  bool _popupEnabled = false;
+  bool _popupInitialized = false;
+
   @override
   void initState() {
     super.initState();
@@ -53,15 +58,18 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
     _aboutRubikaUrl.dispose();
     _aboutInstagramUrl.dispose();
     _aboutMapUrl.dispose();
+    _popupLinkUrl.dispose();
     super.dispose();
   }
 
   static const _tabs = ['قالب سایت', 'دسته‌ها', 'بنرها', 'چیدمان', 'درباره ما'];
+  static const _tabIndexes = [0, 1, 2, 3, 4, 6];
 
   Future<void> _refresh() async {
     _sectionOrderOverride = null;
     _shippingInitialized = false;
     _aboutInitialized = false;
+    _popupInitialized = false;
     ref.invalidate(storeConfigurationProvider);
   }
 
@@ -90,13 +98,13 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: List.generate(
-              _tabs.length,
+              _tabIndexes.length,
               (index) => Padding(
                 padding: const EdgeInsetsDirectional.only(end: 8),
                 child: ChoiceChip(
-                  label: Text(_tabs[index]),
-                  selected: _tab == index,
-                  onSelected: (_) => setState(() => _tab = index),
+                  label: Text(index < _tabs.length ? _tabs[index] : 'پاپ‌آپ'),
+                  selected: _tab == _tabIndexes[index],
+                  onSelected: (_) => setState(() => _tab = _tabIndexes[index]),
                 ),
               ),
             ),
@@ -128,6 +136,7 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
                       if (_tab == 3) _sectionsPanel(data),
                       if (_tab == 4) _aboutPanel(data),
                       if (_tab == 5) _shippingPanel(data),
+                      if (_tab == 6) _popupPanel(data),
                     ],
                   ),
                 ),
@@ -619,6 +628,121 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
             height: height,
             fit: BoxFit.cover,
           ),
+    );
+  }
+
+  Widget _popupPanel(JsonMap data) {
+    final popup =
+        data['popup'] is Map
+            ? Map<String, dynamic>.from(data['popup'] as Map)
+            : <String, dynamic>{};
+    if (!_popupInitialized) {
+      _popupEnabled = popup['enabled'] == true;
+      _popupImagePath = _optionalPath(popup['imagePath']);
+      _popupLinkUrl.text = '${popup['linkUrl'] ?? ''}';
+      _popupInitialized = true;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        sectionTitle('پاپ‌آپ تبلیغاتی سایت'),
+        const Padding(
+          padding: EdgeInsets.only(top: 3, bottom: 12),
+          child: Text(
+            'تصویر را بارگذاری کن، لینک مقصد را بنویس و نمایش پاپ‌آپ را روشن یا خاموش کن. با بستن آن، مشتری تا پایان همین بازدید دوباره آن را نمی‌بیند.',
+            style: TextStyle(
+              color: Color(0xFF74686C),
+              fontSize: 12,
+              height: 1.7,
+            ),
+          ),
+        ),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('پاپ‌آپ در سایت نمایش داده شود'),
+                  subtitle: Text(_popupEnabled ? 'فعال' : 'غیرفعال'),
+                  value: _popupEnabled,
+                  onChanged: (value) => setState(() => _popupEnabled = value),
+                ),
+                const SizedBox(height: 12),
+                AdminImagePickerField(
+                  imagePath: _popupImagePath,
+                  label: 'تصویر تبلیغ (کادر عمودی ۴:۵)',
+                  aspectRatio: 0.8,
+                  lockAspectRatio: true,
+                  onChanged: (path) => setState(() => _popupImagePath = path),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _popupLinkUrl,
+                  keyboardType: TextInputType.url,
+                  textDirection: TextDirection.ltr,
+                  maxLength: 1000,
+                  decoration: const InputDecoration(
+                    labelText: 'لینک مقصد با لمس تصویر',
+                    hintText: 'https://... یا /products',
+                    helperText: 'می‌توانی لینک یک محصول یا صفحهٔ سایت را وارد کنی.',
+                  ),
+                ),
+                if (_popupImagePath != null) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 250),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: AspectRatio(
+                          aspectRatio: 0.8,
+                          child: Image.network(
+                            AdminApi.imageUrl(_popupImagePath!),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Center(
+                              child: Icon(Icons.broken_image_outlined, size: 36),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: _saving
+                      ? null
+                      : () {
+                          if (_popupEnabled && _popupImagePath == null) {
+                            showAppMessage(
+                              context,
+                              'برای فعال‌کردن پاپ‌آپ، اول تصویرش را انتخاب کن.',
+                              error: true,
+                            );
+                            return;
+                          }
+                          _run(() async {
+                            await ref.read(adminApiProvider).updateStorePopup({
+                              'enabled': _popupEnabled,
+                              'imagePath': _popupImagePath,
+                              'linkUrl': _popupLinkUrl.text.trim(),
+                            });
+                            _popupInitialized = false;
+                          }, 'تنظیمات پاپ‌آپ ذخیره شد');
+                        },
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('ذخیرهٔ پاپ‌آپ'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 

@@ -664,6 +664,9 @@ class AdminApi {
   Future<JsonMap> updateStoreLogo(String? logoPath) async =>
       _data(await dio.patch('admin/store/logo', data: {'logoPath': logoPath}));
 
+  Future<JsonMap> updateStorePopup(JsonMap popup) async =>
+      _data(await dio.patch('admin/store/popup', data: popup));
+
   Future<JsonMap> updateStoreAbout(JsonMap about) async =>
       _data(await dio.patch('admin/store/about', data: about));
 

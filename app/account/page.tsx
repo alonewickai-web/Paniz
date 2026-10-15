@@ -4,13 +4,12 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { ArrowLeft, Check, Copy, ExternalLink, LogOut, MapPin, MessageCircle, Package, Pencil, Plus, ShieldCheck, Smartphone, Trash2, Unlink, UserRound } from "lucide-react";
+import { ArrowLeft, Check, LogOut, MapPin, MessageCircle, Package, Pencil, Plus, ShieldCheck, Smartphone, Trash2, UserRound } from "lucide-react";
 import { StorefrontShell } from "../components/storefront-shell";
 import { formatToman } from "../lib/catalog";
 import { CustomerApiError, customerApi, customerAssetUrl, type CustomerAddress, type CustomerOrder, type CustomerProfile } from "../lib/customer-api";
 import iranGeography from "../data/iran-geography.json";
 import { JalaliDatePicker } from "../components/jalali-date-picker";
-import { requestStorePush } from "../lib/customer-push";
 
 const AddressLocationPicker = dynamic(
   () => import("../components/address-location-picker").then((module) => module.AddressLocationPicker),
@@ -39,7 +38,6 @@ type AddressForm = {
   isDefault: boolean;
 };
 
-type RubikaLink = { code: string; expiresAt: string; botUrl: string | null; botUsername: string | null };
 type SupportTicket = { id: string; subject: string; status: string; createdAt: string; lastMessageAt: string; messages: { id: string; senderType: string; body: string; imagePath: string | null; createdAt: string }[] };
 type CustomerReturn = { id: string; orderNumber: string; reason: string; status: string; adminNote: string | null; refundReceiptPath: string | null; requestedAt: string; refundAmountToman: number };
 
@@ -72,14 +70,11 @@ export default function AccountPage() {
   const [codeSent, setCodeSent] = useState(false);
   const [resendSeconds, setResendSeconds] = useState(0);
   const [developmentCode, setDevelopmentCode] = useState(false);
-  const [profileForm, setProfileForm] = useState({ fullName: "", birthDateJalali: "", email: "", marketingOptIn: false, rubikaMarketingOptIn: false });
-  const [rubikaLink, setRubikaLink] = useState<RubikaLink | null>(null);
+  const [profileForm, setProfileForm] = useState({ fullName: "", birthDateJalali: "", email: "", marketingOptIn: false });
   const [addressForm, setAddressForm] = useState<AddressForm>(emptyAddress());
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [addressFormOpen, setAddressFormOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [pushEnabled, setPushEnabled] = useState(false);
-  const [pushBusy, setPushBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -102,7 +97,7 @@ export default function AccountPage() {
     setReturns(customerReturns);
     setProfileForm({
       fullName: customer.fullName ?? "", birthDateJalali: customer.birthDateJalali ?? "", email: customer.email ?? "",
-      marketingOptIn: customer.marketingOptIn, rubikaMarketingOptIn: customer.rubikaMarketingOptIn,
+      marketingOptIn: customer.marketingOptIn,
     });
     setAddressForm((current) => ({ ...current, recipientPhone: current.recipientPhone || customer.phone, recipientName: current.recipientName || customer.fullName || "" }));
     return customer;
@@ -116,13 +111,6 @@ export default function AccountPage() {
       setProfile(null);
     }).finally(() => setBooting(false));
   }, []);
-
-  useEffect(() => {
-    if (!profile || !("serviceWorker" in navigator) || !("Notification" in window) || Notification.permission !== "granted") return;
-    void navigator.serviceWorker.getRegistration("/").then(async (registration) => {
-      if (registration && await registration.pushManager.getSubscription()) setPushEnabled(true);
-    }).catch(() => undefined);
-  }, [profile]);
 
   useEffect(() => {
     const lastPhone = window.sessionStorage.getItem("panizstyle:otp:last-phone");
@@ -208,42 +196,6 @@ export default function AccountPage() {
     finally { setBusy(false); }
   }
 
-  async function connectRubika() {
-    if (!profileForm.rubikaMarketingOptIn) {
-      setError("برای اتصال روبیکا، گزینهٔ رضایت را فعال و سپس ذخیره کن.");
-      return;
-    }
-    setBusy(true); setError(""); setNotice(""); setRubikaLink(null);
-    try {
-      await customerApi("/customer/profile", { method: "PATCH", body: JSON.stringify({ ...profileForm, birthDateJalali: profileForm.birthDateJalali || null }) });
-      const result = await customerApi<RubikaLink>("/customer/rubika/link-code", { method: "POST" });
-      setRubikaLink(result);
-      await refreshAccount();
-      setNotice("کد اتصال ساخته شد. ربات روبیکا را باز کن و کد را برایش بفرست.");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "ساخت کد اتصال روبیکا انجام نشد."); }
-    finally { setBusy(false); }
-  }
-
-  async function unlinkRubika() {
-    if (!window.confirm("اتصال روبیکا قطع و رضایت دریافت پیام‌های روبیکا غیرفعال شود؟")) return;
-    setBusy(true); setError(""); setNotice("");
-    try {
-      await customerApi("/customer/rubika/link", { method: "DELETE" });
-      setRubikaLink(null);
-      await refreshAccount();
-      setNotice("اتصال روبیکا قطع شد.");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "قطع اتصال روبیکا انجام نشد."); }
-    finally { setBusy(false); }
-  }
-
-  async function copyRubikaCode() {
-    if (!rubikaLink) return;
-    try {
-      await navigator.clipboard.writeText(rubikaLink.code);
-      setNotice("کد اتصال کپی شد.");
-    } catch { setNotice("کد را انتخاب و کپی کن: " + rubikaLink.code); }
-  }
-
   function beginAddressEdit(address?: CustomerAddress) {
     setEditingAddressId(address?.id ?? null);
     setAddressForm(address ? {
@@ -320,13 +272,6 @@ export default function AccountPage() {
     return result.imagePath;
   }
 
-  async function enablePush() {
-    setPushBusy(true); setError(""); setNotice("");
-    try { await requestStorePush(); setPushEnabled(true); setNotice("اعلان‌ها فعال شد. پیام‌های پشتیبانی، وضعیت سفارش و موجودشدن کالای درخواستی را دریافت می‌کنی."); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "فعال‌سازی اعلان انجام نشد."); }
-    finally { setPushBusy(false); }
-  }
-
   async function createReturn(event: FormEvent<HTMLFormElement>, orderNumber: string) {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     const form = new FormData(event.currentTarget);
@@ -383,30 +328,8 @@ export default function AccountPage() {
               <JalaliDatePicker value={profileForm.birthDateJalali} onChange={(birthDateJalali) => setProfileForm((form) => ({ ...form, birthDateJalali }))} />
               <label className="store-field"><span>ایمیل <small>(اختیاری)</small></span><input type="email" autoComplete="email" maxLength={254} value={profileForm.email} onChange={(event) => setProfileForm((form) => ({ ...form, email: event.target.value }))} /></label>
               <label className="customer-default-check store-form-wide"><input type="checkbox" checked={profileForm.marketingOptIn} onChange={(event) => setProfileForm((form) => ({ ...form, marketingOptIn: event.target.checked }))} /><span>مایلم پیشنهادها و محصولات تازهٔ فروشگاه را دریافت کنم. هر زمان بخواهم می‌توانم این گزینه را غیرفعال کنم.</span></label>
-              <button className="outline-button customer-save-profile" type="submit" disabled={busy}>{profile.fullName?.trim() ? "ذخیرهٔ اطلاعات" : "ثبت مشخصات و تکمیل حساب"}</button>
+              <button className="button-primary customer-save-profile" type="submit" disabled={busy}>{profile.fullName?.trim() ? "ذخیرهٔ اطلاعات" : "ثبت مشخصات و تکمیل حساب"}</button>
             </form>
-            <div className="customer-push-card">
-              <div><strong>اعلان‌های پانیذ</strong><p>با اجازهٔ تو، پیام پشتیبان، تغییر وضعیت سفارش و موجودشدن کالایی را که انتخاب کرده‌ای اطلاع می‌دهیم. پیشنهادها و محصولات تازه فقط با رضایت بازاریابی ارسال می‌شوند.</p></div>
-              <button className="outline-button" type="button" onClick={() => void enablePush()} disabled={pushBusy || pushEnabled}>{pushBusy ? "در حال فعال‌سازی…" : pushEnabled ? "اعلان‌ها فعال است" : "فعال‌کردن اعلان‌ها"}</button>
-            </div>
-            <div className="customer-rubika-card">
-              <label className="customer-default-check"><input type="checkbox" checked={profileForm.rubikaMarketingOptIn} onChange={(event) => setProfileForm((form) => ({ ...form, rubikaMarketingOptIn: event.target.checked }))} /><span>مایلم پیشنهادها و پیام‌های فروشگاه را از طریق ربات روبیکا دریافت کنم. این رضایت مستقل از پیامک است و هر زمان می‌توانم لغوش کنم.</span></label>
-              <div className="customer-rubika-actions">
-                <span className={profile.rubikaLinked ? "is-connected" : ""}><MessageCircle size={16} />{profile.rubikaLinked ? "حساب روبیکا متصل است" : "حساب روبیکا هنوز متصل نیست"}</span>
-                {profile.rubikaLinked
-                  ? <button className="outline-button" type="button" onClick={() => void unlinkRubika()} disabled={busy}><Unlink size={16} /> قطع اتصال</button>
-                  : <button className="button-primary" type="button" onClick={() => void connectRubika()} disabled={busy || !profileForm.rubikaMarketingOptIn}>{busy ? "در حال ساخت کد…" : "ذخیره رضایت و اتصال روبیکا"}<ArrowLeft size={17} /></button>}
-              </div>
-              {rubikaLink && <div className="customer-rubika-code" role="status">
-                <p>در روبیکا، گفت‌وگوی ربات را باز کن و این کد را برایش بفرست. کد تا ۱۰ دقیقه معتبر است.</p>
-                <strong dir="ltr">{rubikaLink.code}</strong>
-                <div>
-                  <button className="outline-button" type="button" onClick={() => void copyRubikaCode()}><Copy size={15} /> کپی کد</button>
-                  {rubikaLink.botUrl && <a className="outline-button" href={rubikaLink.botUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} /> باز کردن ربات</a>}
-                  {!rubikaLink.botUrl && rubikaLink.botUsername && <span>نام ربات در روبیکا: @{rubikaLink.botUsername}</span>}
-                </div>
-              </div>}
-            </div>
           </section>
 
           <section className="customer-section">

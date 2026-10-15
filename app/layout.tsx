@@ -11,11 +11,13 @@ import { siteUrl } from "./lib/site-url";
 import { SiteVisitTracker } from "./components/site-visit-tracker";
 import { StoreThemeSync } from "./components/store-theme-sync";
 import { GoogleAnalyticsTag } from "./components/google-analytics-tag";
+import { PwaRegistration } from "./components/pwa-registration";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
   title: "فروشگاه پانیذ",
   applicationName: "فروشگاه پانیذ",
+  appleWebApp: { capable: true, title: "پانیذ", statusBarStyle: "default" },
   description:
     "فروشگاه پانیذ برای خرید آنلاین لباس زنانه، پوشاک زنانه و ست زنانه؛ مدل‌های متنوع پوشاک پانیذ را ببین و استایل دلخواهت را انتخاب کن.",
   keywords: ["فروشگاه پانیذ", "پوشاک پانیذ", "پانیذ", "فروشگاه لباس", "لباس زنانه", "پوشاک زنانه", "ست زنانه"],
@@ -78,6 +80,7 @@ export default async function RootLayout({
       <body>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteStructuredData) }} />
         <GoogleAnalyticsTag />
+        <PwaRegistration />
         <StorefrontProvider><StoreThemeSync /><SiteVisitTracker />{children}</StorefrontProvider>
       </body>
     </html>

@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Heart, House, Menu, ShoppingBag, UserRound } from "lucide-react";
+import { Heart, House, ShoppingBag, UserRound } from "lucide-react";
 import { useStorefront } from "../lib/storefront-state";
 import { apiBaseUrl, publicImageUrl, type StoreCategory } from "../lib/catalog";
 import { ProductSearchAutocomplete } from "./product-search-autocomplete";
+import { MarketingPushPrompt } from "./marketing-push-prompt";
+import { PromotionalPopup } from "./promotional-popup";
 
 export function StorefrontHeader() {
   const { cart, favorites } = useStorefront();
@@ -101,8 +103,13 @@ export function StorefrontFooter() {
         <div><strong>همراه پانیذ</strong><Link href="/about">دربارهٔ ما</Link><Link href="/contact">تماس با ما</Link><Link href="/policies/privacy">حریم خصوصی</Link></div>
       </div>
       <div className="footer-bottom page-shell"><span>© پانیذ</span><span>پوشاک زنانه، با انتخاب تو</span></div>
+      <EnamadSeal />
     </footer>
   );
+}
+
+export function EnamadSeal() {
+  return <div className="enamad-seal" dangerouslySetInnerHTML={{ __html: `<a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=8163840&Code=q40hSNzyifJ0X5ZXlM8OUaHEgFcpzbdG'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=8163840&Code=q40hSNzyifJ0X5ZXlM8OUaHEgFcpzbdG' alt='' style='cursor:pointer' code='q40hSNzyifJ0X5ZXlM8OUaHEgFcpzbdG'></a>` }} />;
 }
 
 function useStoreLogo() {
@@ -125,7 +132,6 @@ export function StorefrontBottomNav() {
   return (
     <nav className="mobile-bottom-nav" aria-label="ناوبری پایین">
       <Link href="/" className={`bottom-nav-item ${pathname === "/" ? "active" : ""}`}><House size={20} /><span>خانه</span></Link>
-      <Link href="/products" className={`bottom-nav-item ${pathname.startsWith("/products") ? "active" : ""}`}><Menu size={20} /><span>دسته‌ها</span></Link>
       <Link href="/favorites" className={`bottom-nav-item ${pathname === "/favorites" ? "active" : ""}`}><Heart size={20} /><span>علاقه‌مندی</span></Link>
       <Link href="/cart" className={`bottom-nav-item bottom-cart ${pathname === "/cart" || pathname === "/checkout" ? "active" : ""}`}><ShoppingBag size={20} /><span>سبد خرید</span></Link>
       <Link href="/account" className={`bottom-nav-item ${pathname.startsWith("/account") ? "active" : ""}`}><UserRound size={20} /><span>پروفایل</span></Link>
@@ -134,5 +140,5 @@ export function StorefrontBottomNav() {
 }
 
 export function StorefrontShell({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <><StorefrontHeader />{children}<StorefrontFooter /><StorefrontBottomNav /></>;
+  return <><StorefrontHeader />{children}<StorefrontFooter /><StorefrontBottomNav /><MarketingPushPrompt /><PromotionalPopup /></>;
 }

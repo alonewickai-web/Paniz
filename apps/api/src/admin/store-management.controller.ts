@@ -11,6 +11,7 @@ import { UpdateStoreThemeDto } from "./dto/update-store-theme.dto";
 import { SaveShippingSettingsDto } from "./dto/save-shipping-settings.dto";
 import { UpdateStoreLogoDto } from "./dto/update-store-logo.dto";
 import { UpdateStoreAboutDto } from "./dto/update-store-about.dto";
+import { UpdateStorePopupDto } from "./dto/update-store-popup.dto";
 
 @ApiTags("مدیریت محتوای فروشگاه")
 @ApiBearerAuth("admin-session")
@@ -46,6 +47,14 @@ export class StoreManagementController {
   @RequireAdminPermission("store.content")
   updateLogo(@Req() request: AdminRequest, @Body() body: UpdateStoreLogoDto) {
     return this.store.saveLogo(request.admin!, body);
+  }
+
+  @Patch("store/popup")
+  @ApiOperation({ summary: "ذخیرهٔ تصویر، پیوند و وضعیت پاپ‌آپ تبلیغاتی ویترین" })
+  @ApiBody({ type: UpdateStorePopupDto })
+  @RequireAdminPermission("store.content")
+  updatePopup(@Req() request: AdminRequest, @Body() body: UpdateStorePopupDto) {
+    return this.store.savePopup(request.admin!, body);
   }
 
   @Patch("store/about")

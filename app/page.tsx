@@ -24,6 +24,8 @@ import { useStorefront } from "./lib/storefront-state";
 import { StoreImage } from "./components/store-image";
 import { PageFlipImage, type FlipImage } from "./components/page-flip-image";
 import { ProductSearchAutocomplete } from "./components/product-search-autocomplete";
+import { StoreDropdown } from "./components/store-dropdown";
+import { EnamadSeal } from "./components/storefront-shell";
 import { publicImageUrl } from "./lib/catalog";
 
 type Product = {
@@ -38,7 +40,7 @@ type Product = {
   reviews: number;
   image: string;
   imageAlt: string;
-  images?: { id: string; path: string; alt: string | null }[];
+  images?: { id: string; path: string; alt: string | null; colorName?: string | null }[];
   badge?: string;
   colors: { name: string; value: string }[];
   sizes: string[];
@@ -71,7 +73,7 @@ type ApiProduct = {
   shortDescription: string | null;
   category: { id: string; name: string; slug: string } | null;
   image: { path: string; alt: string | null } | null;
-  images: { id: string; path: string; alt: string | null }[];
+  images: { id: string; path: string; alt: string | null; colorName?: string | null }[];
   priceToman: number | null;
   compareAtPriceToman: number | null;
   colors: { name: string; value: string }[];
@@ -271,7 +273,7 @@ function normalizeText(value: string) {
 }
 
 export default function Home() {
-  const { cart, setCart, favorites, setFavorites } = useStorefront();
+  const { cart, setCart, favorites, setFavorites, notifyCartAdded } = useStorefront();
   const [catalogProducts, setCatalogProducts] = useState<Product[]>(() =>
     process.env.NODE_ENV === "production" ? [] : products,
   );
@@ -641,7 +643,7 @@ export default function Home() {
       }];
     });
     setSelectedProduct(null);
-    setToast(`${product.name} به سبد خرید اضافه شد`);
+    notifyCartAdded();
   }
 
   function updateQuantity(key: string, change: number) {
@@ -675,7 +677,6 @@ export default function Home() {
 
   return (
     <main>
-      <div dangerouslySetInnerHTML={{ __html: `<a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=8163840&Code=q40hSNzyifJ0X5ZXlM8OUaHEgFcpzbdG'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=8163840&Code=q40hSNzyifJ0X5ZXlM8OUaHEgFcpzbdG' alt='' style='cursor:pointer' code='q40hSNzyifJ0X5ZXlM8OUaHEgFcpzbdG'></a>` }} />
       <div className="announcement-bar">
         <Sparkles size={15} aria-hidden="true" />
         <span>کالکشن‌های تازه و انتخاب‌های دوست‌داشتنی پانیذ</span>
@@ -787,17 +788,20 @@ export default function Home() {
               <h2 id="products-title">انتخاب‌های این روزها <Sparkles className="heading-sparkle" aria-hidden="true" /></h2>
               <p>لباس‌هایی که دلت می‌خواد بیشتر بپوشی.</p>
             </div>
-            <label className="sort-control">
-              <SlidersHorizontal size={17} />
-              <span className="sr-only">مرتب‌سازی محصولات</span>
-              <select value={sortBy} onChange={(event) => { setSortBy(event.target.value); setCatalogPage(1); }}>
-                <option value="newest">جدیدترین</option>
-                <option value="popular">محبوب‌ترین</option>
-                <option value="price-low">ارزان‌ترین</option>
-                <option value="price-high">گران‌ترین</option>
-              </select>
-              <ChevronDown size={15} />
-            </label>
+            <StoreDropdown
+              id="home-sort"
+              label="مرتب‌سازی محصولات"
+              value={sortBy}
+              options={[
+                { value: "newest", label: "جدیدترین" },
+                { value: "popular", label: "محبوب‌ترین" },
+                { value: "price-low", label: "ارزان‌ترین" },
+                { value: "price-high", label: "گران‌ترین" },
+              ]}
+              onChange={(value) => { setSortBy(value); setCatalogPage(1); }}
+              compact
+              leadingIcon={<SlidersHorizontal size={17} aria-hidden="true" />}
+            />
           </div>
 
           <div className="filter-chips" aria-label="فیلتر دسته‌بندی">
@@ -917,11 +921,11 @@ export default function Home() {
           <div className="newsletter"><strong>خبرهای خوب رو از دست نده</strong><span>خبرنامه بعد از اتصال سرویس اطلاع‌رسانی فعال می‌شود.</span></div>
         </div>
         <div className="footer-bottom page-shell"><span>© پانیذ، برای تو و روزهای خوبت</span><span>ساخته‌شده با <Heart size={13} fill="currentColor" /> در ایران</span></div>
+        <EnamadSeal />
       </footer>
 
       <nav className="mobile-bottom-nav" aria-label="ناوبری پایین">
         <Link href="/" className="bottom-nav-item active"><House size={20} /><span>خانه</span></Link>
-        <Link href="/products" className="bottom-nav-item"><Menu size={20} /><span>دسته‌ها</span></Link>
         <Link href="/favorites" className="bottom-nav-item"><Heart size={20} /><span>علاقه‌مندی</span></Link>
         <Link href="/cart" className="bottom-nav-item bottom-cart"><ShoppingBag size={20} /><span>سبد خرید</span>{cartCount > 0 && <i>{money(cartCount)}</i>}</Link>
         <Link href="/account" className="bottom-nav-item"><UserRound size={20} /><span>پروفایل</span></Link>
@@ -988,7 +992,8 @@ export default function Home() {
                 const product = catalogProducts.find((item) => item.id === line.productId);
                 if (!product) return null;
                 const variant = product.variants?.find((item) => item.id === line.variantId);
-                return <div className="cart-line" key={line.key}><div className="cart-line-image"><StoreImage src={product.image} alt={product.imageAlt} fill sizes="90px" /></div><div className="cart-line-info"><strong>{product.name}</strong><span>{line.color} · سایز {line.size}</span><b>{money(line.unitPrice ?? product.price)} <small>تومان</small></b><div className="quantity-control"><button onClick={() => updateQuantity(line.key, -1)} aria-label="کم‌کردن تعداد"><Minus size={13} /></button><span>{money(line.quantity)}</span><button onClick={() => updateQuantity(line.key, 1)} disabled={line.quantity >= Math.min(10, variant?.availableQuantity ?? 0)} aria-label="زیادکردن تعداد"><Plus size={13} /></button></div></div><button className="remove-line" onClick={() => updateQuantity(line.key, -line.quantity)} aria-label="حذف محصول"><X size={16} /></button></div>;
+                const colorImage = product.images?.find((image) => image.colorName && normalizeText(image.colorName) === normalizeText(line.color));
+                return <div className="cart-line" key={line.key}><div className="cart-line-image"><StoreImage src={colorImage?.path ?? product.image} alt={colorImage?.alt || `${product.name}، رنگ ${line.color}`} fill sizes="90px" /></div><div className="cart-line-info"><strong>{product.name}</strong><span>{line.color} · سایز {line.size}</span><b>{money(line.unitPrice ?? product.price)} <small>تومان</small></b><div className="quantity-control"><button onClick={() => updateQuantity(line.key, -1)} aria-label="کم‌کردن تعداد"><Minus size={13} /></button><span>{money(line.quantity)}</span><button onClick={() => updateQuantity(line.key, 1)} disabled={line.quantity >= Math.min(10, variant?.availableQuantity ?? 0)} aria-label="زیادکردن تعداد"><Plus size={13} /></button></div></div><button className="remove-line" onClick={() => updateQuantity(line.key, -line.quantity)} aria-label="حذف محصول"><X size={16} /></button></div>;
               })}</div>
               <div className="cart-summary"><div><span>جمع سفارش</span><strong>{money(cartTotal)} <small>تومان</small></strong></div><div className="shipping-note"><Check size={16} /> هزینهٔ ارسال بعد از دریافت نشانی محاسبه می‌شود</div><Link className="button-primary checkout-button" href="/checkout">ادامهٔ خرید <ArrowLeft size={17} /></Link><Link className="continue-shopping" href="/cart">مشاهدهٔ سبد کامل</Link></div>
             </> : <div className="cart-empty"><span><ShoppingBag size={30} /></span><strong>سبدت هنوز خالیه</strong><p>یه گشتی بزن، شاید چیزی دلت رو برد.</p><button className="button-primary" onClick={() => setCartOpen(false)}>دیدن محصولات <ArrowLeft size={17} /></button></div>}

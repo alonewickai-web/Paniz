@@ -1,3 +1,32 @@
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open("paniz-offline-v1")
+      .then((cache) => Promise.all([
+        cache.add("/offline.html").catch(() => undefined),
+        cache.add("/icon-192.png").catch(() => undefined),
+      ]))
+      .then(() => self.skipWaiting()),
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith("paniz-offline-") && key !== "paniz-offline-v1").map((key) => caches.delete(key))))
+      .then(() => self.clients.claim()),
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  if (event.request.method !== "GET" || event.request.mode !== "navigate") return;
+  event.respondWith(
+    fetch(event.request).then((response) => {
+      if (response.status < 500) return response;
+      return caches.match("/offline.html").then((offline) => offline || response);
+    }).catch(async () => (await caches.match("/offline.html")) || Response.error()),
+  );
+});
+
 self.addEventListener("push", (event) => {
   let payload = {};
   try { payload = event.data ? event.data.json() : {}; } catch { payload = { body: event.data?.text() || "" }; }

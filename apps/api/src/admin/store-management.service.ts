@@ -10,6 +10,7 @@ import { UpdateHomepageSectionDto } from "./dto/update-homepage-section.dto";
 import { STORE_THEMES, UpdateStoreThemeDto } from "./dto/update-store-theme.dto";
 import { SaveShippingSettingsDto } from "./dto/save-shipping-settings.dto";
 import { UpdateStoreAboutDto } from "./dto/update-store-about.dto";
+import { UpdateStorePopupDto } from "./dto/update-store-popup.dto";
 
 const defaultSections = [
   { sectionKey: "hero", title: "بنر اصلی", isActive: true, sortOrder: 0 },
@@ -51,10 +52,11 @@ export class StoreManagementService {
 
   async publicConfig() {
     const now = new Date();
-    const [themeSetting, logoSetting, aboutSetting, savedSections, banners, shipping] = await Promise.all([
+    const [themeSetting, logoSetting, aboutSetting, popupSetting, savedSections, banners, shipping] = await Promise.all([
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.theme" }, select: { settingValue: true } }),
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.logoPath" }, select: { settingValue: true } }),
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.about" }, select: { settingValue: true } }),
+      this.prisma.storeSetting.findUnique({ where: { settingKey: "store.popup" }, select: { settingValue: true, updatedAt: true } }),
       this.prisma.homepageSection.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
       this.prisma.banner.findMany({
         where: {
@@ -82,6 +84,7 @@ export class StoreManagementService {
         theme: safeTheme(themeSetting?.settingValue),
         logoPath: logoSetting?.settingValue || null,
         about: safeStoreAbout(aboutSetting?.settingValue),
+        popup: safeStorePopup(popupSetting?.settingValue, popupSetting?.updatedAt),
         sections: mergeSections(savedSections),
         banners: banners.map((banner) => ({
           id: banner.id.toString(),
@@ -95,10 +98,11 @@ export class StoreManagementService {
   }
 
   async adminConfiguration() {
-    const [themeSetting, logoSetting, aboutSetting, sections, categories, banners, shipping] = await Promise.all([
+    const [themeSetting, logoSetting, aboutSetting, popupSetting, sections, categories, banners, shipping] = await Promise.all([
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.theme" }, select: { settingValue: true } }),
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.logoPath" }, select: { settingValue: true } }),
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.about" }, select: { settingValue: true } }),
+      this.prisma.storeSetting.findUnique({ where: { settingKey: "store.popup" }, select: { settingValue: true, updatedAt: true } }),
       this.prisma.homepageSection.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
       this.prisma.category.findMany({ orderBy: [{ parentId: "asc" }, { sortOrder: "asc" }, { name: "asc" }] }),
       this.prisma.banner.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
@@ -109,6 +113,7 @@ export class StoreManagementService {
         theme: safeTheme(themeSetting?.settingValue),
         logoPath: logoSetting?.settingValue || null,
         about: safeStoreAbout(aboutSetting?.settingValue),
+        popup: safeStorePopup(popupSetting?.settingValue, popupSetting?.updatedAt),
         sections: mergeSections(sections),
         categories: categories.map((category) => ({ ...category, id: category.id.toString(), parentId: category.parentId?.toString() ?? null })),
         banners: banners.map((banner) => ({ ...banner, id: banner.id.toString(), altText: banner.altText?.trim() || banner.title, isArchived: banner.archivedAt !== null })),
@@ -146,6 +151,35 @@ export class StoreManagementService {
       await tx.adminAuditLog.create({ data: { adminId: admin.id, action: "store.logo.updated", entityType: "store_setting", details: { logoPath } } });
     });
     return { data: { logoPath } };
+  }
+
+  async savePopup(admin: AuthenticatedAdmin, input: UpdateStorePopupDto) {
+    requireAdminPermission(admin, "store.content");
+    const imagePath = input.imagePath?.trim() || null;
+    const linkUrl = input.linkUrl?.trim() || null;
+    if (input.enabled && !imagePath) {
+      throw new BadRequestException({ code: "STORE_POPUP_IMAGE_REQUIRED", message: "برای نمایش پاپ‌آپ، تصویر انتخاب کن." });
+    }
+    if (imagePath && !/^\/uploads\/products\/[A-Za-z0-9_-]+\.(?:jpe?g|png|webp)$/i.test(imagePath)) {
+      throw new BadRequestException({ code: "INVALID_STORE_POPUP_IMAGE", message: "تصویر پاپ‌آپ باید از گالری برنامه بارگذاری شود." });
+    }
+    if (linkUrl && !allowedPath(linkUrl)) {
+      throw new BadRequestException({ code: "INVALID_STORE_POPUP_LINK", message: "پیوند مقصد باید نشانی HTTPS یا مسیر داخلی سایت باشد." });
+    }
+    const popup = { enabled: input.enabled, imagePath, linkUrl };
+    const updatedAt = await this.prisma.$transaction(async (tx) => {
+      const saved = await tx.storeSetting.upsert({
+        where: { settingKey: "store.popup" },
+        create: { settingKey: "store.popup", settingValue: popup, isPublic: true, updatedByAdminId: admin.id },
+        update: { settingValue: popup, isPublic: true, updatedByAdminId: admin.id },
+        select: { updatedAt: true },
+      });
+      await tx.adminAuditLog.create({
+        data: { adminId: admin.id, action: "store.popup.updated", entityType: "store_setting", details: popup },
+      });
+      return saved.updatedAt;
+    });
+    return { data: { popup: { ...popup, updatedAt: updatedAt.toISOString() } } };
   }
 
   async saveAboutInfo(admin: AuthenticatedAdmin, input: UpdateStoreAboutDto) {
@@ -511,6 +545,23 @@ function safeStoreAbout(value: Prisma.JsonValue | undefined) {
     mapUrl: read("mapUrl"),
     latitude: typeof source.latitude === "number" && Number.isFinite(source.latitude) ? source.latitude : null,
     longitude: typeof source.longitude === "number" && Number.isFinite(source.longitude) ? source.longitude : null,
+  };
+}
+
+function safeStorePopup(value: Prisma.JsonValue | undefined, updatedAt?: Date) {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Prisma.JsonObject
+    : {};
+  const rawImagePath = typeof source.imagePath === "string" ? source.imagePath.trim() : "";
+  const imagePath = /^\/uploads\/products\/[A-Za-z0-9_-]+\.(?:jpe?g|png|webp)$/i.test(rawImagePath)
+    ? rawImagePath
+    : null;
+  const rawLinkUrl = typeof source.linkUrl === "string" ? source.linkUrl.trim() : "";
+  return {
+    enabled: source.enabled === true && imagePath !== null,
+    imagePath,
+    linkUrl: rawLinkUrl && allowedPath(rawLinkUrl) ? rawLinkUrl : null,
+    updatedAt: updatedAt?.toISOString() ?? null,
   };
 }
 

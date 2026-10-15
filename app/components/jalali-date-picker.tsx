@@ -7,6 +7,7 @@ import { jalaaliMonthLength, toGregorian, toJalaali } from "jalaali-js";
 const months = ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"];
 const weekdays = ["ش", "ی", "د", "س", "چ", "پ", "ج"];
 const fa = new Intl.NumberFormat("fa-IR");
+const faYear = new Intl.NumberFormat("fa-IR", { useGrouping: false });
 
 function isoDate(year: number, month: number, day: number) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -31,7 +32,7 @@ export function JalaliDatePicker({ value, onChange, label = "تاریخ تولد
     return (new Date(gregorian.gy, gregorian.gm - 1, gregorian.gd).getDay() + 1) % 7;
   }, [month, year]);
   const days = useMemo(() => Array.from({ length: jalaaliMonthLength(year, month) }, (_, index) => index + 1), [month, year]);
-  const labelValue = selected ? `${fa.format(selected.jd)} ${months[selected.jm - 1]} ${fa.format(selected.jy)}` : "انتخاب از تقویم";
+  const labelValue = selected ? `${fa.format(selected.jd)} ${months[selected.jm - 1]} ${faYear.format(selected.jy)}` : "انتخاب از تقویم";
 
   function changeYear(nextYear: number) {
     setYear(nextYear);
@@ -52,7 +53,7 @@ export function JalaliDatePicker({ value, onChange, label = "تاریخ تولد
         <label className="jalali-calendar-select-field jalali-calendar-year-field">
           <span>سال</span>
           <select aria-label="سال" value={year} onChange={(event) => changeYear(Number(event.target.value))}>
-            {years.map((yearOption) => <option key={yearOption} value={yearOption}>{fa.format(yearOption)}</option>)}
+            {years.map((yearOption) => <option key={yearOption} value={yearOption}>{faYear.format(yearOption)}</option>)}
           </select>
           <ChevronDown size={15} aria-hidden="true" />
         </label>

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Search, SlidersHorizontal, X } from "lucide-react";
 import { StorefrontShell } from "./storefront-shell";
 import { StoreProductCard } from "./store-product-card";
+import { StoreDropdown } from "./store-dropdown";
 import { apiBaseUrl, type ProductListPayload, type StoreCategory, type StoreProduct } from "../lib/catalog";
 import { ProductSearchAutocomplete } from "./product-search-autocomplete";
 
@@ -151,6 +152,12 @@ export function ProductsExplorer() {
 
   const hasFilters = Boolean(filters.q || filters.category || filters.minPrice || filters.maxPrice || filters.size || filters.color || filters.inStock || filters.onSale);
   const categoryOptions = categories.flatMap((category) => [category, ...(category.children ?? [])]);
+  const categoryFilterOptions = [{ value: "", label: "همهٔ دسته‌ها" }, ...categoryOptions.map((category) => ({ value: category.slug, label: category.name }))];
+  const sortOptions = [
+    { value: "newest", label: "جدیدترین" },
+    { value: "price-asc", label: "ارزان‌ترین" },
+    { value: "price-desc", label: "گران‌ترین" },
+  ];
 
   return (
     <StorefrontShell>
@@ -165,7 +172,10 @@ export function ProductsExplorer() {
           <div className="store-catalog-layout">
             <aside className="store-filter-panel" aria-label="فیلتر محصولات">
               <div className="store-filter-title"><strong><SlidersHorizontal size={17} /> فیلترها</strong>{hasFilters && <button onClick={clearFilters}>پاک‌کردن</button>}</div>
-              <label className="store-field"><span>دسته‌بندی</span><select value={filters.category} onChange={(event) => change("category", event.target.value)}><option value="">همهٔ دسته‌ها</option>{categoryOptions.map((category) => <option key={category.slug} value={category.slug}>{category.name}</option>)}</select></label>
+              <div className="store-field">
+                <span>دسته‌بندی</span>
+                <StoreDropdown id="store-category" label="دسته‌بندی" value={filters.category} options={categoryFilterOptions} onChange={(value) => change("category", value)} />
+              </div>
               <fieldset className="store-filter-group"><legend>بازهٔ قیمت <small>(تومان)</small></legend><div className="store-price-fields"><label><span className="sr-only">حداقل قیمت</span><div className="store-price-input"><input inputMode="numeric" type="text" placeholder="از" value={formatPrice(filters.minPrice)} onChange={(event) => changePrice("minPrice", event.currentTarget)} /><span className="store-price-stepper"><button type="button" aria-label="افزایش حداقل قیمت، ۱۰۰ هزار تومان" onClick={() => stepPrice("minPrice", 100_000)}><ChevronUp size={13} /></button><button type="button" aria-label="کاهش حداقل قیمت، ۱۰۰ هزار تومان" onClick={() => stepPrice("minPrice", -100_000)}><ChevronDown size={13} /></button></span></div></label><label><span className="sr-only">حداکثر قیمت</span><div className="store-price-input"><input inputMode="numeric" type="text" placeholder="تا" value={formatPrice(filters.maxPrice)} onChange={(event) => changePrice("maxPrice", event.currentTarget)} /><span className="store-price-stepper"><button type="button" aria-label="افزایش حداکثر قیمت، ۱۰۰ هزار تومان" onClick={() => stepPrice("maxPrice", 100_000)}><ChevronUp size={13} /></button><button type="button" aria-label="کاهش حداکثر قیمت، ۱۰۰ هزار تومان" onClick={() => stepPrice("maxPrice", -100_000)}><ChevronDown size={13} /></button></span></div></label></div></fieldset>
               <label className="store-field"><span>سایز</span><input value={filters.size} placeholder="مثلاً M یا ۳۸" onChange={(event) => change("size", event.target.value)} /></label>
               <label className="store-field"><span>رنگ</span><input value={filters.color} placeholder="مثلاً یاسی" onChange={(event) => change("color", event.target.value)} /></label>
@@ -176,7 +186,7 @@ export function ProductsExplorer() {
             <section className="store-catalog-results" aria-label="فهرست محصولات">
               <div className="store-results-toolbar">
                 <span>{loading ? "در حال به‌روزرسانی…" : `${new Intl.NumberFormat("fa-IR").format(total)} انتخاب برای تو`}</span>
-                <label className="sort-control"><SlidersHorizontal size={16} /><span className="sr-only">مرتب‌سازی</span><select value={filters.sort} onChange={(event) => change("sort", event.target.value)}><option value="newest">جدیدترین</option><option value="price-asc">ارزان‌ترین</option><option value="price-desc">گران‌ترین</option></select></label>
+                <StoreDropdown id="catalog-sort" label="مرتب‌سازی" value={filters.sort} options={sortOptions} onChange={(value) => change("sort", value)} compact leadingIcon={<SlidersHorizontal size={16} aria-hidden="true" />} />
               </div>
               <ProductSearchAutocomplete
                 id="catalog-search"

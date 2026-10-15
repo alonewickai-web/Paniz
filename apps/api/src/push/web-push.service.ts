@@ -29,12 +29,27 @@ export class WebPushService {
     return { enabled: Boolean(this.publicKey()) };
   }
 
+  async saveMarketingSubscription(subscription: { endpoint: string; keys: { p256dh: string; auth: string } }) {
+    const endpoint = subscription.endpoint.trim();
+    let parsed: URL;
+    try { parsed = new URL(endpoint); } catch { throw new Error("نشانی اعلان معتبر نیست."); }
+    if (parsed.protocol !== "https:" || endpoint.length > 2048) throw new Error("نشانی امن اعلان معتبر نیست.");
+    const endpointHash = createHash("sha256").update(endpoint).digest("hex");
+    await this.prisma.publicMarketingWebPushSubscription.upsert({
+      where: { endpointHash },
+      create: { endpoint, endpointHash, p256dh: subscription.keys.p256dh, auth: subscription.keys.auth },
+      update: { endpoint, p256dh: subscription.keys.p256dh, auth: subscription.keys.auth, consentedAt: new Date() },
+    });
+    return { enabled: Boolean(this.publicKey()) };
+  }
+
   async removeSubscription(customerId: bigint, endpoint: string) {
     await this.prisma.customerWebPushSubscription.deleteMany({ where: { customerId, endpoint } });
   }
 
   async notifyCustomer(customerId: bigint, title: string, body: string, url = "/account") {
-    await this.send(await this.prisma.customerWebPushSubscription.findMany({ where: { customerId } }), { title, body, url });
+    const subscriptions = await this.prisma.customerWebPushSubscription.findMany({ where: { customerId } });
+    await this.send(subscriptions.map((subscription) => ({ ...subscription, source: "customer" as const })), { title, body, url });
   }
 
   async notifyVariantSubscribers(variantId: bigint, productName: string) {
@@ -50,11 +65,19 @@ export class WebPushService {
   }
 
   async notifyMarketingCustomers(title: string, body: string, url = "/") {
-    const subscriptions = await this.prisma.customerWebPushSubscription.findMany({ where: { customer: { marketingOptIn: true } } });
-    await this.send(subscriptions, { title, body, url });
+    const [customerSubscriptions, visitorSubscriptions] = await Promise.all([
+      this.prisma.customerWebPushSubscription.findMany({ where: { customer: { marketingOptIn: true } } }),
+      this.prisma.publicMarketingWebPushSubscription.findMany(),
+    ]);
+    const customerEndpoints = new Set(customerSubscriptions.map((subscription) => subscription.endpointHash));
+    const uniqueVisitorSubscriptions = visitorSubscriptions.filter((subscription) => !customerEndpoints.has(subscription.endpointHash));
+    await this.send([
+      ...customerSubscriptions.map((subscription) => ({ ...subscription, source: "customer" as const })),
+      ...uniqueVisitorSubscriptions.map((subscription) => ({ ...subscription, source: "visitor" as const })),
+    ], { title, body, url });
   }
 
-  private async send(subscriptions: Array<{ id: bigint; endpoint: string; p256dh: string; auth: string }>, payload: { title: string; body: string; url: string }) {
+  private async send(subscriptions: Array<{ id: bigint; endpoint: string; p256dh: string; auth: string; source: "customer" | "visitor" }>, payload: { title: string; body: string; url: string }) {
     const publicKey = this.config.get<string>("WEB_PUSH_VAPID_PUBLIC_KEY")?.trim();
     const privateKey = this.config.get<string>("WEB_PUSH_VAPID_PRIVATE_KEY")?.trim();
     const subject = this.config.get<string>("WEB_PUSH_SUBJECT")?.trim() || "mailto:support@panizstyle.ir";
@@ -65,7 +88,10 @@ export class WebPushService {
         await webPush.sendNotification({ endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } }, JSON.stringify(payload), { TTL: 60 * 60 });
       } catch (error) {
         const status = (error as { statusCode?: number }).statusCode;
-        if (status === 404 || status === 410) await this.prisma.customerWebPushSubscription.deleteMany({ where: { id: subscription.id } });
+        if (status === 404 || status === 410) {
+          if (subscription.source === "visitor") await this.prisma.publicMarketingWebPushSubscription.deleteMany({ where: { id: subscription.id } });
+          else await this.prisma.customerWebPushSubscription.deleteMany({ where: { id: subscription.id } });
+        }
         else this.logger.warn(`Customer web push delivery failed (HTTP ${status ?? "unknown"}).`);
       }
     }));

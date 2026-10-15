@@ -13,7 +13,7 @@ import { requestStorePush } from "../lib/customer-push";
 import { trackGa4 } from "../lib/ga4";
 
 export function ProductDetailView({ product }: { product: StoreProductDetail }) {
-  const { cart, setCart, favorites, setFavorites } = useStorefront();
+  const { cart, setCart, favorites, setFavorites, notifyCartAdded } = useStorefront();
   const productId = Number(product.id);
   const availableVariants = product.variants.filter((variant) => variant.availableQuantity > 0);
   const initial = availableVariants[0] ?? product.variants[0];
@@ -91,6 +91,7 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
 
   const variant = product.variants.find((item) => item.color.name === color && item.size === size);
   const stock = variant?.availableQuantity ?? 0;
+  const selectedColorAvailable = product.variants.some((item) => normalizeColorName(item.color.name) === normalizeColorName(color) && item.availableQuantity > 0);
   const maxOrderQuantity = Math.min(10, stock);
   useEffect(() => {
     const firstAvailable = product.variants.find((item) => item.availableQuantity > 0) ?? product.variants[0];
@@ -223,7 +224,7 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
         quantity,
       }],
     });
-    setNotice("به سبد خرید اضافه شد.");
+    notifyCartAdded();
   }
 
   async function notifyWhenAvailable() {
@@ -305,6 +306,7 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
               aria-label={mainImage ? `تصویر ${imageIndex + 1} از ${allImages.length} برای ${product.name}` : `تصویر ${product.name}`}
             >
               {mainImage ? <PageFlipImage src={mainImage.path} alt={mainImage.alt || product.name} outgoing={galleryOutgoing} direction={galleryDirection} priority sizes="(max-width: 760px) 100vw, 54vw" /> : <div className="store-no-image">{product.images.some((image) => image.colorName?.trim()) ? `برای رنگ ${color} عکسی ثبت نشده` : "تصویر محصول"}</div>}
+              {!selectedColorAvailable && <span className="store-stock-overlay" role="status">ناموجود</span>}
               {discount > 0 && <span className="store-detail-sale">{new Intl.NumberFormat("fa-IR").format(discount)}٪ تخفیف</span>}
               {allImages.length > 1 && <>
                 <span className="store-image-count">{new Intl.NumberFormat("fa-IR").format(Math.max(0, imageIndex + 1))} / {new Intl.NumberFormat("fa-IR").format(allImages.length)}</span>
@@ -332,7 +334,7 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
               </div>
               <fieldset className="store-choice-group store-inline-color-group"><legend>رنگ <span>{color}</span></legend><div className="store-color-choices">{product.colors.map((item) => {
                 const colorAvailable = product.variants.some((entry) => entry.color.name === item.name && entry.availableQuantity > 0);
-                return <button key={item.name} type="button" className={`${color === item.name ? "active" : ""} ${!colorAvailable ? "unavailable" : ""}`} onClick={() => selectColor(item.name)} aria-label={`${item.name}${colorAvailable ? "" : "، ناموجود"}`} aria-pressed={color === item.name}><i style={{ background: item.value }} />{item.name}</button>;
+                return <button key={item.name} type="button" className={`${color === item.name ? "active" : ""} ${!colorAvailable ? "unavailable" : ""}`} onClick={() => selectColor(item.name)} aria-label={`${item.name}${colorAvailable ? "" : "، ناموجود"}`} aria-pressed={color === item.name}><i style={{ background: item.value }} />{item.name}{!colorAvailable && <small>ناموجود</small>}</button>;
               })}</div></fieldset>
             </div>
             <div className="store-stock-line" role="status">{stock > 0 ? <><span className="store-stock-dot" /> {stock <= 3 ? `فقط ${new Intl.NumberFormat("fa-IR").format(stock)} عدد باقی مانده` : "موجود و آمادهٔ خرید"}</> : <><span className="store-stock-dot unavailable" /> این ترکیب موجود نیست</>}</div>

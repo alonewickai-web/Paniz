@@ -113,9 +113,12 @@ export default function CartPage() {
                   const product = catalog[line.productSlug ?? ""];
                   const quoted = quoteByVariant.get(line.variantId ?? "");
                   const variant = product?.variants.find((item) => item.id === line.variantId);
+                  const colorImage = product?.images.find((image) => image.colorName && normalizeColorName(image.colorName) === normalizeColorName(line.color));
+                  const fallbackImage = product?.images.find((image) => !image.colorName?.trim()) ?? product?.image;
+                  const cartImage = colorImage ?? fallbackImage;
                   return <article className="store-cart-line" key={line.key}>
                     <Link className="store-cart-image" href={product ? `/products/${product.slug}` : "/products"}>
-                      {product?.image ? <StoreImage src={product.image.path} alt={product.image.alt || product.name} fill sizes="120px" /> : <span>تصویر</span>}
+                      {cartImage ? <StoreImage src={cartImage.path} alt={cartImage.alt || `${product?.name ?? "محصول"}، رنگ ${line.color}`} fill sizes="120px" /> : <span>تصویر</span>}
                     </Link>
                     <div className="store-cart-line-info">
                       <Link href={product ? `/products/${product.slug}` : "/products"}><strong>{product?.name || quoted?.productName || "محصول انتخاب‌شده"}</strong></Link>
@@ -145,6 +148,10 @@ export default function CartPage() {
       </main>
     </StorefrontShell>
   );
+}
+
+function normalizeColorName(value: string) {
+  return value.normalize("NFKC").replace(/[يى]/g, "ی").replace(/ك/g, "ک").trim().replace(/\s+/g, " ");
 }
 
 function readError(payload: unknown): string {

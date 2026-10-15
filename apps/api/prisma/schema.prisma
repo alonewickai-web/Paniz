@@ -730,6 +730,20 @@ model CustomerWebPushSubscription {
   @@map("customer_web_push_subscriptions")
 }
 
+model PublicMarketingWebPushSubscription {
+  id           BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  endpoint     String   @db.VarChar(2048)
+  endpointHash String   @unique(map: "uq_public_marketing_push_endpoint_hash") @map("endpoint_hash") @db.Char(64)
+  p256dh       String   @db.VarChar(256)
+  auth         String   @db.VarChar(128)
+  consentedAt  DateTime @default(now()) @map("consented_at") @db.DateTime(3)
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@index([updatedAt], map: "ix_public_marketing_push_updated")
+  @@map("public_marketing_web_push_subscriptions")
+}
+
 model BackInStockSubscription {
   customerId BigInt         @map("customer_id") @db.UnsignedBigInt
   variantId  BigInt         @map("variant_id") @db.UnsignedBigInt
