@@ -677,6 +677,7 @@ export default function Home() {
 
   return (
     <main>
+      <EnamadSeal />
       <div className="announcement-bar">
         <Sparkles size={15} aria-hidden="true" />
         <span>کالکشن‌های تازه و انتخاب‌های دوست‌داشتنی پانیذ</span>
@@ -921,7 +922,6 @@ export default function Home() {
           <div className="newsletter"><strong>خبرهای خوب رو از دست نده</strong><span>خبرنامه بعد از اتصال سرویس اطلاع‌رسانی فعال می‌شود.</span></div>
         </div>
         <div className="footer-bottom page-shell"><span>© پانیذ، برای تو و روزهای خوبت</span><span>ساخته‌شده با <Heart size={13} fill="currentColor" /> در ایران</span></div>
-        <EnamadSeal />
       </footer>
 
       <nav className="mobile-bottom-nav" aria-label="ناوبری پایین">

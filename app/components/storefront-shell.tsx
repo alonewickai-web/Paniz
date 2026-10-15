@@ -61,6 +61,7 @@ export function StorefrontHeader() {
 
   return (
     <>
+      <EnamadSeal />
       <div className="announcement-bar">انتخاب‌های دوست‌داشتنی برای روزهای پیشِ رو</div>
       <header className="site-header">
         <div className="header-main page-shell">
@@ -103,13 +104,12 @@ export function StorefrontFooter() {
         <div><strong>همراه پانیذ</strong><Link href="/about">دربارهٔ ما</Link><Link href="/contact">تماس با ما</Link><Link href="/policies/privacy">حریم خصوصی</Link></div>
       </div>
       <div className="footer-bottom page-shell"><span>© پانیذ</span><span>پوشاک زنانه، با انتخاب تو</span></div>
-      <EnamadSeal />
     </footer>
   );
 }
 
 export function EnamadSeal() {
-  return <div className="enamad-seal" dangerouslySetInnerHTML={{ __html: `<a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=8191295&Code=H613Jqd6T1ufboLySUezjs7YqoET1EPq'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=8191295&Code=H613Jqd6T1ufboLySUezjs7YqoET1EPq' alt='' style='cursor:pointer' code='H613Jqd6T1ufboLySUezjs7YqoET1EPq'></a>` }} />;
+  return <div className="enamad-seal" aria-label="نماد اعتماد الکترونیکی پانیذ"><div dangerouslySetInnerHTML={{ __html: `<a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=8191295&Code=H613Jqd6T1ufboLySUezjs7YqoET1EPq'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=8191295&Code=H613Jqd6T1ufboLySUezjs7YqoET1EPq' alt='' style='cursor:pointer' code='H613Jqd6T1ufboLySUezjs7YqoET1EPq'></a>` }} /><span>نماد اعتماد الکترونیکی پانیذ</span></div>;
 }
 
 function useStoreLogo() {
