@@ -88,8 +88,16 @@ export class AdminToolsService implements OnModuleInit, OnModuleDestroy {
     }
     this.rubikaTimer = setInterval(() => void this.processQueuedRubika(), 15_000);
     this.rubikaTimer.unref();
-    this.rubikaProductTimer = setInterval(() => void this.publishOldestAvailableProduct(), 150 * 60_000);
-    this.rubikaProductTimer.unref();
+    const automaticRubikaProductPostsEnabled = this.config
+      .get<string>("RUBIKA_AUTO_PRODUCT_POST_ENABLED", "true")
+      .trim()
+      .toLowerCase() !== "false";
+    if (automaticRubikaProductPostsEnabled) {
+      this.rubikaProductTimer = setInterval(() => void this.publishOldestAvailableProduct(), 150 * 60_000);
+      this.rubikaProductTimer.unref();
+    } else {
+      this.logger.log("Automatic Rubika product posts are disabled by configuration.");
+    }
     this.backupTimer = setInterval(() => void this.ensureDailyBackup(), 30 * 60_000);
     this.backupTimer.unref();
     setTimeout(() => void this.publishDuePosts(), 5_000).unref();
