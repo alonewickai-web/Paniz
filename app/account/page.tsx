@@ -77,6 +77,7 @@ export default function AccountPage() {
   const [addressFormOpen, setAddressFormOpen] = useState(false);
   const [openAccountPanel, setOpenAccountPanel] = useState<CustomerAccountPanel | null>(null);
   const [openInvoiceOrder, setOpenInvoiceOrder] = useState<string | null>(null);
+  const [openSupportTicket, setOpenSupportTicket] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -450,7 +451,31 @@ export default function AccountPage() {
             onToggle={() => setOpenAccountPanel((current) => current === "support" ? null : "support")}
           >
             <form className="customer-support-form" onSubmit={(event) => void createSupportTicket(event)}><label className="store-field"><span>موضوع</span><input name="subject" required minLength={3} maxLength={180} /></label><label className="store-field"><span>پیام</span><textarea name="message" required minLength={2} maxLength={4000} rows={3} /></label><label className="store-field"><span>تصویر پیوست <small>(اختیاری · JPG، PNG یا WebP تا ۵ مگابایت)</small></span><input type="file" name="image" accept="image/jpeg,image/png,image/webp" /></label><button className="button-primary" type="submit" disabled={busy}>ثبت درخواست پشتیبانی</button></form>
-            {supportTickets.map((ticket) => <article className="customer-ticket" key={ticket.id}><div className="customer-ticket-heading"><strong>{ticket.subject}</strong><span>{ticket.status === "waiting_customer" ? "پاسخ پشتیبان" : ticket.status === "closed" ? "تیکت بسته شد" : "در حال پیگیری"}</span></div>{ticket.status === "closed" && <p className="customer-ticket-closed" role="status">این تیکت بسته شد. برای پیگیری بیشتر، یک درخواست پشتیبانی تازه ثبت کن.</p>}<ol>{ticket.messages.map((message) => <li className={message.senderType === "admin" ? "from-support" : "from-customer"} key={message.id}><strong>{message.senderType === "admin" ? "پشتیبان پانیذ" : "من"}</strong><p>{message.body}</p>{message.imagePath && <a href={customerAssetUrl(message.imagePath) ?? undefined} target="_blank" rel="noreferrer"><img className="customer-ticket-image" src={customerAssetUrl(message.imagePath) ?? undefined} alt="تصویر پیوست گفت‌وگوی پشتیبانی" loading="lazy" /></a>}<time>{new Date(message.createdAt).toLocaleString("fa-IR")}</time></li>)}</ol>{ticket.status !== "closed" && <form className="customer-ticket-reply" onSubmit={(event) => void replySupportTicket(event, ticket.id)}><label className="store-field"><span>پاسخ</span><textarea name="body" required maxLength={4000} rows={2} /></label><label className="store-field"><span>تصویر (اختیاری)</span><input type="file" name="image" accept="image/jpeg,image/png,image/webp" /></label><button className="outline-button" type="submit" disabled={busy}>ارسال پیام</button></form>}</article>)}
+            {supportTickets.length > 0 && <div className="customer-ticket-list">
+              {supportTickets.map((ticket) => {
+                const expanded = openSupportTicket === ticket.id;
+                const detailsId = `customer-ticket-details-${ticket.id}`;
+                const status = ticket.status === "waiting_customer" ? "پاسخ پشتیبان" : ticket.status === "closed" ? "تیکت بسته شد" : "در حال پیگیری";
+                return <article className="customer-ticket" key={ticket.id}>
+                  <button
+                    className="customer-ticket-heading"
+                    type="button"
+                    aria-expanded={expanded}
+                    aria-controls={detailsId}
+                    onClick={() => setOpenSupportTicket((current) => current === ticket.id ? null : ticket.id)}
+                  >
+                    <strong>{ticket.subject}</strong>
+                    <span>{status}</span>
+                    <ChevronDown size={17} aria-hidden="true" />
+                  </button>
+                  <div className="customer-ticket-details" id={detailsId} hidden={!expanded}>
+                    {ticket.status === "closed" && <p className="customer-ticket-closed" role="status">این تیکت بسته شد. برای پیگیری بیشتر، یک درخواست پشتیبانی تازه ثبت کن.</p>}
+                    <ol>{ticket.messages.map((message) => <li className={message.senderType === "admin" ? "from-support" : "from-customer"} key={message.id}><strong>{message.senderType === "admin" ? "پشتیبان پانیذ" : "من"}</strong><p>{message.body}</p>{message.imagePath && <a href={customerAssetUrl(message.imagePath) ?? undefined} target="_blank" rel="noreferrer"><img className="customer-ticket-image" src={customerAssetUrl(message.imagePath) ?? undefined} alt="تصویر پیوست گفت‌وگوی پشتیبانی" loading="lazy" /></a>}<time>{new Date(message.createdAt).toLocaleString("fa-IR")}</time></li>)}</ol>
+                    {ticket.status !== "closed" && <form className="customer-ticket-reply" onSubmit={(event) => void replySupportTicket(event, ticket.id)}><label className="store-field"><span>پاسخ</span><textarea name="body" required maxLength={4000} rows={2} /></label><label className="store-field"><span>تصویر (اختیاری)</span><input type="file" name="image" accept="image/jpeg,image/png,image/webp" /></label><button className="outline-button" type="submit" disabled={busy}>ارسال پیام</button></form>}
+                  </div>
+                </article>;
+              })}
+            </div>}
           </CustomerAccountSection>
         </div>}
       </div></main>
