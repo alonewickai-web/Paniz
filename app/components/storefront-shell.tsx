@@ -8,7 +8,6 @@ import { useStorefront } from "../lib/storefront-state";
 import { apiBaseUrl, publicImageUrl, type StoreCategory } from "../lib/catalog";
 import { ProductSearchAutocomplete } from "./product-search-autocomplete";
 import { MarketingPushPrompt } from "./marketing-push-prompt";
-import { PromotionalPopup } from "./promotional-popup";
 
 export function StorefrontHeader() {
   const { cart, favorites } = useStorefront();
@@ -140,5 +139,5 @@ export function StorefrontBottomNav() {
 }
 
 export function StorefrontShell({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <><StorefrontHeader />{children}<StorefrontFooter /><StorefrontBottomNav /><MarketingPushPrompt /><PromotionalPopup /></>;
+  return <><StorefrontHeader />{children}<StorefrontFooter /><StorefrontBottomNav /><MarketingPushPrompt /></>;
 }

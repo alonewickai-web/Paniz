@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import {
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -6,9 +6,11 @@ import {
   ApiQuery,
   ApiTags,
 } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import { CatalogService } from "./catalog.service";
 import { ListProductsQuery } from "./dto/list-products.query";
 import { ProductSuggestionsQuery } from "./dto/product-suggestions.query";
+import { SyncPublicFavoritesDto } from "./dto/sync-public-favorites.dto";
 
 @ApiTags("کاتالوگ")
 @Controller()
@@ -19,6 +21,13 @@ export class CatalogController {
   @ApiOperation({ summary: "دریافت بنرها، رنگ‌بندی و چیدمان عمومی ویترین" })
   storefrontConfig() {
     return this.catalogService.storefrontConfig();
+  }
+
+  @Post("favorites/sync")
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @ApiOperation({ summary: "همگام‌سازی ناشناس علاقه‌مندی‌های بازدیدکننده برای شمارش محبوبیت محصولات" })
+  syncFavorites(@Body() body: SyncPublicFavoritesDto) {
+    return this.catalogService.syncFavorites(body);
   }
 
   @Get("categories")
@@ -58,6 +67,12 @@ export class CatalogController {
   @ApiOperation({ summary: "مسیر دائمی آدرس قدیمی محصول" })
   productSlugRedirect(@Param("slug") slug: string) {
     return this.catalogService.productSlugRedirect(slug);
+  }
+
+  @Get("products/:slug/reviews")
+  @ApiOperation({ summary: "نمایش نظرهای تأییدشدهٔ محصول" })
+  productReviews(@Param("slug") slug: string) {
+    return this.catalogService.productReviews(slug);
   }
 
   @Get("products/:slug")

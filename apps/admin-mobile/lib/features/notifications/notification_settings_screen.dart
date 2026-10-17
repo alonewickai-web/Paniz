@@ -15,16 +15,37 @@ class NotificationSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _NotificationSettingsScreenState
-    extends ConsumerState<NotificationSettingsScreen> {
+    extends ConsumerState<NotificationSettingsScreen>
+    with WidgetsBindingObserver {
   JsonMap _preferences = {};
   List<JsonMap> _devices = [];
   bool _loading = true;
+  bool _batteryOptimizationExempt = false;
   final Set<String> _saving = {};
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshBatteryOptimization();
+  }
+
+  Future<void> _refreshBatteryOptimization() async {
+    final exempt =
+        await ref.read(adminApiProvider).hasBatteryOptimizationExemption();
+    if (!mounted || exempt == _batteryOptimizationExempt) return;
+    setState(() => _batteryOptimizationExempt = exempt);
   }
 
   Future<void> _load() async {
@@ -34,10 +55,13 @@ class _NotificationSettingsScreenState
         api.notificationPreferences(),
         api.notificationDevices(),
       ]);
+      final batteryOptimizationExempt =
+          await api.hasBatteryOptimizationExemption();
       if (!mounted) return;
       setState(() {
         _preferences = results[0] as JsonMap;
         _devices = results[1] as List<JsonMap>;
+        _batteryOptimizationExempt = batteryOptimizationExempt;
         _loading = false;
       });
     } catch (error) {
@@ -87,6 +111,9 @@ class _NotificationSettingsScreenState
       }
       await _load();
       if (mounted) showAppMessage(context, 'تنظیم اعلان‌ها ذخیره شد.');
+      if (key == 'backgroundMonitoringEnabled' && value && mounted) {
+        await _offerBatteryOptimizationExemption();
+      }
     } catch (error) {
       if (key == 'backgroundMonitoringEnabled' && value) {
         final api = ref.read(adminApiProvider);
@@ -104,6 +131,43 @@ class _NotificationSettingsScreenState
         showAppMessage(context, AdminApi.friendlyError(error), error: true);
     } finally {
       if (mounted) setState(() => _saving.remove(key));
+    }
+  }
+
+  Future<void> _offerBatteryOptimizationExemption() async {
+    final api = ref.read(adminApiProvider);
+    if (await api.hasBatteryOptimizationExemption()) {
+      if (mounted) setState(() => _batteryOptimizationExempt = true);
+      return;
+    }
+    if (!mounted) return;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('اجازهٔ اجرای بدون محدودیت باتری'),
+            content: const Text(
+              'این اجازه کمک می‌کند اتصال اعلان‌های سفارش و پیام در پس‌زمینه فعال بماند. ممکن است مصرف باتری بیشتر شود. اندروید درخواست نهایی را نمایش می‌دهد و می‌توانید آن را نپذیرید.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('فعلاً نه'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('ادامه'),
+              ),
+            ],
+          ),
+    );
+    if (accepted != true || !mounted) return;
+    try {
+      await api.requestBatteryOptimizationExemption();
+    } catch (error) {
+      if (mounted) {
+        showAppMessage(context, AdminApi.friendlyError(error), error: true);
+      }
     }
   }
 
@@ -182,7 +246,7 @@ class _NotificationSettingsScreenState
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'اعلان‌های پانیذ',
+                              'اتصال مستقیم اعلان‌های پانیذ',
                               style: TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 16,
@@ -190,7 +254,7 @@ class _NotificationSettingsScreenState
                             ),
                             SizedBox(height: 4),
                             Text(
-                              'بدون سرویس Firebase',
+                              'WebSocket امن با سرور پانیذ؛ بدون Firebase/FCM',
                               style: TextStyle(fontSize: 12),
                             ),
                           ],
@@ -207,8 +271,8 @@ class _NotificationSettingsScreenState
                     ),
                     subtitle: Text(
                       monitoring
-                          ? 'مانیتورینگ روشن است؛ اعلان دائمی اتصال در گوشی نمایش داده می‌شود.'
-                          : 'با روشن‌کردن، اتصال امن سرور در پس‌زمینه فعال می‌شود.',
+                          ? 'اتصال مستقیم سرور فعال است؛ اعلان دائمی اتصال در گوشی نمایش داده می‌شود.'
+                          : 'با روشن‌کردن، اتصال امن WebSocket به سرور پانیذ فعال می‌شود.',
                     ),
                     value: monitoring,
                     onChanged:
@@ -219,13 +283,65 @@ class _NotificationSettingsScreenState
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'برای حفظ اتصال، اندروید یک اعلان دائمی نشان می‌دهد. قطع اینترنت، Force Stop، محدودیت باتری سازندهٔ گوشی یا منقضی‌شدن نشست می‌تواند دریافت فوری را متوقف کند؛ اعلان‌ها در سرور می‌مانند و پس از اتصال دوباره همگام می‌شوند.',
+                    'پیام‌ها از اتصال مستقیم WebSocket به سرور پانیذ می‌رسند و در صورت قطع موقت، دوباره از API همگام می‌شوند. اندروید یک اعلان دائمی نشان می‌دهد؛ محدودیت باتری گوشی ممکن است دریافت پس‌زمینه را به تأخیر بیندازد.',
                     style: TextStyle(
                       color: context.paniz.muted,
                       fontSize: 12,
                       height: 1.7,
                     ),
                   ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        _batteryOptimizationExempt
+                            ? Icons.battery_charging_full_rounded
+                            : Icons.battery_saver_outlined,
+                        color: context.paniz.primary,
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          _batteryOptimizationExempt
+                              ? 'محدودیت باتری برداشته شده است'
+                              : 'اجازهٔ فعالیت بدون محدودیت باتری',
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _batteryOptimizationExempt
+                        ? 'اندروید برنامه را از بهینه‌سازی باتری مستثنا کرده است.'
+                        : 'برای فعال‌ماندن اتصال اعلان‌ها در پس‌زمینه، از اندروید اجازه بگیرید. این کار ممکن است مصرف باتری را افزایش دهد.',
+                    style: TextStyle(
+                      color: context.paniz.muted,
+                      fontSize: 12,
+                      height: 1.7,
+                    ),
+                  ),
+                  if (!_batteryOptimizationExempt) ...[
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: OutlinedButton.icon(
+                        onPressed: _offerBatteryOptimizationExemption,
+                        icon: const Icon(Icons.battery_saver_outlined),
+                        label: const Text('درخواست اجازه از اندروید'),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

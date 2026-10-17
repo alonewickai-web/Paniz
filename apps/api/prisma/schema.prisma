@@ -368,6 +368,7 @@ model Product {
   variants          ProductVariant[]
   couponProducts    CouponProduct[]
   wishlistItems     WishlistItem[]
+  anonymousFavorites AnonymousProductFavorite[]
   reviews           Review[]
   orderItems        OrderItem[]
   slugRedirects     ProductSlugRedirect[]
@@ -793,6 +794,17 @@ model WishlistItem {
   @@id([wishlistId, productId])
   @@index([productId], map: "ix_wishlist_items_product")
   @@map("wishlist_items")
+}
+
+model AnonymousProductFavorite {
+  visitorHash String   @map("visitor_hash") @db.Char(64)
+  productId   BigInt   @map("product_id") @db.UnsignedBigInt
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([visitorHash, productId])
+  @@index([productId], map: "ix_anon_favorite_product")
+  @@map("anonymous_product_favorites")
 }
 
 model Review {

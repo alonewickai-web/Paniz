@@ -67,6 +67,8 @@ class AdminApi {
   static const _notificationDeviceKey = 'paniz.admin.notification-device-id';
   static const _notificationPromptKey =
       'paniz.admin.notification-permission-prompted';
+  static const _batteryOptimizationPromptKey =
+      'paniz.admin.battery-optimization-prompted';
   static const _notificationChannel = MethodChannel(
     'paniz/admin-notifications',
   );
@@ -348,6 +350,35 @@ class AdminApi {
   Future<bool> hasNotificationPermission() async =>
       await _notificationChannel.invokeMethod<bool>('hasPermission') ?? false;
 
+  Future<bool> hasBatteryOptimizationExemption() async {
+    try {
+      return await _notificationChannel.invokeMethod<bool>(
+            'hasBatteryOptimizationExemption',
+          ) ??
+          false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  Future<void> requestBatteryOptimizationExemption() async {
+    await _storage.write(key: _batteryOptimizationPromptKey, value: 'true');
+    await _notificationChannel.invokeMethod<void>(
+      'requestBatteryOptimizationExemption',
+    );
+  }
+
+  Future<void> requestBatteryOptimizationExemptionIfNeeded() async {
+    if (await hasBatteryOptimizationExemption()) return;
+    if (await _storage.read(key: _batteryOptimizationPromptKey) == 'true') {
+      return;
+    }
+    await _storage.write(key: _batteryOptimizationPromptKey, value: 'true');
+    await requestBatteryOptimizationExemption();
+  }
+
   Future<void> startNotificationMonitoring({
     required String deviceId,
     required bool soundEnabled,
@@ -405,6 +436,7 @@ class AdminApi {
         soundEnabled: preferences['soundEnabled'] == true,
         vibrationEnabled: preferences['vibrationEnabled'] != false,
       );
+      await requestBatteryOptimizationExemptionIfNeeded();
     } catch (_) {
       // Do not block sign-in or session restoration on background notification setup.
     }
@@ -661,6 +693,12 @@ class AdminApi {
   Future<JsonMap> updateShippingSettings(JsonMap settings) async =>
       _data(await dio.patch('admin/store/shipping', data: settings));
 
+  Future<JsonMap> updateReturnsPolicy(JsonMap policy) async =>
+      _data(await dio.patch('admin/store/returns-policy', data: policy));
+
+  Future<JsonMap> updateStoreFaqs(JsonMap faqSettings) async =>
+      _data(await dio.patch('admin/store/faqs', data: faqSettings));
+
   Future<JsonMap> updateStoreLogo(String? logoPath) async =>
       _data(await dio.patch('admin/store/logo', data: {'logoPath': logoPath}));
 
@@ -796,6 +834,17 @@ class AdminApi {
     );
     return _list(_payload(response));
   }
+
+  Future<List<JsonMap>> reviews({String status = 'pending'}) async {
+    final response = await dio.get(
+      'admin/reviews',
+      queryParameters: {'status': status},
+    );
+    return _list(_payload(response));
+  }
+
+  Future<JsonMap> updateReviewStatus(String id, String status) async =>
+      _data(await dio.patch('admin/reviews/$id/status', data: {'status': status}));
 
   Future<JsonMap> updateOrderStatus(
     String id,

@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.provider.OpenableColumns
 import androidx.biometric.BiometricManager
@@ -190,6 +191,28 @@ class MainActivity : FlutterFragmentActivity() {
                         }
                         "requestPermission" -> requestNotificationPermission(result)
                         "hasPermission" -> result.success(canShowNotifications())
+                        "hasBatteryOptimizationExemption" ->
+                            result.success(hasBatteryOptimizationExemption())
+                        "requestBatteryOptimizationExemption" -> {
+                            if (hasBatteryOptimizationExemption()) {
+                                result.success(true)
+                            } else {
+                                val intent = Intent(
+                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    Uri.parse("package:$packageName"),
+                                )
+                                if (intent.resolveActivity(packageManager) == null) {
+                                    result.error(
+                                        "BATTERY_SETTINGS_UNAVAILABLE",
+                                        "درخواست تنظیم محدودیت باتری در این نسخهٔ اندروید در دسترس نیست.",
+                                        null,
+                                    )
+                                } else {
+                                    startActivity(intent)
+                                    result.success(true)
+                                }
+                            }
+                        }
                         "startMonitoring" -> {
                             val apiBaseUrl = call.argument<String>("apiBaseUrl")?.trim().orEmpty()
                             val accessToken = call.argument<String>("accessToken")?.trim().orEmpty()
@@ -250,6 +273,12 @@ class MainActivity : FlutterFragmentActivity() {
         val runtimePermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         return notificationsEnabled && runtimePermissionGranted
+    }
+
+    private fun hasBatteryOptimizationExemption(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        return powerManager.isIgnoringBatteryOptimizations(packageName)
     }
 
     private fun authenticateBiometric(result: MethodChannel.Result) {

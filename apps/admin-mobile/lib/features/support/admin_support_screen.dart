@@ -7,20 +7,29 @@ import '../../core/providers.dart';
 import '../../core/ui_helpers.dart';
 
 class AdminSupportScreen extends ConsumerStatefulWidget {
-  const AdminSupportScreen({super.key});
+  const AdminSupportScreen({super.key, this.initialTab = 0});
+  final int initialTab;
   @override
   ConsumerState<AdminSupportScreen> createState() => _AdminSupportScreenState();
 }
 
 class _AdminSupportScreenState extends ConsumerState<AdminSupportScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 2, vsync: this);
+  late final TabController _tabs;
   List<JsonMap> _tickets = [];
   List<JsonMap> _returns = [];
   bool _loading = true;
   String? _error;
 
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _tabs = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTab == 1 ? 1 : 0,
+    );
+    _load();
+  }
   @override
   void dispose() { _tabs.dispose(); super.dispose(); }
 

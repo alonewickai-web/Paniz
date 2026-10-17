@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../database/prisma.service";
 import { CustomerRequest } from "./customer-session.guard";
 import { normalizeIranPhone } from "./dto/phone.dto";
@@ -6,6 +6,7 @@ import { UpdateCustomerProfileDto } from "./dto/update-customer-profile.dto";
 import { SaveCustomerAddressDto } from "./dto/save-customer-address.dto";
 import { RubikaBotService } from "../integrations/rubika/rubika.service";
 import { isValidJalaaliDate, toJalaali } from "jalaali-js";
+import { CreateProductReviewDto } from "./dto/create-product-review.dto";
 
 @Injectable()
 export class CustomerService {
@@ -183,6 +184,83 @@ export class CustomerService {
       })),
     };
   }
+
+  async reviewOrders(customerId: bigint, productIdText: string) {
+    const productId = parsePositiveId(productIdText, "شناسهٔ محصول معتبر نیست.");
+    const items = await this.prisma.orderItem.findMany({
+      where: {
+        productId,
+        review: null,
+        order: { customerId, paymentStatus: "paid", status: "delivered" },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: {
+        id: true,
+        productNameSnapshot: true,
+        colorNameSnapshot: true,
+        sizeLabelSnapshot: true,
+        createdAt: true,
+        order: { select: { orderNumber: true, placedAt: true } },
+      },
+    });
+    return { data: items.map((item) => ({
+      orderItemId: item.id.toString(),
+      productName: item.productNameSnapshot,
+      color: item.colorNameSnapshot,
+      size: item.sizeLabelSnapshot,
+      orderNumber: item.order.orderNumber,
+      purchasedAt: item.order.placedAt.toISOString(),
+    })) };
+  }
+
+  async createProductReview(customerId: bigint, productIdText: string, input: CreateProductReviewDto) {
+    const productId = parsePositiveId(productIdText, "شناسهٔ محصول معتبر نیست.");
+    const orderItemId = parsePositiveId(input.orderItemId, "شناسهٔ خرید معتبر نیست.");
+    const item = await this.prisma.orderItem.findFirst({
+      where: {
+        id: orderItemId,
+        productId,
+        review: null,
+        order: { customerId, paymentStatus: "paid", status: "delivered" },
+      },
+      select: { id: true, productId: true },
+    });
+    if (!item) {
+      throw new BadRequestException({ code: "PRODUCT_REVIEW_PURCHASE_REQUIRED", message: "ثبت نظر فقط برای خرید پرداخت‌شده و تحویل‌شدهٔ همین محصول امکان‌پذیر است." });
+    }
+    try {
+      const review = await this.prisma.review.create({
+        data: {
+          productId: item.productId!,
+          customerId,
+          orderItemId: item.id,
+          rating: input.rating,
+          title: input.title?.trim() || null,
+          body: input.body?.trim() || null,
+          status: "pending",
+        },
+        select: { id: true, status: true, createdAt: true },
+      });
+      return { data: { id: review.id.toString(), status: review.status, createdAt: review.createdAt.toISOString() } };
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
+        throw new ConflictException({ code: "PRODUCT_REVIEW_ALREADY_EXISTS", message: "برای این خرید قبلاً نظر ثبت شده است." });
+      }
+      throw error;
+    }
+  }
+}
+
+function parsePositiveId(value: string, message: string): bigint {
+  if (!/^\d{1,20}$/.test(value)) {
+    throw new BadRequestException({ code: "PRODUCT_REVIEW_ID_INVALID", message });
+  }
+  const parsed = BigInt(value);
+  if (parsed <= 0n || parsed > 18446744073709551615n) {
+    throw new BadRequestException({ code: "PRODUCT_REVIEW_ID_INVALID", message });
+  }
+  return parsed;
 }
 
 function addressData(customerId: bigint, input: SaveCustomerAddressDto, isDefault: boolean) {

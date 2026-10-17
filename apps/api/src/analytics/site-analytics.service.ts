@@ -74,7 +74,7 @@ export class SiteAnalyticsService {
         select: {
           id: true, name: true, slug: true,
           variants: { where: { isActive: true }, select: { sku: true, _count: { select: { backInStockSubscriptions: true } } } },
-          _count: { select: { wishlistItems: true } },
+          _count: { select: { wishlistItems: true, anonymousFavorites: true } },
         },
       }),
     ]);
@@ -113,7 +113,7 @@ export class SiteAnalyticsService {
             id: product.id.toString(), name: product.name,
             code: product.variants.map((variant) => variant.sku).find(Boolean) ?? "—",
             pageViews: safeCount(page?.pageViews ?? 0n),
-            favoriteCount: product._count.wishlistItems,
+            favoriteCount: product._count.wishlistItems + product._count.anonymousFavorites,
             backInStockCount: product.variants.reduce((sum, variant) => sum + variant._count.backInStockSubscriptions, 0),
           };
         }).filter((product) => product.pageViews > 0 || product.favoriteCount > 0 || product.backInStockCount > 0)

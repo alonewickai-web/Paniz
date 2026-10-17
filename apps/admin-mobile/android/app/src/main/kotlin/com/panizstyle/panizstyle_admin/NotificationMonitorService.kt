@@ -231,7 +231,7 @@ class NotificationMonitorService : Service() {
                     }
                     retryDelaySeconds = 2
                     authenticating = false
-                    updateMonitorStatus("اتصال اعلان‌ها برقرار است")
+                    updateMonitorStatus("اتصال مستقیم امن اعلان‌ها برقرار است")
                     scheduleSync()
                 }
 
@@ -256,7 +256,7 @@ class NotificationMonitorService : Service() {
                         stopSelf()
                         return
                     }
-                    scheduleReconnect("اتصال اعلان‌ها در حال بازیابی است")
+                    scheduleReconnect("اتصال مستقیم اعلان‌ها در حال بازیابی است")
                 }
 
                 override fun onFailure(webSocket: okhttp3.WebSocket, error: Throwable, response: Response?) {
@@ -267,7 +267,7 @@ class NotificationMonitorService : Service() {
                         authenticating = true
                         updateMonitorStatus("نشست منقضی شد؛ برنامه را باز کنید")
                     } else {
-                        scheduleReconnect("اتصال اعلان‌ها قطع شد؛ تلاش دوباره انجام می‌شود")
+                        scheduleReconnect("اتصال مستقیم قطع شد؛ تلاش دوباره انجام می‌شود")
                     }
                 }
             })
@@ -286,7 +286,7 @@ class NotificationMonitorService : Service() {
                 return
             }
             authenticating = false
-            scheduleReconnect("اتصال اعلان‌ها برقرار نشد؛ تلاش دوباره انجام می‌شود")
+            scheduleReconnect("اتصال مستقیم برقرار نشد؛ تلاش دوباره انجام می‌شود")
         }
     }
 
@@ -437,7 +437,8 @@ class NotificationMonitorService : Service() {
 
     private fun startInForeground(status: String) {
         val notification = notificationBuilder(MONITOR_CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
+            .setSmallIcon(R.drawable.ic_stat_paniz)
+            .setLargeIcon(BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher))
             .setContentTitle("مانیتورینگ اعلان‌های پانیذ")
             .setContentText(status)
             .setOngoing(true)
@@ -453,7 +454,8 @@ class NotificationMonitorService : Service() {
         if (!running && worker != null) return
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val notification = notificationBuilder(MONITOR_CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
+            .setSmallIcon(R.drawable.ic_stat_paniz)
+            .setLargeIcon(BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher))
             .setContentTitle("مانیتورینگ اعلان‌های پانیذ")
             .setContentText(status)
             .setOngoing(true)

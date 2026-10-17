@@ -11,6 +11,7 @@ import { PageFlipImage, type FlipImage } from "./page-flip-image";
 import { CustomerApiError, customerApi } from "../lib/customer-api";
 import { requestStorePush } from "../lib/customer-push";
 import { trackGa4 } from "../lib/ga4";
+import { ProductReviews } from "./product-reviews";
 
 export function ProductDetailView({ product }: { product: StoreProductDetail }) {
   const { cart, setCart, favorites, setFavorites, notifyCartAdded } = useStorefront();
@@ -354,7 +355,7 @@ export function ProductDetailView({ product }: { product: StoreProductDetail }) 
               <details open><summary>توضیحات محصول</summary><p>{product.description || product.shortDescription || "جزئیات بیشتر این محصول به‌زودی از فروشگاه دریافت می‌شود."}</p></details>
               {materials.map(([title, value]) => <details key={title}><summary>{title}</summary><p>{value}</p></details>)}
               <details onToggle={(event) => { if ((event.currentTarget as HTMLDetailsElement).open) void loadRelated(); }}><summary>محصولات مشابه</summary>{related.length ? <div className="product-grid store-related-grid">{related.map((item) => <StoreProductCard key={item.id} product={item} />)}</div> : <p>محصول مشابهی برای نمایش پیدا نشد.</p>}</details>
-              <details><summary>نظرات خریداران</summary><p>ثبت نظر بعد از خرید و ورود با شمارهٔ تأییدشده فعال می‌شود.</p></details>
+              <details><summary>نظر خریداران و ثبت نظر</summary><ProductReviews productId={product.id} slug={product.slug} /></details>
             </div>
           </section>
         </div>

@@ -23,16 +23,6 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
   bool _saving = false;
   List<String>? _sectionOrderOverride;
 
-  final _shippingName = TextEditingController();
-  final _shippingDescription = TextEditingController();
-  final _shippingDaysMin = TextEditingController();
-  final _shippingDaysMax = TextEditingController();
-  final _shippingCost = TextEditingController();
-  final _freeShippingThreshold = TextEditingController();
-  bool _shippingInitialized = false;
-  bool _alwaysFree = false;
-  bool _freeThresholdEnabled = false;
-
   final _aboutAddress = TextEditingController();
   final _aboutIntroTitle = TextEditingController();
   final _aboutIntroDescription = TextEditingController();
@@ -57,12 +47,6 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
 
   @override
   void dispose() {
-    _shippingName.dispose();
-    _shippingDescription.dispose();
-    _shippingDaysMin.dispose();
-    _shippingDaysMax.dispose();
-    _shippingCost.dispose();
-    _freeShippingThreshold.dispose();
     _aboutIntroTitle.dispose();
     _aboutIntroDescription.dispose();
     _aboutAddress.dispose();
@@ -79,7 +63,6 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
 
   Future<void> _refresh() async {
     _sectionOrderOverride = null;
-    _shippingInitialized = false;
     _aboutInitialized = false;
     _popupInitialized = false;
     ref.invalidate(storeConfigurationProvider);
@@ -147,7 +130,6 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
                       if (_tab == 2) _bannersPanel(data),
                       if (_tab == 3) _sectionsPanel(data),
                       if (_tab == 4) _aboutPanel(data),
-                      if (_tab == 5) _shippingPanel(data),
                       if (_tab == 6) _popupPanel(data),
                     ],
                   ),
@@ -757,217 +739,6 @@ class _StoreManagementScreenState extends ConsumerState<StoreManagementScreen> {
                           },
                   icon: const Icon(Icons.save_outlined),
                   label: const Text('ذخیرهٔ پاپ‌آپ'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _shippingPanel(JsonMap data) {
-    final shipping =
-        data['shipping'] is Map
-            ? Map<String, dynamic>.from(data['shipping'] as Map)
-            : <String, dynamic>{};
-    if (!_shippingInitialized) {
-      _shippingName.text = '${shipping['name'] ?? 'ارسال پستی'}';
-      final savedDescription = '${shipping['description'] ?? ''}';
-      _shippingDescription.text =
-          savedDescription == 'هزینهٔ ارسال سفارش بر اساس تنظیم فروشگاه'
-              ? ''
-              : savedDescription;
-      _shippingDaysMin.text = '${shipping['estimatedDaysMin'] ?? ''}';
-      _shippingDaysMax.text = '${shipping['estimatedDaysMax'] ?? ''}';
-      _shippingCost.text = _digits('${shipping['baseCostToman'] ?? 0}');
-      _freeShippingThreshold.text = _digits(
-        '${shipping['freeOverToman'] ?? ''}',
-      );
-      _alwaysFree = shipping['baseCostToman'] == 0 && shipping['id'] != null;
-      _freeThresholdEnabled = shipping['freeOverToman'] != null;
-      _shippingInitialized = true;
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        sectionTitle('هزینهٔ ارسال و پست'),
-        const Padding(
-          padding: EdgeInsets.only(top: 4, bottom: 12),
-          child: Text(
-            'مبلغ ارسال در فاکتور مشتری نشان داده می‌شود. اگر ارسال رایگان باشد نیز این موضوع در فاکتور به‌روشنی نوشته می‌شود.',
-            style: TextStyle(
-              color: Color(0xFF74686C),
-              fontSize: 12,
-              height: 1.6,
-            ),
-          ),
-        ),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: _shippingName,
-                  maxLength: 120,
-                  decoration: const InputDecoration(
-                    labelText: 'نام روش ارسال',
-                    hintText: 'مثلاً ارسال پستی',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _shippingDescription,
-                  minLines: 2,
-                  maxLines: 4,
-                  maxLength: 500,
-                  decoration: const InputDecoration(
-                    labelText: 'توضیحات روش ارسال',
-                    hintText: 'جزئیات واقعی ارسال را برای مشتری بنویس',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _shippingDaysMin,
-                        keyboardType: TextInputType.number,
-                        textDirection: TextDirection.ltr,
-                        decoration: const InputDecoration(
-                          labelText: 'حداقل زمان (روز)',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _shippingDaysMax,
-                        keyboardType: TextInputType.number,
-                        textDirection: TextDirection.ltr,
-                        decoration: const InputDecoration(
-                          labelText: 'حداکثر زمان (روز)',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _shippingCost,
-                  enabled: !_alwaysFree,
-                  keyboardType: TextInputType.number,
-                  textDirection: TextDirection.ltr,
-                  decoration: const InputDecoration(
-                    labelText: 'هزینهٔ پست',
-                    suffixText: 'تومان',
-                    helperText: 'مبلغ با جداکنندهٔ سه‌رقمی نمایش داده می‌شود.',
-                  ),
-                  onChanged: (value) {
-                    final formatted = _groupDigits(value);
-                    if (formatted != value) {
-                      _shippingCost.value = TextEditingValue(
-                        text: formatted,
-                        selection: TextSelection.collapsed(
-                          offset: formatted.length,
-                        ),
-                      );
-                    }
-                  },
-                ),
-                SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('ارسال همهٔ سفارش‌ها رایگان باشد'),
-                  value: _alwaysFree,
-                  onChanged: (value) => setState(() => _alwaysFree = value),
-                ),
-                SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('ارسال بالای یک مبلغ رایگان شود'),
-                  value: _freeThresholdEnabled,
-                  onChanged:
-                      (value) => setState(() => _freeThresholdEnabled = value),
-                ),
-                if (_freeThresholdEnabled && !_alwaysFree) ...[
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: _freeShippingThreshold,
-                    keyboardType: TextInputType.number,
-                    textDirection: TextDirection.ltr,
-                    decoration: const InputDecoration(
-                      labelText: 'حداقل مبلغ سبد برای ارسال رایگان',
-                      suffixText: 'تومان',
-                    ),
-                    onChanged: (value) {
-                      final formatted = _groupDigits(value);
-                      if (formatted != value)
-                        _freeShippingThreshold.value = TextEditingValue(
-                          text: formatted,
-                          selection: TextSelection.collapsed(
-                            offset: formatted.length,
-                          ),
-                        );
-                    },
-                  ),
-                ],
-                const SizedBox(height: 14),
-                FilledButton.icon(
-                  onPressed:
-                      _saving
-                          ? null
-                          : () => _run(() async {
-                            final cost = _digits(_shippingCost.text);
-                            final threshold = _digits(
-                              _freeShippingThreshold.text,
-                            );
-                            final minDays = _digits(_shippingDaysMin.text);
-                            final maxDays = _digits(_shippingDaysMax.text);
-                            if (!_alwaysFree && cost.isEmpty)
-                              throw const AdminApiException(
-                                'هزینهٔ پست را وارد کن.',
-                              );
-                            if (minDays.isNotEmpty != maxDays.isNotEmpty)
-                              throw const AdminApiException(
-                                'حداقل و حداکثر زمان ارسال را با هم وارد کن.',
-                              );
-                            if (minDays.isNotEmpty &&
-                                int.parse(maxDays) < int.parse(minDays))
-                              throw const AdminApiException(
-                                'حداکثر زمان ارسال نباید از حداقل آن کمتر باشد.',
-                              );
-                            if (_freeThresholdEnabled &&
-                                !_alwaysFree &&
-                                threshold.isEmpty)
-                              throw const AdminApiException(
-                                'حد خرید برای ارسال رایگان را وارد کن.',
-                              );
-                            await ref
-                                .read(adminApiProvider)
-                                .updateShippingSettings({
-                                  'name': _shippingName.text.trim(),
-                                  'description':
-                                      _shippingDescription.text.trim(),
-                                  'estimatedDaysMin':
-                                      minDays.isEmpty
-                                          ? null
-                                          : int.parse(minDays),
-                                  'estimatedDaysMax':
-                                      maxDays.isEmpty
-                                          ? null
-                                          : int.parse(maxDays),
-                                  'baseCostToman': cost.isEmpty ? '0' : cost,
-                                  'alwaysFree': _alwaysFree,
-                                  'freeShippingEnabled':
-                                      _freeThresholdEnabled && !_alwaysFree,
-                                  if (_freeThresholdEnabled && !_alwaysFree)
-                                    'freeOverToman': threshold,
-                                });
-                            _shippingInitialized = false;
-                          }, 'تنظیمات ارسال ذخیره شد'),
-                  icon: const Icon(Icons.save_outlined),
-                  label: const Text('ذخیرهٔ هزینهٔ ارسال'),
                 ),
               ],
             ),
@@ -2276,27 +2047,4 @@ int _integer(Object? value) =>
 String? _optionalPath(Object? value) {
   final path = '$value'.trim();
   return path.isEmpty || path == 'null' ? null : path;
-}
-
-String _digits(String value) {
-  const persian = '۰۱۲۳۴۵۶۷۸۹';
-  const arabic = '٠١٢٣٤٥٦٧٨٩';
-  return value
-      .replaceAllMapped(RegExp('[۰-۹٠-٩]'), (match) {
-        final digit = match[0]!;
-        final index = persian.indexOf(digit);
-        return '${index >= 0 ? index : arabic.indexOf(digit)}';
-      })
-      .replaceAll(RegExp(r'[^0-9]'), '');
-}
-
-String _groupDigits(String value) {
-  final digits = _digits(value);
-  if (digits.isEmpty) return '';
-  final grouped = StringBuffer();
-  for (var index = 0; index < digits.length; index++) {
-    if (index > 0 && (digits.length - index) % 3 == 0) grouped.write(',');
-    grouped.write(digits[index]);
-  }
-  return grouped.toString();
 }

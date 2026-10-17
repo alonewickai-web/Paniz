@@ -275,11 +275,7 @@ Future<void> _openNotification(
     }
   }
   if (!context.mounted) return;
-  final entityType = '${item['entityType'] ?? ''}';
-  if (onNavigate != null &&
-      (entityType.isNotEmpty ||
-          '${item['type']}' == 'new_order' ||
-          '${item['type']}' == 'admin_message')) {
+  if (onNavigate != null) {
     Navigator.of(context).pop();
     WidgetsBinding.instance.addPostFrameCallback((_) => onNavigate(item));
     return;

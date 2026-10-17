@@ -26,6 +26,8 @@ import { PageFlipImage, type FlipImage } from "./components/page-flip-image";
 import { ProductSearchAutocomplete } from "./components/product-search-autocomplete";
 import { StoreDropdown } from "./components/store-dropdown";
 import { EnamadSeal } from "./components/storefront-shell";
+import { MarketingPushPrompt } from "./components/marketing-push-prompt";
+import { PromotionalPopup } from "./components/promotional-popup";
 import { publicImageUrl } from "./lib/catalog";
 
 type Product = {
@@ -678,6 +680,8 @@ export default function Home() {
   return (
     <main>
       <EnamadSeal />
+      <MarketingPushPrompt />
+      <PromotionalPopup />
       <div className="announcement-bar">
         <Sparkles size={15} aria-hidden="true" />
         <span>کالکشن‌های تازه و انتخاب‌های دوست‌داشتنی پانیذ</span>
@@ -904,13 +908,13 @@ export default function Home() {
         </section>}
 
         {sectionIsActive("benefits") && <section className="benefits-strip" aria-label="خدمات پانیذ" style={{ order: sectionOrder("benefits", 3) }}>
-          <div className="benefit"><span className="benefit-icon mint-icon"><ShoppingBag size={20} /></span><div><strong>خرید آسوده</strong><span>قیمت و موجودی از فروشگاه بررسی می‌شود</span></div></div>
+          <Link className="benefit benefit-link" href="/policies/terms"><span className="benefit-icon mint-icon"><ShoppingBag size={20} /></span><div><strong>خرید آسوده</strong><span>قیمت و موجودی از فروشگاه بررسی می‌شود</span></div></Link>
           <span className="benefit-separator" />
-          <div className="benefit"><span className="benefit-icon peach-icon"><ArrowRight size={20} /></span><div><strong>روش‌های ارسال</strong><span>هزینه و شرایط ارسال را در راهنمای ارسال ببین</span></div></div>
+          <Link className="benefit benefit-link" href="/help/shipping"><span className="benefit-icon peach-icon"><ArrowRight size={20} /></span><div><strong>روش‌های ارسال</strong><span>هزینه و شرایط ارسال را در راهنمای ارسال ببین</span></div></Link>
           <span className="benefit-separator" />
-          <div className="benefit"><span className="benefit-icon lilac-icon"><Check size={20} /></span><div><strong>شرایط تعویض</strong><span>پیش از نهایی‌شدن سفارش اعلام می‌شود</span></div></div>
+          <Link className="benefit benefit-link" href="/policies/returns"><span className="benefit-icon lilac-icon"><Check size={20} /></span><div><strong>شرایط تعویض</strong><span>پیش از نهایی‌شدن سفارش اعلام می‌شود</span></div></Link>
           <span className="benefit-separator" />
-          <div className="benefit"><span className="benefit-icon rose-icon"><Heart size={20} /></span><div><strong>پیگیری سفارش</strong><span>وضعیت خریدت را آنلاین ببین</span></div></div>
+          <Link className="benefit benefit-link" href="/account"><span className="benefit-icon rose-icon"><Heart size={20} /></span><div><strong>پیگیری سفارش</strong><span>وضعیت خریدت را آنلاین ببین</span></div></Link>
         </section>}
       </div>
 

@@ -92,6 +92,8 @@ class _AppUpdateScreenState extends ConsumerState<AppUpdateScreen>
   Future<void> _download() async {
     final release = _latest;
     if (release == null || _installed == null || _busy) return;
+    final expectedBytes =
+        int.tryParse('${release['fileSizeBytes'] ?? ''}') ?? 0;
     setState(() {
       _busy = true;
       _error = null;
@@ -109,13 +111,19 @@ class _AppUpdateScreenState extends ConsumerState<AppUpdateScreen>
         _cancel,
         (done, total) {
           if (mounted)
-            setState(() => _progress = total > 0 ? done / total : null);
+            setState(() {
+              final denominator = total > 0 ? total : expectedBytes;
+              _progress =
+                  denominator > 0
+                      ? (done / denominator).clamp(0.0, 1.0).toDouble()
+                      : null;
+            });
         },
       );
       if (mounted)
         setState(() {
           _status = 'در حال بررسی فایل و امضای برنامه…';
-          _progress = null;
+          _progress = 1;
         });
       await _native.invokeMethod('verifyApk', {
         'path': path,
@@ -378,7 +386,23 @@ class _AppUpdateScreenState extends ConsumerState<AppUpdateScreen>
           if (_busy)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 14),
-              child: LinearProgressIndicator(value: _progress),
+              child: Column(
+                children: [
+                  LinearProgressIndicator(value: _progress),
+                  if (_progress != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '${persianNumber((_progress!.clamp(0.0, 1.0) * 100).round())}٪ از ۱۰۰٪',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: context.paniz.primary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           if (_status != null)
             Padding(

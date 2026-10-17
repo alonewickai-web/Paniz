@@ -20,6 +20,7 @@ enum _ProductSort {
   leastSelling,
   cheapest,
   mostExpensive,
+  mostFavorited,
 }
 
 enum _ProductStockFilter { all, inStock, outOfStock }
@@ -625,6 +626,9 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                     right,
                     highest: true,
                   ).compareTo(_productPrice(left, highest: true)),
+                  _ProductSort.mostFavorited =>
+                    (int.tryParse('${right['favoriteCount'] ?? 0}') ?? 0)
+                        .compareTo(int.tryParse('${left['favoriteCount'] ?? 0}') ?? 0),
                 };
                 return comparison != 0
                     ? comparison
@@ -835,6 +839,7 @@ String _sortTitle(_ProductSort sort) => switch (sort) {
   _ProductSort.leastSelling => 'کم‌فروش‌ترین',
   _ProductSort.cheapest => 'ارزان‌ترین',
   _ProductSort.mostExpensive => 'گران‌ترین',
+  _ProductSort.mostFavorited => 'محبوب‌ترین',
 };
 
 class _ProductSortSheet extends StatelessWidget {
@@ -873,6 +878,11 @@ class _ProductSortSheet extends StatelessWidget {
         value: _ProductSort.mostExpensive,
         label: 'گران‌ترین',
         icon: Icons.north_rounded,
+      ),
+      (
+        value: _ProductSort.mostFavorited,
+        label: 'محبوب‌ترین',
+        icon: Icons.favorite_rounded,
       ),
     ];
     return SafeArea(
@@ -1292,6 +1302,25 @@ class _ProductCard extends ConsumerWidget {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: .45),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.favorite_rounded, size: 18, color: Theme.of(context).colorScheme.error),
+                  const SizedBox(width: 8),
+                  const Expanded(child: Text('ذخیره‌شده در علاقه‌مندی کاربران')),
+                  Text(
+                    '${persianNumber(product['favoriteCount'] ?? 0)} نفر',
+                    style: TextStyle(fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.error),
+                  ),
+                ],
+              ),
             ),
             if (can('products.edit') || can('products.archive')) ...[
               const SizedBox(height: 12),

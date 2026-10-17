@@ -26,7 +26,11 @@ import '../dashboard/seo_analytics_screen.dart';
 import '../inventory/inventory_screen.dart';
 import '../orders/orders_screen.dart';
 import '../products/products_screen.dart';
+import '../products/review_management_screen.dart';
 import '../store/store_management_screen.dart';
+import '../store/shipping_settings_screen.dart';
+import '../store/returns_policy_screen.dart';
+import '../store/faq_management_screen.dart';
 import '../tools/admin_tools_screens.dart';
 
 class AdminHome extends ConsumerStatefulWidget {
@@ -88,19 +92,69 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
     if (!mounted) return;
     final type = '${item['type'] ?? ''}';
     final entity = '${item['entityType'] ?? ''}';
-    if (type == 'new_order' || entity == 'order') {
+    if (type == 'app_update' || entity == 'app_release') {
+      _pushTool('بروزرسانی', const AppUpdateScreen());
+    } else if (type == 'new_order' ||
+        type == 'payment_success' ||
+        type == 'payment_failed' ||
+        entity == 'order') {
       _selectTab(2);
     } else if (type == 'admin_message' || entity == 'admin_chat') {
       _pushTool('گفت‌وگوی مدیران', const AdminChatScreen());
+    } else if (entity == 'return_request') {
+      _pushTool(
+        'پشتیبانی و مرجوعی',
+        const AdminSupportScreen(initialTab: 1),
+      );
+    } else if (entity == 'support_ticket' || entity == 'ticket') {
+      _pushTool(
+        'پشتیبانی مشتریان',
+        const AdminSupportScreen(initialTab: 0),
+      );
+    } else if (type == 'customer_message' && entity == 'customer_message') {
+      _showNotificationDetails(item);
+    } else if (type == 'rubika_message' || entity == 'rubika_chat') {
+      _pushTool('تبلیغات و روبیکا', const SocialPublishingScreen());
+    } else if (type == 'low_stock' || entity == 'product_variant') {
+      _pushTool('مدیریت انبار', const InventoryScreen());
     } else if (entity == 'product') {
       _selectTab(1);
-    } else if (entity == 'support_ticket' || entity == 'ticket') {
-      _pushTool('پشتیبانی', const AdminSupportScreen());
-    } else if (entity == 'social_post' || entity == 'sms_campaign') {
+    } else if (type == 'security_alert') {
+      _pushTool('گزارش فعالیت‌ها', const AuditLogScreen());
+    } else if (type == 'server_alert') {
+      _pushTool('سرور و پشتیبان‌گیری', const OperationsScreen());
+    } else if (entity == 'social_post') {
       _pushTool('انتشار و پیام‌رسانی', const SocialPublishingScreen());
+    } else if (entity == 'sms_campaign') {
+      _pushTool('پیام‌رسانی به مشتریان', const SmsCampaignScreen());
     } else {
-      _pushTool('اعلان‌ها', const NotificationInboxScreen());
+      _showNotificationDetails(item);
     }
+  }
+
+  void _showNotificationDetails(JsonMap item) {
+    final createdAt = DateTime.tryParse('${item['createdAt'] ?? ''}')?.toLocal();
+    final time = createdAt == null
+        ? ''
+        : '\n\n${persianNumber(createdAt.year)}/${persianNumber(createdAt.month.toString().padLeft(2, '0'))}/${persianNumber(createdAt.day.toString().padLeft(2, '0'))} · ${persianNumber(createdAt.hour.toString().padLeft(2, '0'))}:${persianNumber(createdAt.minute.toString().padLeft(2, '0'))}';
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('${item['title'] ?? 'اعلان پانیذ'}'),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            '${item['body'] ?? ''}$time',
+            textDirection: TextDirection.rtl,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('بستن'),
+          ),
+        ],
+      ),
+    );
   }
 
   static const _titles = ['خانه', 'محصولات', 'سفارش‌ها', 'گزارش‌ها'];
@@ -559,11 +613,33 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
                   'هزینه و روش ارسال',
                   Icons.local_shipping_outlined,
                   permission: 'store.content',
-                  detail: 'هزینهٔ پست و حد ارسال رایگان',
+                  detail: 'روش ارسال، هزینه و زمان تحویل',
                   onTap:
                       () => _pushToolFromDrawer(
                         'هزینه و روش ارسال',
-                        const StoreManagementScreen(initialTab: 5),
+                        const ShippingSettingsScreen(),
+                      ),
+                ),
+                _drawerTile(
+                  'شرایط تعویض و مرجوعی',
+                  Icons.assignment_return_outlined,
+                  permission: 'store.content',
+                  detail: 'ویرایش سیاست‌هایی که در سایت نمایش داده می‌شود',
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'شرایط تعویض و مرجوعی',
+                        const ReturnsPolicyScreen(),
+                      ),
+                ),
+                _drawerTile(
+                  'پرسش‌های پرتکرار',
+                  Icons.quiz_outlined,
+                  permission: 'store.content',
+                  detail: 'مدیریت پرسش و پاسخ راهنمای خرید سایت',
+                  onTap:
+                      () => _pushToolFromDrawer(
+                        'پرسش‌های پرتکرار',
+                        const FaqManagementScreen(),
                       ),
                 ),
                 _drawerTile(
@@ -575,6 +651,16 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
                         'مدیریت مشتریان',
                         const CustomerManagementScreen(),
                       ),
+                ),
+                _drawerTile(
+                  'مدیریت نظرهای محصولات',
+                  Icons.rate_review_outlined,
+                  permission: 'products.view',
+                  detail: 'بررسی و تأیید نظرهای خریداران',
+                  onTap: () => _pushToolFromDrawer(
+                    'مدیریت نظرهای محصولات',
+                    const ReviewManagementScreen(),
+                  ),
                 ),
                 _drawerTile(
                   'کدهای تخفیف',

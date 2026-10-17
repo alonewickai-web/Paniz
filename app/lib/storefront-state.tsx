@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ShoppingBag } from "lucide-react";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 export type CartLine = {
   key: string;
@@ -32,6 +32,7 @@ export function StorefrontProvider({ children }: Readonly<{ children: React.Reac
   const [ready, setReady] = useState(false);
   const [cartNoticeRevision, setCartNoticeRevision] = useState(0);
   const [cartNoticeVisible, setCartNoticeVisible] = useState(false);
+  const favoriteSyncQueue = useRef<Promise<void>>(Promise.resolve());
 
   const notifyCartAdded = useCallback(() => {
     setCartNoticeRevision((revision) => revision + 1);
@@ -69,6 +70,24 @@ export function StorefrontProvider({ children }: Readonly<{ children: React.Reac
 
   useEffect(() => {
     if (ready) window.localStorage.setItem("panizstyle-favorites", JSON.stringify(favorites));
+  }, [favorites, ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const visitorId = getOrCreateVisitorId();
+    const productIds = favorites.map(String);
+    const timeout = window.setTimeout(() => {
+      const sync = async () => {
+        await fetch("/api/v1/favorites/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ visitorId, productIds }),
+          keepalive: true,
+        });
+      };
+      favoriteSyncQueue.current = favoriteSyncQueue.current.then(sync, sync).then(() => undefined).catch(() => undefined);
+    }, 250);
+    return () => window.clearTimeout(timeout);
   }, [favorites, ready]);
 
   useEffect(() => {
@@ -120,4 +139,17 @@ function sanitizeCart(value: unknown): CartLine[] {
 function sanitizeFavorites(value: unknown): number[] {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.filter((id): id is number => Number.isSafeInteger(id)))];
+}
+
+function getOrCreateVisitorId(): string {
+  const key = "panizstyle.analytics.visitor";
+  try {
+    const saved = window.localStorage.getItem(key) ?? "";
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(saved)) return saved;
+    const created = window.crypto.randomUUID();
+    window.localStorage.setItem(key, created);
+    return created;
+  } catch {
+    return window.crypto.randomUUID();
+  }
 }

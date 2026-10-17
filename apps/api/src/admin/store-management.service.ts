@@ -11,6 +11,8 @@ import { STORE_THEMES, UpdateStoreThemeDto } from "./dto/update-store-theme.dto"
 import { SaveShippingSettingsDto } from "./dto/save-shipping-settings.dto";
 import { UpdateStoreAboutDto } from "./dto/update-store-about.dto";
 import { UpdateStorePopupDto } from "./dto/update-store-popup.dto";
+import { UpdateStoreReturnsPolicyDto } from "./dto/update-store-returns-policy.dto";
+import { UpdateStoreFaqsDto } from "./dto/update-store-faqs.dto";
 
 const defaultSections = [
   { sectionKey: "hero", title: "بنر اصلی", isActive: true, sortOrder: 0 },
@@ -52,11 +54,13 @@ export class StoreManagementService {
 
   async publicConfig() {
     const now = new Date();
-    const [themeSetting, logoSetting, aboutSetting, popupSetting, savedSections, banners, shipping] = await Promise.all([
+    const [themeSetting, logoSetting, aboutSetting, popupSetting, returnsPolicySetting, faqsSetting, savedSections, banners, shipping] = await Promise.all([
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.theme" }, select: { settingValue: true } }),
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.logoPath" }, select: { settingValue: true } }),
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.about" }, select: { settingValue: true } }),
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.popup" }, select: { settingValue: true, updatedAt: true } }),
+      this.prisma.storeSetting.findUnique({ where: { settingKey: "store.returnsPolicy" }, select: { settingValue: true } }),
+      this.prisma.storeSetting.findUnique({ where: { settingKey: "store.faqs" }, select: { settingValue: true } }),
       this.prisma.homepageSection.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
       this.prisma.banner.findMany({
         where: {
@@ -85,6 +89,8 @@ export class StoreManagementService {
         logoPath: logoSetting?.settingValue || null,
         about: safeStoreAbout(aboutSetting?.settingValue),
         popup: safeStorePopup(popupSetting?.settingValue, popupSetting?.updatedAt),
+        returnsPolicy: safeStoreReturnsPolicy(returnsPolicySetting?.settingValue),
+        faqs: safeStoreFaqs(faqsSetting?.settingValue),
         sections: mergeSections(savedSections),
         banners: banners.map((banner) => ({
           id: banner.id.toString(),
@@ -98,11 +104,13 @@ export class StoreManagementService {
   }
 
   async adminConfiguration() {
-    const [themeSetting, logoSetting, aboutSetting, popupSetting, sections, categories, banners, shipping] = await Promise.all([
+    const [themeSetting, logoSetting, aboutSetting, popupSetting, returnsPolicySetting, faqsSetting, sections, categories, banners, shipping] = await Promise.all([
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.theme" }, select: { settingValue: true } }),
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.logoPath" }, select: { settingValue: true } }),
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.about" }, select: { settingValue: true } }),
       this.prisma.storeSetting.findUnique({ where: { settingKey: "store.popup" }, select: { settingValue: true, updatedAt: true } }),
+      this.prisma.storeSetting.findUnique({ where: { settingKey: "store.returnsPolicy" }, select: { settingValue: true } }),
+      this.prisma.storeSetting.findUnique({ where: { settingKey: "store.faqs" }, select: { settingValue: true } }),
       this.prisma.homepageSection.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
       this.prisma.category.findMany({ orderBy: [{ parentId: "asc" }, { sortOrder: "asc" }, { name: "asc" }] }),
       this.prisma.banner.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
@@ -114,6 +122,8 @@ export class StoreManagementService {
         logoPath: logoSetting?.settingValue || null,
         about: safeStoreAbout(aboutSetting?.settingValue),
         popup: safeStorePopup(popupSetting?.settingValue, popupSetting?.updatedAt),
+        returnsPolicy: safeStoreReturnsPolicy(returnsPolicySetting?.settingValue),
+        faqs: safeStoreFaqs(faqsSetting?.settingValue),
         sections: mergeSections(sections),
         categories: categories.map((category) => ({ ...category, id: category.id.toString(), parentId: category.parentId?.toString() ?? null })),
         banners: banners.map((banner) => ({ ...banner, id: banner.id.toString(), altText: banner.altText?.trim() || banner.title, isArchived: banner.archivedAt !== null })),
@@ -224,6 +234,44 @@ export class StoreManagementService {
       return about;
     });
     return { data: { about } };
+  }
+
+  async saveReturnsPolicy(admin: AuthenticatedAdmin, input: UpdateStoreReturnsPolicyDto) {
+    requireAdminPermission(admin, "store.content");
+    const sections = input.sections.map((section) => ({ heading: section.heading.trim(), body: section.body.trim() }));
+    if (sections.some((section) => !section.heading || !section.body)) {
+      throw new BadRequestException({ code: "INVALID_RETURNS_POLICY", message: "عنوان و متن همهٔ بندها را کامل کن." });
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.storeSetting.upsert({
+        where: { settingKey: "store.returnsPolicy" },
+        create: { settingKey: "store.returnsPolicy", settingValue: { sections }, isPublic: true, updatedByAdminId: admin.id },
+        update: { settingValue: { sections }, isPublic: true, updatedByAdminId: admin.id },
+      });
+      await tx.adminAuditLog.create({
+        data: { adminId: admin.id, action: "store.returns_policy.updated", entityType: "store_setting", details: { sectionCount: sections.length } },
+      });
+    });
+    return { data: { returnsPolicy: { sections } } };
+  }
+
+  async saveFaqs(admin: AuthenticatedAdmin, input: UpdateStoreFaqsDto) {
+    requireAdminPermission(admin, "store.content");
+    const faqs = input.faqs.map((item) => ({ question: item.question.trim(), answer: item.answer.trim() }));
+    if (faqs.some((item) => !item.question || !item.answer)) {
+      throw new BadRequestException({ code: "INVALID_STORE_FAQS", message: "پرسش و پاسخ همهٔ موارد را کامل کن." });
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.storeSetting.upsert({
+        where: { settingKey: "store.faqs" },
+        create: { settingKey: "store.faqs", settingValue: { faqs }, isPublic: true, updatedByAdminId: admin.id },
+        update: { settingValue: { faqs }, isPublic: true, updatedByAdminId: admin.id },
+      });
+      await tx.adminAuditLog.create({
+        data: { adminId: admin.id, action: "store.faqs.updated", entityType: "store_setting", details: { faqCount: faqs.length } },
+      });
+    });
+    return { data: { faqs } };
   }
 
   async saveTheme(admin: AuthenticatedAdmin, input: UpdateStoreThemeDto) {
@@ -584,6 +632,38 @@ function safeStorePopup(value: Prisma.JsonValue | undefined, updatedAt?: Date) {
     linkUrl: rawLinkUrl && allowedPath(rawLinkUrl) ? rawLinkUrl : null,
     updatedAt: updatedAt?.toISOString() ?? null,
   };
+}
+
+function safeStoreReturnsPolicy(value: Prisma.JsonValue | undefined) {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Prisma.JsonObject
+    : {};
+  const rawSections = source.sections;
+  if (!Array.isArray(rawSections)) return null;
+  const sections = rawSections.flatMap((section) => {
+    if (!section || typeof section !== "object" || Array.isArray(section)) return [];
+    const item = section as Prisma.JsonObject;
+    const heading = typeof item.heading === "string" ? item.heading.trim() : "";
+    const body = typeof item.body === "string" ? item.body.trim() : "";
+    return heading && body ? [{ heading, body }] : [];
+  });
+  return sections.length ? { sections } : null;
+}
+
+function safeStoreFaqs(value: Prisma.JsonValue | undefined) {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Prisma.JsonObject
+    : {};
+  const rawFaqs = source.faqs;
+  if (!Array.isArray(rawFaqs)) return null;
+  const faqs = rawFaqs.flatMap((faq) => {
+    if (!faq || typeof faq !== "object" || Array.isArray(faq)) return [];
+    const item = faq as Prisma.JsonObject;
+    const question = typeof item.question === "string" ? item.question.trim() : "";
+    const answer = typeof item.answer === "string" ? item.answer.trim() : "";
+    return question && answer ? [{ question, answer }] : [];
+  });
+  return faqs.length ? { faqs } : null;
 }
 
 function safeNumber(value: bigint): number {

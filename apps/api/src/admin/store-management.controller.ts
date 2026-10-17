@@ -12,6 +12,8 @@ import { SaveShippingSettingsDto } from "./dto/save-shipping-settings.dto";
 import { UpdateStoreLogoDto } from "./dto/update-store-logo.dto";
 import { UpdateStoreAboutDto } from "./dto/update-store-about.dto";
 import { UpdateStorePopupDto } from "./dto/update-store-popup.dto";
+import { UpdateStoreReturnsPolicyDto } from "./dto/update-store-returns-policy.dto";
+import { UpdateStoreFaqsDto } from "./dto/update-store-faqs.dto";
 
 @ApiTags("مدیریت محتوای فروشگاه")
 @ApiBearerAuth("admin-session")
@@ -63,6 +65,22 @@ export class StoreManagementController {
   @RequireAdminPermission("store.content")
   updateAbout(@Req() request: AdminRequest, @Body() body: UpdateStoreAboutDto) {
     return this.store.saveAboutInfo(request.admin!, body);
+  }
+
+  @Patch("store/returns-policy")
+  @ApiOperation({ summary: "ذخیرهٔ شرایط تعویض و مرجوعی نمایش‌داده‌شده در سایت" })
+  @ApiBody({ type: UpdateStoreReturnsPolicyDto })
+  @RequireAdminPermission("store.content")
+  updateReturnsPolicy(@Req() request: AdminRequest, @Body() body: UpdateStoreReturnsPolicyDto) {
+    return this.store.saveReturnsPolicy(request.admin!, body);
+  }
+
+  @Patch("store/faqs")
+  @ApiOperation({ summary: "ذخیرهٔ پرسش‌های پرتکرار نمایش‌داده‌شده در سایت" })
+  @ApiBody({ type: UpdateStoreFaqsDto })
+  @RequireAdminPermission("store.content")
+  updateFaqs(@Req() request: AdminRequest, @Body() body: UpdateStoreFaqsDto) {
+    return this.store.saveFaqs(request.admin!, body);
   }
 
   @Patch("homepage-sections/reorder")

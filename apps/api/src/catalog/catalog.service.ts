@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../database/prisma.service";
 import { ListProductsQuery } from "./dto/list-products.query";
+import { SyncPublicFavoritesDto } from "./dto/sync-public-favorites.dto";
 import { StoreManagementService } from "../admin/store-management.service";
 import { productColorKey, resolveProductColorHex, resolveProductColorName } from "./product-color";
 
@@ -24,6 +26,34 @@ export class CatalogService {
 
   storefrontConfig() {
     return this.storeManagement.publicConfig();
+  }
+
+  async syncFavorites(input: SyncPublicFavoritesDto) {
+    const visitorHash = createHash("sha256").update(input.visitorId.toLowerCase()).digest("hex");
+    const requestedIds = [...new Set(input.productIds.map((id) => BigInt(id)))];
+    const count = await this.prisma.$transaction(async (tx) => {
+      const products = requestedIds.length
+        ? await tx.product.findMany({
+            where: { id: { in: requestedIds }, status: "published", deletedAt: null, publishedAt: { lte: new Date() } },
+            select: { id: true },
+          })
+        : [];
+      const validIds = products.map((product) => product.id);
+      await tx.anonymousProductFavorite.deleteMany({
+        where: {
+          visitorHash,
+          ...(validIds.length ? { productId: { notIn: validIds } } : {}),
+        },
+      });
+      if (validIds.length) {
+        await tx.anonymousProductFavorite.createMany({
+          data: validIds.map((productId) => ({ visitorHash, productId })),
+          skipDuplicates: true,
+        });
+      }
+      return validIds.length;
+    });
+    return { data: { synced: true, savedProductCount: count } };
   }
 
   async listCategories() {
@@ -256,6 +286,44 @@ export class CatalogService {
         minimumPriceToman: cheapestVariant ? toSafeNumber(cheapestVariant.priceToman) : null,
       },
     };
+  }
+
+  async productReviews(slug: string) {
+    const product = await this.prisma.product.findFirst({
+      where: {
+        slug,
+        status: "published",
+        publishedAt: { lte: new Date() },
+        deletedAt: null,
+        variants: { some: { isActive: true } },
+        category: { is: { isActive: true } },
+      },
+      select: { id: true },
+    });
+    if (!product) throw new NotFoundException({ code: "PRODUCT_NOT_FOUND", message: "محصول موردنظر پیدا نشد." });
+    const where = { productId: product.id, status: "approved" };
+    const [total, average, reviews] = await Promise.all([
+      this.prisma.review.count({ where }),
+      this.prisma.review.aggregate({ where, _avg: { rating: true } }),
+      this.prisma.review.findMany({
+        where,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: 50,
+        select: { id: true, rating: true, title: true, body: true, createdAt: true },
+      }),
+    ]);
+    return { data: {
+      total,
+      averageRating: average._avg.rating ? Math.round(average._avg.rating * 10) / 10 : null,
+      reviews: reviews.map((review) => ({
+        id: review.id.toString(),
+        rating: review.rating,
+        title: review.title,
+        body: review.body,
+        createdAt: review.createdAt.toISOString(),
+        verifiedPurchase: true,
+      })),
+    } };
   }
 
   async productSlugRedirect(slug: string) {

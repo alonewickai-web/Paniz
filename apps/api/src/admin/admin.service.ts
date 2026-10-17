@@ -228,6 +228,7 @@ export class AdminService {
           category: { select: { id: true, name: true, slug: true } },
           images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] },
           variants: { orderBy: [{ colorSortOrder: "asc" }, { colorName: "asc" }, { sizeLabel: "asc" }] },
+          _count: { select: { wishlistItems: true, anonymousFavorites: true } },
         },
       }),
     ]);
@@ -265,6 +266,7 @@ export class AdminService {
         category: product.category ? { id: product.category.id.toString(), name: product.category.name, slug: product.category.slug } : null,
         images: product.images.map((image) => ({ id: image.id.toString(), imagePath: image.imagePath, altText: image.altText, colorName: image.colorName, fileSizeBytes: image.fileSizeBytes, isPrimary: image.isPrimary, sortOrder: image.sortOrder })),
         soldQuantity: soldByProductId.get(product.id.toString()) ?? 0,
+        favoriteCount: product._count.wishlistItems + product._count.anonymousFavorites,
         createdAt: product.createdAt.toISOString(),
         variants: product.variants.map((variant) => ({
           colorSortOrder: variant.colorSortOrder,

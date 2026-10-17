@@ -12,6 +12,7 @@ import { CreateTicketDto, SupportMessageDto } from "../support/dto/create-ticket
 import { CreateReturnDto } from "../support/dto/create-return.dto";
 import { CustomerPushSubscriptionDto, RemoveCustomerPushSubscriptionDto } from "../support/dto/customer-push-subscription.dto";
 import { supportImageRoot } from "../uploads/upload-storage";
+import { CreateProductReviewDto } from "./dto/create-product-review.dto";
 
 @ApiTags("پروفایل و سفارش‌های مشتری")
 @Controller("customer")
@@ -104,6 +105,18 @@ export class CustomerController {
   @ApiOperation({ summary: "نمایش سفارش‌های حساب مشتری" })
   listOrders(@Req() request: CustomerRequest) {
     return this.customers.listOrders(request);
+  }
+
+  @Get("products/:productId/review-orders")
+  @ApiOperation({ summary: "سفارش‌های تحویل‌شده‌ای که مشتری می‌تواند برای محصول نظر ثبت کند" })
+  reviewOrders(@Req() request: CustomerRequest, @Param("productId") productId: string) {
+    return this.customers.reviewOrders(request.customer!.id, productId);
+  }
+
+  @Post("products/:productId/reviews")
+  @ApiOperation({ summary: "ثبت نظر برای محصول خریداری‌شده" })
+  createProductReview(@Req() request: CustomerRequest, @Param("productId") productId: string, @Body() body: CreateProductReviewDto) {
+    return this.customers.createProductReview(request.customer!.id, productId, body);
   }
 
   @Get("addresses")
